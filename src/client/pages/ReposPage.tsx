@@ -4,7 +4,7 @@ import { Checkbox } from '@shared/components/ui/checkbox';
 import { Badge } from '@shared/components/ui/badge';
 import { Input } from '@shared/components/ui/input';
 import { Button } from '@shared/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@shared/components/ui/tabs';
+// Tabs removed — using simple hand-rolled tabs for reliability
 import { Progress } from '@shared/components/ui/progress';
 import { Separator } from '@shared/components/ui/separator';
 import {
@@ -109,6 +109,13 @@ export default function ReposPage() {
   const queryClient = useQueryClient();
 
   // Data fetching — repos
+  // Check token status first — don't hit GitHub API without a valid token
+  const { data: tokenData } = useQuery({
+    queryKey: ['settings', 'token'],
+    queryFn: () =>
+      fetch('/api/settings/token').then(r => r.json() as Promise<{ configured: boolean }>),
+  });
+
   const {
     data: availableData,
     isLoading: loadingAvailable,
@@ -121,6 +128,7 @@ export default function ReposPage() {
           throw new Error(r.status === 401 ? 'token-missing' : 'api-error');
         return r.json() as Promise<AvailableReposResponse>;
       }),
+    enabled: tokenData?.configured === true,
   });
 
   const { data: trackedData } = useQuery({
@@ -200,6 +208,9 @@ export default function ReposPage() {
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['collection', 'status'] }),
   });
+
+  // Tabs
+  const [activeTab, setActiveTab] = useState<'repos' | 'collection'>('repos');
 
   // Local state — repos tab
   const [selectedGithubIds, setSelectedGithubIds] = useState<Set<number>>(
@@ -447,6 +458,21 @@ export default function ReposPage() {
     );
   }
 
+  if (tokenData && !tokenData.configured) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-12 px-4">
+        <div className="mx-auto max-w-2xl">
+          <p className="text-sm text-gray-600 mb-4">
+            GitHub token not configured. Add your token in Settings to load repos.
+          </p>
+          <Button variant="outline" onClick={() => { window.location.hash = '#settings'; }}>
+            Go to Settings
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   if (availableError) {
     return (
       <div className="min-h-screen bg-gray-50 py-12 px-4">
@@ -482,15 +508,32 @@ export default function ReposPage() {
           time.
         </p>
 
-        <Tabs defaultValue="repos" className="mt-6">
-          <TabsList>
-            <TabsTrigger value="repos">Repos</TabsTrigger>
-            <TabsTrigger value="collection">Collection</TabsTrigger>
-          </TabsList>
+        <div className="mt-6">
+          <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+            <button
+              onClick={() => setActiveTab('repos')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeTab === 'repos'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Repos
+            </button>
+            <button
+              onClick={() => setActiveTab('collection')}
+              className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                activeTab === 'collection'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Collection
+            </button>
+          </div>
 
           {/* ====== REPOS TAB ====== */}
-          <TabsContent value="repos">
-            {/* Search input */}
+          {activeTab === 'repos' && (<>
             <div className="mt-4 relative">
               <Input
                 placeholder="Filter repos by name..."
@@ -680,10 +723,10 @@ export default function ReposPage() {
                 </div>
               </div>
             )}
-          </TabsContent>
+          </>)}
 
           {/* ====== COLLECTION TAB ====== */}
-          <TabsContent value="collection">
+          {activeTab === 'collection' && (
             <div className="mt-4 space-y-4">
               {/* Cross-session resume banner */}
               {resumeInfo?.hasIncomplete && !isCollecting && (
@@ -774,11 +817,7 @@ export default function ReposPage() {
                     No repos tracked.{' '}
                     <button
                       className="text-primary underline cursor-pointer"
-                      onClick={() => {
-                        // Switch to repos tab - trigger click on the repos tab trigger
-                        const reposTab = document.querySelector('[data-slot="tabs-trigger"][value="repos"]');
-                        if (reposTab instanceof HTMLElement) reposTab.click();
-                      }}
+                      onClick={() => setActiveTab('repos')}
                     >
                       Add repos to start collecting data.
                     </button>
@@ -868,8 +907,8 @@ export default function ReposPage() {
                 </p>
               )}
             </div>
-          </TabsContent>
-        </Tabs>
+          )}
+        </div>
       </div>
 
       {/* Sticky action bar */}

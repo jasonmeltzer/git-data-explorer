@@ -170,6 +170,8 @@ export class CollectionEngine {
         this._onResume();
       }
     }, retryAfterMs);
+    // Don't block process exit for a rate-limit timer
+    this._rateLimitWaitTimer.unref();
   }
 
   /**

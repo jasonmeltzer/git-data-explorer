@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Switch } from '@shared/components/ui/switch';
+// Simple toggle — Base UI Switch has rendering issues
 import TokenForm from '../components/TokenForm.js';
 
 interface Props {
@@ -48,11 +48,21 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
                 When off, accounts identified as bots (Dependabot, Renovate, GitHub Actions, and others) are excluded from all contributor data.
               </p>
             </div>
-            <Switch
+            <button
               id="bot-toggle"
-              checked={botSettings?.includeBots ?? false}
-              onCheckedChange={(checked: boolean) => botToggleMutation.mutate(checked)}
-            />
+              role="switch"
+              aria-checked={botSettings?.includeBots ?? false}
+              onClick={() => botToggleMutation.mutate(!(botSettings?.includeBots ?? false))}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                botSettings?.includeBots ? 'bg-gray-900' : 'bg-gray-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-lg ring-0 transition-transform ${
+                  botSettings?.includeBots ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
           </div>
         </div>
       </div>
