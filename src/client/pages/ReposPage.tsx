@@ -280,7 +280,7 @@ export default function ReposPage() {
   const groupEntries = Array.from(groupedRepos.entries());
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-24">
       <div className="mx-auto max-w-2xl py-8 px-4">
         <h1 className="text-2xl font-semibold text-gray-900">
           Select Repos to Track
@@ -340,7 +340,7 @@ export default function ReposPage() {
                   <p className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
                     {displayName}
                   </p>
-                  {/* Select all row */}
+                  {/* Select all / Unselect all row */}
                   <div className="flex items-center gap-2 mb-1 py-1">
                     <Checkbox
                       checked={allSelected}
@@ -358,7 +358,7 @@ export default function ReposPage() {
                       htmlFor={`select-all-${ownerLogin}`}
                       className="text-sm text-gray-600 cursor-pointer"
                     >
-                      Select all
+                      {allSelected ? 'Unselect all' : 'Select all'}
                     </label>
                     <span className="text-xs text-gray-400 ml-1">
                       {groupCount} / {repos.length} selected
@@ -393,25 +393,6 @@ export default function ReposPage() {
             })}
           </div>
         )}
-
-        {/* Action bar */}
-        <div className="mt-6 flex items-center gap-4">
-          <Button
-            onClick={handleSave}
-            disabled={saveMutation.isPending}
-            className="bg-gray-900 text-white hover:bg-gray-700"
-          >
-            {saveMutation.isPending ? 'Saving...' : 'Save Selection'}
-          </Button>
-          {saveMutation.isError && (
-            <p className="text-sm text-red-600">
-              Failed to save repo selection. Please try again.
-            </p>
-          )}
-          {saveMutation.isSuccess && (
-            <p className="text-sm text-green-700">Selection saved.</p>
-          )}
-        </div>
 
         {/* Stopped repos panel */}
         {stoppedRepos.length > 0 && (
@@ -487,6 +468,37 @@ export default function ReposPage() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Sticky action bar — always visible at bottom of viewport */}
+      <div className="fixed bottom-0 left-0 right-0 z-10 border-t border-gray-200 bg-white px-4 py-3 shadow-md">
+        <div className="mx-auto max-w-2xl flex items-center gap-4">
+          <Button
+            onClick={handleSave}
+            disabled={saveMutation.isPending || stopMutation.isPending}
+            className="bg-gray-900 text-white hover:bg-gray-700"
+          >
+            {saveMutation.isPending || stopMutation.isPending
+              ? 'Saving...'
+              : 'Save Selection'}
+          </Button>
+          {selectedGithubIds.size > 0 && (
+            <button
+              onClick={() => setSelectedGithubIds(new Set())}
+              className="text-sm text-gray-500 hover:text-gray-700 underline"
+            >
+              Unselect all
+            </button>
+          )}
+          {saveMutation.isError && (
+            <p className="text-sm text-red-600">
+              Failed to save. Please try again.
+            </p>
+          )}
+          {saveMutation.isSuccess && !saveMutation.isPending && (
+            <p className="text-sm text-green-700">Selection saved.</p>
+          )}
+        </div>
       </div>
 
       {/* Delete confirmation dialog */}
