@@ -7,12 +7,12 @@
 
 ### Authentication & Setup
 
-- [ ] **AUTH-01**: User can authenticate with GitHub using a Personal Access Token
+- [x] **AUTH-01**: User can authenticate with GitHub using a Personal Access Token
 - [ ] ~~**AUTH-02**: User can authenticate with GitHub using OAuth device flow (browser-based)~~ — **Deferred to v2**
-- [ ] **AUTH-03**: User can browse and select repos from their GitHub org to track
-- [ ] **AUTH-04**: User can add new repos to track at any time
-- [ ] **AUTH-05**: User can remove repos from tracking (data persists unless explicitly deleted)
-- [ ] **AUTH-06**: User can explicitly delete cached data for a repo
+- [x] **AUTH-03**: User can browse and select repos from their GitHub org to track
+- [x] **AUTH-04**: User can add new repos to track at any time
+- [x] **AUTH-05**: User can remove repos from tracking (data persists unless explicitly deleted)
+- [x] **AUTH-06**: User can explicitly delete cached data for a repo
 
 ### Data Collection
 
@@ -97,12 +97,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| AUTH-01 | Phase 2 | Pending |
+| AUTH-01 | Phase 2 | Complete |
 | AUTH-02 | v2 | Deferred |
-| AUTH-03 | Phase 2 | Pending |
-| AUTH-04 | Phase 2 | Pending |
-| AUTH-05 | Phase 2 | Pending |
-| AUTH-06 | Phase 2 | Pending |
+| AUTH-03 | Phase 2 | Complete |
+| AUTH-04 | Phase 2 | Complete |
+| AUTH-05 | Phase 2 | Complete |
+| AUTH-06 | Phase 2 | Complete |
 | COLL-01 | Phase 3 | Pending |
 | COLL-02 | Phase 3 | Pending |
 | COLL-03 | Phase 3 | Pending |
