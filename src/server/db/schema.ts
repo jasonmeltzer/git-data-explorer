@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
 
 // App configuration key-value store
 export const appConfig = sqliteTable('app_config', {
@@ -80,5 +80,5 @@ export const collectionState = sqliteTable('collection_state', {
   lastRunAt: integer('last_run_at', { mode: 'timestamp' }),
   errorMessage: text('error_message'),
 }, (table) => [
-  index('idx_collection_repo_type').on(table.repoId, table.resourceType),
+  uniqueIndex('idx_collection_repo_type_unique').on(table.repoId, table.resourceType),
 ]);

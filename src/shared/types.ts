@@ -57,3 +57,54 @@ export interface RepoDeleteCounts {
   commits: number;
   prs: number;
 }
+
+// Collection status for a single resource (commits or PRs) within a repo
+export type CollectionResourceStatus = 'pending' | 'in_progress' | 'complete' | 'paused' | 'error';
+
+// Overall repo collection status (derived from its resource statuses)
+export type CollectionRepoOverallStatus = 'pending' | 'collecting' | 'updating' | 'complete' | 'paused' | 'error';
+
+// Per-repo collection status as returned by the API
+export interface CollectionRepoStatus {
+  repoId: number;
+  fullName: string;
+  ownerLogin: string;
+  name: string;
+  status: CollectionRepoOverallStatus;
+  commitsCollected: number;
+  prsCollected: number;
+  lastSyncedAt: string | null;   // ISO timestamp
+  errorMessage: string | null;
+  isFirstSync: boolean;          // true if never completed before
+}
+
+// SSE progress event shape
+export interface CollectionProgressEvent {
+  type: 'repo_start' | 'page_complete' | 'repo_complete' | 'rate_limit' | 'secondary_rate_limit' | 'error' | 'batch_complete';
+  repoId: number;
+  repoFullName: string;
+  resourceType?: 'commits' | 'pull_requests';
+  itemsInPage?: number;
+  totalItemsSoFar?: number;
+  rateLimitResetAt?: string;     // ISO timestamp for rate-limit reset
+  rateLimitRemaining?: number;
+  rateLimitTotal?: number;
+  errorMessage?: string;
+  reposCompleted?: number;
+  reposTotal?: number;
+}
+
+// Overall collection batch status
+export interface CollectionBatchStatus {
+  isActive: boolean;
+  repoStatuses: CollectionRepoStatus[];
+  rateLimitRemaining: number | null;
+  rateLimitTotal: number | null;
+  rateLimitResetAt: string | null;
+  botsExcludedCount: number;
+}
+
+// Settings (bot toggle)
+export interface AppSettings {
+  includeBots: boolean;
+}
