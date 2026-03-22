@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage.js';
 import SettingsPage from './pages/SettingsPage.js';
+import ReposPage from './pages/ReposPage.js';
 import NavBar from './components/NavBar.js';
 
 type Page = 'landing' | 'repos' | 'settings';
@@ -38,9 +39,7 @@ export default function App() {
       <NavBar activePage={page} />
       <main>
         {page === 'repos' && (
-          <div className="flex items-center justify-center py-24">
-            <p className="text-gray-400 text-sm">Repos page coming soon...</p>
-          </div>
+          <ReposPage />
         )}
         {page === 'settings' && (
           <SettingsPage
