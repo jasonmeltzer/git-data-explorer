@@ -12,7 +12,8 @@ Engineering leaders can see concrete, data-backed trends in how code contributio
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] All data cached in local SQLite — never re-fetches already-cached data (Validated in Phase 01: Foundation — SQLite DB with WAL mode, Drizzle ORM schema)
+- [x] Local-first web app runs on user's machine (Validated in Phase 01: Foundation — Hono server + Vite React SPA)
 
 ### Active
 
@@ -60,7 +61,7 @@ Privacy and trust matter: engineering leaders will only use this tool if they tr
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Local SQLite over cloud DB | Data privacy, zero infrastructure, works offline after collection | — Pending |
+| Local SQLite over cloud DB | Data privacy, zero infrastructure, works offline after collection | ✓ Validated Phase 01 |
 | First commit date for "new dev" | Zero manual setup, purely derived from git history | — Pending |
 | Cohort analysis as primary view | Reinforces trend-over-individuals framing | — Pending |
 | Incremental API collection with pause/resume | GitHub rate limits make full collection impractical in one session for large repos | — Pending |
@@ -84,4 +85,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-03-22 after initialization*
+*Last updated: 2026-03-22 after Phase 01 completion*
