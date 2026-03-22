@@ -5,6 +5,7 @@ import 'dotenv/config';
 import { runMigrations } from './db/migrate.js';
 import health from './routes/health.js';
 import settings from './routes/settings.js';
+import repositories from './routes/repositories.js';
 
 // Run migrations synchronously before accepting requests
 runMigrations();
@@ -18,6 +19,7 @@ app.use('/api/*', cors({ origin: 'http://localhost:5173' }));
 // Mount routes
 app.route('/', health);
 app.route('/', settings);
+app.route('/', repositories);
 
 const port = parseInt(process.env.PORT ?? '3001', 10);
 
