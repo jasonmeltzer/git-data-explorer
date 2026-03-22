@@ -44,10 +44,10 @@ Plans:
   3. User can add a new repo to tracking at any time without affecting existing tracked repos
   4. User can stop tracking a repo (data persists) and can explicitly delete its cached data
   5. After saving a token, user is auto-navigated to repo selection page
-**Plans:** 1/3 plans executed
+**Plans:** 2/3 plans executed
 Plans:
 - [x] 02-01-PLAN.md -- Backend: Octokit client, GitHub API repo listing, repo CRUD services, Hono routes, and tests
-- [ ] 02-02-PLAN.md -- Frontend infra: shadcn/ui init, TanStack Query, NavBar, 3-page router, shared types, post-token navigation
+- [x] 02-02-PLAN.md -- Frontend infra: shadcn/ui init, TanStack Query, NavBar, 3-page router, shared types, post-token navigation
 - [ ] 02-03-PLAN.md -- ReposPage UI with grouped checklist, search, management actions, and landing page updates
 
 ### Phase 3: Data Collection Engine
@@ -95,7 +95,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planning complete | - |
-| 2. Auth & Repo Management | 1/3 | In Progress|  |
+| 2. Auth & Repo Management | 2/3 | In Progress|  |
 | 3. Data Collection Engine | 0/TBD | Not started | - |
 | 4. Query Service & Cohort Engine | 0/TBD | Not started | - |
 | 5. Dashboard UI | 0/TBD | Not started | - |
