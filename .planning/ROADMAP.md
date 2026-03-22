@@ -65,7 +65,7 @@ Plans:
 - [x] 03-01-PLAN.md — Schema fix (unique constraint), shared types, bot detection service, collection state DB service
 - [x] 03-02-PLAN.md — Collection engine (commits + PRs), queue orchestrator, Hono routes, SSE progress endpoint
 - [x] 03-03-PLAN.md — Frontend Collection tab, SSE hook, progress display, bot toggle in Settings
-- [ ] 03-04-PLAN.md — Human verification of end-to-end data collection flow
+- [x] 03-04-PLAN.md — Human verification of end-to-end data collection flow
 
 ### Phase 4: Query Service & Cohort Engine
 **Goal**: A tested analytics layer that produces correct cohort groupings, ramp-up curves, before/after AI marker comparisons, and rolling period comparisons from the collected data
