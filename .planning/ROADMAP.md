@@ -37,14 +37,18 @@ Plans:
 ### Phase 2: Auth & Repo Management
 **Goal**: Users can authenticate with GitHub and manage which repos they want to track — including adding, removing, and clearing cached data
 **Depends on**: Phase 1
-**Requirements**: AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, AUTH-06
+**Requirements**: AUTH-01, AUTH-03, AUTH-04, AUTH-05, AUTH-06
 **Success Criteria** (what must be TRUE):
-  1. User can authenticate via Personal Access Token and the token is stored securely in the OS keychain
-  2. User can authenticate via GitHub OAuth device flow (browser-based authorization, no manual token entry)
-  3. User can browse their GitHub org's repos and select one or more to track
-  4. User can add a new repo to tracking at any time without affecting existing tracked repos
-  5. User can remove a repo from tracking (data persists) and can explicitly delete its cached data
-**Plans**: TBD
+  1. User can authenticate via Personal Access Token stored in `.env` file (implemented in Phase 1, wired to Octokit in Phase 2)
+  2. User can browse all repos their PAT has access to (personal + org), grouped by owner, and select which to track
+  3. User can add a new repo to tracking at any time without affecting existing tracked repos
+  4. User can stop tracking a repo (data persists) and can explicitly delete its cached data
+  5. After saving a token, user is auto-navigated to repo selection page
+**Plans:** 3 plans
+Plans:
+- [ ] 02-01-PLAN.md -- Backend: Octokit client, GitHub API repo listing, repo CRUD services, Hono routes, and tests
+- [ ] 02-02-PLAN.md -- Frontend infra: shadcn/ui init, TanStack Query, NavBar, 3-page router, shared types, post-token navigation
+- [ ] 02-03-PLAN.md -- ReposPage UI with grouped checklist, search, management actions, and landing page updates
 
 ### Phase 3: Data Collection Engine
 **Goal**: The app can fetch and cache GitHub commit and PR data incrementally — resuming correctly across sessions and rate-limit interruptions — and communicates collection status clearly to the user
