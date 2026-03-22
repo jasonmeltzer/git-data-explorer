@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, index, uniqueIndex, unique } from 'drizzle-orm/sqlite-core';
 
 // App configuration key-value store
 export const appConfig = sqliteTable('app_config', {
@@ -43,7 +43,7 @@ export const commits = sqliteTable('commits', {
 }, (table) => [
   index('idx_commits_repo_date').on(table.repoId, table.committedAt),
   index('idx_commits_author').on(table.authorId),
-  index('idx_commits_sha_repo').on(table.sha, table.repoId),
+  uniqueIndex('idx_commits_sha_repo').on(table.sha, table.repoId),
 ]);
 
 // Pull requests
@@ -66,7 +66,7 @@ export const pullRequests = sqliteTable('pull_requests', {
 }, (table) => [
   index('idx_prs_repo_date').on(table.repoId, table.createdAt),
   index('idx_prs_author').on(table.authorId),
-  index('idx_prs_github_id_repo').on(table.githubId, table.repoId),
+  uniqueIndex('idx_prs_github_id_repo').on(table.githubId, table.repoId),
 ]);
 
 // Collection state tracking for incremental resume

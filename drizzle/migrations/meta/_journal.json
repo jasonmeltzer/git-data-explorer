@@ -15,6 +15,13 @@
       "when": 1774212518524,
       "tag": "0001_amazing_eternals",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1774212832756,
+      "tag": "0002_aspiring_morlun",
+      "breakpoints": true
     }
   ]
 }
