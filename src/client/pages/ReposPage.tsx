@@ -167,12 +167,22 @@ export default function ReposPage() {
     return selectedCount > 0 && selectedCount < repos.length;
   };
 
-  // Save handler
-  const handleSave = () => {
+  // Save handler — adds newly selected repos AND stops repos that were tracked but unchecked
+  const handleSave = async () => {
     if (!availableData) return;
+
+    // Repos to start tracking (selected ones)
     const reposToTrack = availableData.repos.filter(r =>
       selectedGithubIds.has(r.githubId)
     );
+
+    // Repos to stop tracking: were tracked, now deselected
+    const reposToStop = (trackedData?.repos ?? []).filter(
+      r => !selectedGithubIds.has(r.githubId)
+    );
+
+    // Stop deselected repos first, then save new selection
+    await Promise.all(reposToStop.map(r => stopMutation.mutateAsync(r.id)));
     saveMutation.mutate(reposToTrack);
   };
 
