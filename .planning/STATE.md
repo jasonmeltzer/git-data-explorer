@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-02-PLAN.md
-last_updated: "2026-03-22T20:59:13.847Z"
+stopped_at: Completed 03-03-PLAN.md
+last_updated: "2026-03-22T21:05:38.252Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 ## Current Position
 
 Phase: 03 (data-collection) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 
 ## Performance Metrics
 
@@ -53,6 +53,7 @@ Plan: 3 of 4
 | Phase 02 P03 | ~15min | 3 tasks (incl. post-checkpoint fixes) | 4 files |
 | Phase 03 P01 | 2m43s | 2 tasks | 7 files |
 | Phase 03 P02 | 6min | 2 tasks | 11 files |
+| Phase 03 P03 | 4min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,8 @@ Recent decisions affecting current work:
 - [Phase 03]: Collection-specific Octokit throws RateLimitError for clean pause/resume flow
 - [Phase 03]: CollectionQueue is module-level singleton shared between routes and repositories
 - [Phase 03]: Upgraded (sha,repoId) and (githubId,repoId) indexes to unique for onConflictDoUpdate upsert
+- [Phase 03]: SSE hook auto-connects only when collection is active; polling 3s active / 30s idle
+- [Phase 03]: Data completeness badges on Repos tab share repoStatusMap from collection status query
 
 ### Pending Todos
 
@@ -97,6 +100,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T20:59:13.844Z
-Stopped at: Completed 03-02-PLAN.md
+Last session: 2026-03-22T21:05:38.249Z
+Stopped at: Completed 03-03-PLAN.md
 Resume file: None

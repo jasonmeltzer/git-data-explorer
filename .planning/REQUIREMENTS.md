@@ -21,10 +21,10 @@
 - [x] **COLL-03**: All fetched data is cached in local SQLite — never re-fetches already-cached data
 - [x] **COLL-04**: Collection uses cursor-based state (commit SHA, PR updated_at) for correct incremental resume
 - [x] **COLL-05**: App detects GitHub rate limits (both primary 5k/hr and secondary 900pts/min) and pauses collection gracefully
-- [ ] **COLL-06**: App shows progress during collection (repos completed, data fetched vs estimated remaining)
+- [x] **COLL-06**: App shows progress during collection (repos completed, data fetched vs estimated remaining)
 - [x] **COLL-07**: App communicates clearly when collection is paused due to rate limits and when to return
 - [x] **COLL-08**: Collection resumes from where it left off across app restarts
-- [ ] **COLL-09**: App shows data completeness state — which repos/date ranges are fully collected vs partial
+- [x] **COLL-09**: App shows data completeness state — which repos/date ranges are fully collected vs partial
 - [x] **COLL-10**: Bot accounts (Dependabot, Renovate, GitHub Actions) are filtered from contributor analysis
 
 ### Core Metrics & Charts
@@ -108,10 +108,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COLL-03 | Phase 3 | Complete |
 | COLL-04 | Phase 3 | Complete |
 | COLL-05 | Phase 3 | Complete |
-| COLL-06 | Phase 3 | Pending |
+| COLL-06 | Phase 3 | Complete |
 | COLL-07 | Phase 3 | Complete |
 | COLL-08 | Phase 3 | Complete |
-| COLL-09 | Phase 3 | Pending |
+| COLL-09 | Phase 3 | Complete |
 | COLL-10 | Phase 3 | Complete |
 | METR-01 | Phase 5 | Pending |
 | METR-02 | Phase 5 | Pending |
