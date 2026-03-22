@@ -1,10 +1,32 @@
 # Git Data Explorer
 
-A local-first web application for engineering leaders to understand how AI tools are changing code contribution patterns across their GitHub repositories.
+## Who This Is For
 
-Connect to the GitHub API, cache commit and PR data in a local SQLite database, and explore trend dashboards showing how the nature of code changes is evolving over time.
+Engineering leaders who want to understand how AI coding tools (Copilot, Claude Code, Cursor, etc.) are changing code contribution patterns across their GitHub org. If you've adopted AI tools and want to see concrete data on what's actually changing — not just anecdotes — this is for you.
 
-**This is a trend analysis tool, not a productivity tracker.** All views default to cohort aggregates — it shows how contributions are changing, not how individuals are performing.
+## What It Does
+
+Git Data Explorer connects to the GitHub API, incrementally caches commit and PR data in a local SQLite database, and presents trend dashboards showing how contributions are evolving over time.
+
+Key analyses:
+- **PR and commit size trends** — Are PRs getting larger? More files per commit? How has the shape of contributions changed?
+- **New developer ramp-up** — How quickly do new devs reach meaningful contribution sizes? Is AI accelerating onboarding?
+- **Cohort analysis by tenure** — Group contributors by experience (0-3mo, 3-12mo, 1yr+) to see how different groups are affected
+- **Before/after comparison** — Set a marker date ("when we adopted AI") to compare periods
+- **Rolling trend views** — Month-over-month and quarter-over-quarter patterns
+
+## Why This Exists
+
+After adopting Claude Code, the founder saw dramatic shifts in contribution patterns that were hard to quantify without tooling. This project makes that analysis accessible to any engineering leader with GitHub repos.
+
+**This is a trend analysis tool, not a productivity tracker.** All views default to cohort aggregates. It shows how contributions are changing across your org, not how individuals are performing. The framing, UI language, and default views are deliberately designed to reinforce this.
+
+## Why Local-First
+
+- **Your data stays on your machine** — no cloud dependency, no third-party access to your commit history
+- **No account or subscription** — clone, run, explore
+- **Works offline** after initial data collection
+- **Handles GitHub rate limits gracefully** — collects what it can, pauses, resumes next session
 
 ## Current Status
 
@@ -67,21 +89,7 @@ This starts both the API server (port 3001) and the Vite dev server (port 5173).
 3. Select which repos to track and click **Save Selection**
 4. The landing page will show your tracked repos
 
-## Project Structure
-
-```
-src/
-├── client/           # React SPA
-│   ├── components/   # NavBar, shared components
-│   └── pages/        # LandingPage, ReposPage, SettingsPage
-├── server/           # Hono API server
-│   ├── routes/       # API route handlers
-│   ├── services/     # Business logic (GitHub, repos, auth)
-│   └── db/           # Drizzle schema and migrations
-└── shared/           # Types and UI components shared across client/server
-    ├── components/ui/ # shadcn/ui primitives
-    └── types.ts       # Shared TypeScript interfaces
-```
+See [ARCHITECTURE.md](ARCHITECTURE.md) for technical details.
 
 ## License
 
