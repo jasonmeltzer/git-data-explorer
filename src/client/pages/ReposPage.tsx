@@ -4,6 +4,9 @@ import { Checkbox } from '@shared/components/ui/checkbox';
 import { Badge } from '@shared/components/ui/badge';
 import { Input } from '@shared/components/ui/input';
 import { Button } from '@shared/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@shared/components/ui/tabs';
+import { Progress } from '@shared/components/ui/progress';
+import { Separator } from '@shared/components/ui/separator';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,17 +17,98 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@shared/components/ui/alert-dialog';
+import {
+  RefreshCw,
+  CircleDashed,
+  Loader2,
+  CheckCircle2,
+  PauseCircle,
+  XCircle,
+  Clock,
+} from 'lucide-react';
+import { useCollectionSSE } from '../hooks/useCollectionSSE.js';
 import type {
   GitHubRepo,
   AvailableReposResponse,
   TrackedRepo,
   RepoDeleteCounts,
+  CollectionBatchStatus,
+  CollectionRepoStatus,
+  CollectionRepoOverallStatus,
 } from '@shared/types.js';
+
+function getStatusIcon(status: CollectionRepoOverallStatus) {
+  switch (status) {
+    case 'pending':
+      return <CircleDashed className="h-4 w-4 text-muted-foreground" />;
+    case 'collecting':
+      return <Loader2 className="h-4 w-4 text-primary animate-spin" />;
+    case 'updating':
+      return <Loader2 className="h-4 w-4 text-primary animate-spin" />;
+    case 'complete':
+      return <CheckCircle2 className="h-4 w-4 text-muted-foreground" />;
+    case 'paused':
+      return <PauseCircle className="h-4 w-4 text-muted-foreground" />;
+    case 'error':
+      return <XCircle className="h-4 w-4 text-destructive" />;
+  }
+}
+
+function getStatusBadge(status: CollectionRepoOverallStatus, isFirstSync: boolean) {
+  switch (status) {
+    case 'pending':
+      return <Badge variant="secondary">Queued</Badge>;
+    case 'collecting':
+      return (
+        <Badge className="bg-primary text-primary-foreground">
+          {isFirstSync ? 'Collecting' : 'Updating'}
+        </Badge>
+      );
+    case 'updating':
+      return <Badge className="bg-primary text-primary-foreground">Updating</Badge>;
+    case 'complete':
+      return null;
+    case 'paused':
+      return <Badge variant="secondary">Paused</Badge>;
+    case 'error':
+      return (
+        <Badge variant="outline" className="text-destructive border-destructive">
+          Error
+        </Badge>
+      );
+  }
+}
+
+function getReposTabBadge(status: CollectionRepoOverallStatus | undefined) {
+  if (!status) return null;
+  switch (status) {
+    case 'collecting':
+    case 'updating':
+      return <Badge variant="secondary">Collecting...</Badge>;
+    case 'paused':
+      return <Badge variant="secondary">Stopped</Badge>;
+    case 'error':
+      return (
+        <Badge variant="outline" className="text-destructive border-destructive">
+          Error
+        </Badge>
+      );
+    default:
+      return null;
+  }
+}
+
+function formatResetTime(resetAt: string): string {
+  return new Date(resetAt).toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 
 export default function ReposPage() {
   const queryClient = useQueryClient();
 
-  // Data fetching
+  // Data fetching — repos
   const {
     data: availableData,
     isLoading: loadingAvailable,
@@ -53,7 +137,71 @@ export default function ReposPage() {
       ),
   });
 
-  // Local state
+  // Data fetching — collection status
+  const [isCollecting, setIsCollecting] = useState(false);
+
+  const { data: collectionStatus } = useQuery({
+    queryKey: ['collection', 'status'],
+    queryFn: () =>
+      fetch('/api/collection/status').then(r => r.json() as Promise<CollectionBatchStatus>),
+    refetchInterval: isCollecting ? 3000 : 30000,
+  });
+
+  const { data: resumeInfo } = useQuery({
+    queryKey: ['collection', 'resume-info'],
+    queryFn: () =>
+      fetch('/api/collection/resume-info').then(r => r.json() as Promise<{ hasIncomplete: boolean; repoName?: string }>),
+  });
+
+  // SSE for live progress
+  const { latestEvent } = useCollectionSSE({ enabled: isCollecting });
+
+  // Track collecting state from status
+  useEffect(() => {
+    if (collectionStatus) {
+      setIsCollecting(collectionStatus.isActive);
+    }
+  }, [collectionStatus]);
+
+  // Invalidate status on batch_complete SSE event
+  useEffect(() => {
+    if (latestEvent?.type === 'batch_complete') {
+      queryClient.invalidateQueries({ queryKey: ['collection', 'status'] });
+      queryClient.invalidateQueries({ queryKey: ['collection', 'resume-info'] });
+    }
+  }, [latestEvent, queryClient]);
+
+  // Collection mutations
+  const startCollectionMutation = useMutation({
+    mutationFn: (repoIds?: number[]) =>
+      fetch('/api/collection/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repoIds }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      setIsCollecting(true);
+      queryClient.invalidateQueries({ queryKey: ['collection', 'status'] });
+    },
+  });
+
+  const stopCollectionMutation = useMutation({
+    mutationFn: () =>
+      fetch('/api/collection/stop', { method: 'POST' }).then(r => r.json()),
+    onSuccess: () => {
+      setIsCollecting(false);
+      queryClient.invalidateQueries({ queryKey: ['collection', 'status'] });
+    },
+  });
+
+  const skipRepoMutation = useMutation({
+    mutationFn: () =>
+      fetch('/api/collection/skip', { method: 'POST' }).then(r => r.json()),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ['collection', 'status'] }),
+  });
+
+  // Local state — repos tab
   const [selectedGithubIds, setSelectedGithubIds] = useState<Set<number>>(
     new Set()
   );
@@ -70,7 +218,7 @@ export default function ReposPage() {
     }
   }, [trackedData]);
 
-  // Mutations
+  // Repo mutations
   const saveMutation = useMutation({
     mutationFn: (repos: GitHubRepo[]) =>
       fetch('/api/repos', {
@@ -129,6 +277,17 @@ export default function ReposPage() {
     return groups;
   }, [filteredRepos, availableData?.authenticatedLogin]);
 
+  // Build a map of repo collection statuses by githubId for the Repos tab badges
+  const repoStatusMap = useMemo(() => {
+    const map = new Map<string, CollectionRepoStatus>();
+    if (collectionStatus?.repoStatuses) {
+      for (const rs of collectionStatus.repoStatuses) {
+        map.set(rs.fullName, rs);
+      }
+    }
+    return map;
+  }, [collectionStatus]);
+
   // Selection helpers
   const toggleRepo = (githubId: number) => {
     setSelectedGithubIds(prev => {
@@ -167,21 +326,15 @@ export default function ReposPage() {
     return selectedCount > 0 && selectedCount < repos.length;
   };
 
-  // Save handler — adds newly selected repos AND stops repos that were tracked but unchecked
+  // Save handler
   const handleSave = async () => {
     if (!availableData) return;
-
-    // Repos to start tracking (selected ones)
     const reposToTrack = availableData.repos.filter(r =>
       selectedGithubIds.has(r.githubId)
     );
-
-    // Repos to stop tracking: were tracked, now deselected
     const reposToStop = (trackedData?.repos ?? []).filter(
       r => !selectedGithubIds.has(r.githubId)
     );
-
-    // Stop deselected repos first, then save new selection
     await Promise.all(reposToStop.map(r => stopMutation.mutateAsync(r.id)));
     saveMutation.mutate(reposToTrack);
   };
@@ -221,6 +374,45 @@ export default function ReposPage() {
     };
     saveMutation.mutate([repoAsGitHub]);
   };
+
+  // Derived collection state
+  const repoStatuses = collectionStatus?.repoStatuses ?? [];
+  const hasTrackedRepos = (trackedData?.repos ?? []).length > 0;
+  const collectingRepos = repoStatuses.filter(
+    r => r.status === 'collecting' || r.status === 'updating'
+  );
+  const completedRepos = repoStatuses.filter(r => r.status === 'complete');
+  const currentlyCollecting = collectingRepos[0] ?? null;
+  const percentComplete =
+    repoStatuses.length > 0
+      ? Math.round((completedRepos.length / repoStatuses.length) * 100)
+      : 0;
+
+  // Rate limit state
+  const isRateLimited =
+    collectionStatus?.rateLimitResetAt != null ||
+    latestEvent?.type === 'rate_limit';
+  const rateLimitResetAt =
+    latestEvent?.type === 'rate_limit'
+      ? latestEvent.rateLimitResetAt
+      : collectionStatus?.rateLimitResetAt;
+  const isSecondaryRateLimit = latestEvent?.type === 'secondary_rate_limit';
+
+  // Collection summary text
+  const getCollectionSummary = () => {
+    if (!hasTrackedRepos) return { heading: 'No repos tracked', body: 'Add repos to start collecting data.' };
+    if (isCollecting && collectingRepos.length > 0) {
+      return {
+        heading: `Collecting ${completedRepos.length + 1} of ${repoStatuses.length} repos...`,
+        body: undefined,
+      };
+    }
+    if (repoStatuses.length > 0 && repoStatuses.every(r => r.status === 'complete')) {
+      return { heading: 'All repos up to date', body: 'Last synced timestamps shown below.' };
+    }
+    return { heading: 'Ready to sync', body: 'Select repos and tap Sync now to start fetching data.' };
+  };
+  const summary = getCollectionSummary();
 
   // Token missing error state
   const errorMessage =
@@ -290,189 +482,397 @@ export default function ReposPage() {
           time.
         </p>
 
-        {/* Search input */}
-        <div className="mt-6 relative">
-          <Input
-            placeholder="Filter repos by name..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pr-8"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              aria-label="Clear search"
-            >
-              ×
-            </button>
-          )}
-        </div>
+        <Tabs defaultValue="repos" className="mt-6">
+          <TabsList>
+            <TabsTrigger value="repos">Repos</TabsTrigger>
+            <TabsTrigger value="collection">Collection</TabsTrigger>
+          </TabsList>
 
-        {/* Rate-limit warning */}
-        {selectedGithubIds.size > 5 && (
-          <div className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">
-            Selecting many repos may take multiple sessions due to GitHub API rate
-            limits. We recommend starting with 5 or fewer.
-          </div>
-        )}
+          {/* ====== REPOS TAB ====== */}
+          <TabsContent value="repos">
+            {/* Search input */}
+            <div className="mt-4 relative">
+              <Input
+                placeholder="Filter repos by name..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="w-full pr-8"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="Clear search"
+                >
+                  x
+                </button>
+              )}
+            </div>
 
-        {/* Repo groups */}
-        {searchQuery && groupEntries.length === 0 ? (
-          <p className="text-sm text-gray-400 py-8 text-center">
-            No repos match &ldquo;{searchQuery}&rdquo;
-          </p>
-        ) : (
-          <div className="mt-4 space-y-6">
-            {groupEntries.map(([ownerLogin, repos], index) => {
-              const groupCount = repos.filter(r =>
-                selectedGithubIds.has(r.githubId)
-              ).length;
-              const allSelected = isGroupAllSelected(ownerLogin);
-              const partialSelected = isGroupPartiallySelected(ownerLogin);
-              const displayName =
-                ownerLogin === authLogin ? 'Personal' : ownerLogin;
+            {/* Rate-limit warning */}
+            {selectedGithubIds.size > 5 && (
+              <div className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">
+                Selecting many repos may take multiple sessions due to GitHub API rate
+                limits. We recommend starting with 5 or fewer.
+              </div>
+            )}
 
-              return (
-                <div key={ownerLogin}>
-                  {index > 0 && <div className="border-t border-gray-100 mb-4" />}
-                  {/* Owner header */}
-                  <p className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
-                    {displayName}
-                  </p>
-                  {/* Select all / Unselect all row */}
-                  <div className="flex items-center gap-2 mb-1 py-1">
-                    <Checkbox
-                      checked={allSelected}
-                      data-state={
-                        partialSelected
-                          ? 'indeterminate'
-                          : allSelected
-                          ? 'checked'
-                          : 'unchecked'
-                      }
-                      onCheckedChange={() => toggleGroup(ownerLogin)}
-                      id={`select-all-${ownerLogin}`}
-                      className="shrink-0 min-w-5"
-                    />
-                    <label
-                      htmlFor={`select-all-${ownerLogin}`}
-                      className="text-sm text-gray-600 cursor-pointer ml-3"
-                    >
-                      {allSelected ? 'Unselect all' : 'Select all'}
-                    </label>
-                    <span className="text-xs text-gray-400 ml-1">
-                      {groupCount} / {repos.length} selected
-                    </span>
-                  </div>
-                  {/* Repo rows */}
-                  {repos.map(repo => (
-                    <div
-                      key={repo.githubId}
-                      className="flex items-center min-h-[44px] py-2 px-1 hover:bg-gray-50 rounded"
-                    >
-                      <Checkbox
-                        checked={selectedGithubIds.has(repo.githubId)}
-                        onCheckedChange={() => toggleRepo(repo.githubId)}
-                        id={`repo-${repo.githubId}`}
-                        className="shrink-0 min-w-5"
-                      />
-                      <label
-                        htmlFor={`repo-${repo.githubId}`}
-                        className="text-sm text-gray-900 ml-3 flex-1 cursor-pointer"
+            {/* Repo groups */}
+            {searchQuery && groupEntries.length === 0 ? (
+              <p className="text-sm text-gray-400 py-8 text-center">
+                No repos match &ldquo;{searchQuery}&rdquo;
+              </p>
+            ) : (
+              <div className="mt-4 space-y-6">
+                {groupEntries.map(([ownerLogin, repos], index) => {
+                  const groupCount = repos.filter(r =>
+                    selectedGithubIds.has(r.githubId)
+                  ).length;
+                  const allSelected = isGroupAllSelected(ownerLogin);
+                  const partialSelected = isGroupPartiallySelected(ownerLogin);
+                  const displayName =
+                    ownerLogin === authLogin ? 'Personal' : ownerLogin;
+
+                  return (
+                    <div key={ownerLogin}>
+                      {index > 0 && <div className="border-t border-gray-100 mb-4" />}
+                      <p className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                        {displayName}
+                      </p>
+                      <div className="flex items-center gap-2 mb-1 py-1">
+                        <Checkbox
+                          checked={allSelected}
+                          data-state={
+                            partialSelected
+                              ? 'indeterminate'
+                              : allSelected
+                              ? 'checked'
+                              : 'unchecked'
+                          }
+                          onCheckedChange={() => toggleGroup(ownerLogin)}
+                          id={`select-all-${ownerLogin}`}
+                          className="shrink-0 min-w-5"
+                        />
+                        <label
+                          htmlFor={`select-all-${ownerLogin}`}
+                          className="text-sm text-gray-600 cursor-pointer ml-3"
+                        >
+                          {allSelected ? 'Unselect all' : 'Select all'}
+                        </label>
+                        <span className="text-xs text-gray-400 ml-1">
+                          {groupCount} / {repos.length} selected
+                        </span>
+                      </div>
+                      {repos.map(repo => {
+                        const repoCollectionStatus = repoStatusMap.get(repo.fullName);
+                        const collectionBadge = repoCollectionStatus
+                          ? getReposTabBadge(repoCollectionStatus.status)
+                          : null;
+                        return (
+                          <div
+                            key={repo.githubId}
+                            className="flex items-center min-h-[44px] py-2 px-1 hover:bg-gray-50 rounded"
+                          >
+                            <Checkbox
+                              checked={selectedGithubIds.has(repo.githubId)}
+                              onCheckedChange={() => toggleRepo(repo.githubId)}
+                              id={`repo-${repo.githubId}`}
+                              className="shrink-0 min-w-5"
+                            />
+                            <label
+                              htmlFor={`repo-${repo.githubId}`}
+                              className="text-sm text-gray-900 ml-3 flex-1 cursor-pointer"
+                            >
+                              {repo.name}
+                            </label>
+                            {collectionBadge}
+                            {repoCollectionStatus?.lastSyncedAt && (
+                              <span className="text-xs text-muted-foreground ml-2 flex items-center gap-1">
+                                <Clock className="h-3 w-3 inline" />
+                                {new Date(repoCollectionStatus.lastSyncedAt).toLocaleDateString()}
+                              </span>
+                            )}
+                            {repo.isPrivate && (
+                              <Badge variant="secondary" className="ml-2">
+                                Private
+                              </Badge>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Stopped repos panel */}
+            {stoppedRepos.length > 0 && (
+              <div className="mt-8">
+                <button
+                  onClick={() => setShowStopped(v => !v)}
+                  className="text-sm text-gray-500 cursor-pointer hover:text-gray-700"
+                >
+                  {stoppedRepos.length} stopped repo
+                  {stoppedRepos.length !== 1 ? 's' : ''}{' '}
+                  {showStopped ? '\u25B2' : '\u25BC'}
+                </button>
+
+                {showStopped && (
+                  <div className="mt-3 space-y-2">
+                    {stoppedRepos.map(repo => (
+                      <div
+                        key={repo.id}
+                        className="flex items-center gap-2 py-1"
                       >
-                        {repo.name}
-                      </label>
-                      {repo.isPrivate && (
-                        <Badge variant="secondary" className="ml-2">
-                          Private
-                        </Badge>
-                      )}
+                        <span className="text-sm text-gray-500 flex-1">
+                          {repo.fullName}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleReAdd(repo)}
+                          disabled={saveMutation.isPending}
+                        >
+                          Re-add repo
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-red-600 hover:text-red-700"
+                          onClick={() => handleDeleteClick(repo)}
+                        >
+                          Delete data
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tracked repos with stop tracking action */}
+            {trackedData && trackedData.repos.length > 0 && (
+              <div className="mt-8">
+                <p className="text-sm font-semibold text-gray-700 mb-2">
+                  Currently tracked
+                </p>
+                <div className="space-y-1">
+                  {trackedData.repos.map(repo => (
+                    <div
+                      key={repo.id}
+                      className="flex items-center gap-2 min-h-[44px] py-2 px-1"
+                    >
+                      <span className="text-sm text-gray-900 flex-1">
+                        {repo.fullName}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleStop(repo)}
+                        disabled={stoppingIds.has(repo.id)}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        {stoppingIds.has(repo.id) ? 'Stopping...' : 'Stop tracking'}
+                      </Button>
                     </div>
                   ))}
                 </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Stopped repos panel */}
-        {stoppedRepos.length > 0 && (
-          <div className="mt-8">
-            <button
-              onClick={() => setShowStopped(v => !v)}
-              className="text-sm text-gray-500 cursor-pointer hover:text-gray-700"
-            >
-              {stoppedRepos.length} stopped repo
-              {stoppedRepos.length !== 1 ? 's' : ''}{' '}
-              {showStopped ? '▲' : '▼'}
-            </button>
-
-            {showStopped && (
-              <div className="mt-3 space-y-2">
-                {stoppedRepos.map(repo => (
-                  <div
-                    key={repo.id}
-                    className="flex items-center gap-2 py-1"
-                  >
-                    <span className="text-sm text-gray-500 flex-1">
-                      {repo.fullName}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleReAdd(repo)}
-                      disabled={saveMutation.isPending}
-                    >
-                      Re-add repo
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-red-600 hover:text-red-700"
-                      onClick={() => handleDeleteClick(repo)}
-                    >
-                      Delete data
-                    </Button>
-                  </div>
-                ))}
               </div>
             )}
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Tracked repos with stop tracking action */}
-        {trackedData && trackedData.repos.length > 0 && (
-          <div className="mt-8">
-            <p className="text-sm font-semibold text-gray-700 mb-2">
-              Currently tracked
-            </p>
-            <div className="space-y-1">
-              {trackedData.repos.map(repo => (
-                <div
-                  key={repo.id}
-                  className="flex items-center gap-2 min-h-[44px] py-2 px-1"
-                >
-                  <span className="text-sm text-gray-900 flex-1">
-                    {repo.fullName}
-                  </span>
+          {/* ====== COLLECTION TAB ====== */}
+          <TabsContent value="collection">
+            <div className="mt-4 space-y-4">
+              {/* Cross-session resume banner */}
+              {resumeInfo?.hasIncomplete && !isCollecting && (
+                <div className="bg-muted border border-border rounded-lg p-3 flex items-center justify-between">
+                  <p className="text-sm text-foreground">
+                    Collection paused{resumeInfo.repoName ? ` \u2014 ${resumeInfo.repoName} was stopped partway through` : ''}. Resume to continue where you left off.
+                  </p>
                   <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleStop(repo)}
-                    disabled={stoppingIds.has(repo.id)}
-                    className="text-gray-500 hover:text-gray-700"
+                    variant="default"
+                    onClick={() => startCollectionMutation.mutate(undefined)}
+                    disabled={startCollectionMutation.isPending}
                   >
-                    {stoppingIds.has(repo.id) ? 'Stopping...' : 'Stop tracking'}
+                    Resume collection
                   </Button>
                 </div>
-              ))}
+              )}
+
+              {/* Summary bar */}
+              <div className="bg-muted rounded-lg p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-base font-semibold text-foreground">{summary.heading}</p>
+                    {summary.body && (
+                      <p className="text-sm text-muted-foreground mt-1">{summary.body}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {collectionStatus?.rateLimitRemaining != null && collectionStatus?.rateLimitTotal != null && (
+                      <span className="text-sm text-muted-foreground">
+                        {collectionStatus.rateLimitRemaining.toLocaleString()} / {collectionStatus.rateLimitTotal.toLocaleString()} API requests remaining
+                      </span>
+                    )}
+                    <Button
+                      onClick={() => startCollectionMutation.mutate(undefined)}
+                      disabled={!hasTrackedRepos || startCollectionMutation.isPending || isCollecting}
+                    >
+                      {startCollectionMutation.isPending || isCollecting ? (
+                        <>
+                          <Loader2 className="animate-spin h-4 w-4 mr-2" />
+                          Syncing...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="h-4 w-4 mr-2" />
+                          Sync now
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Rate-limit message */}
+              {isRateLimited && rateLimitResetAt && !isSecondaryRateLimit && (
+                <p className="text-sm text-muted-foreground">
+                  Rate limited &mdash; collection will resume after {formatResetTime(rateLimitResetAt)} automatically.
+                </p>
+              )}
+              {isSecondaryRateLimit && (
+                <p className="text-sm text-muted-foreground">
+                  Temporarily slowed &mdash; GitHub&apos;s secondary rate limit reached. Resuming shortly.
+                </p>
+              )}
+
+              {/* Active collection progress */}
+              {isCollecting && (
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <Progress value={percentComplete} />
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="text-destructive min-h-[44px]"
+                    onClick={() => stopCollectionMutation.mutate()}
+                    disabled={stopCollectionMutation.isPending}
+                  >
+                    Stop all
+                  </Button>
+                </div>
+              )}
+
+              <Separator />
+
+              {/* Per-repo status list */}
+              {repoStatuses.length === 0 && !hasTrackedRepos && (
+                <div className="py-8 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    No repos tracked.{' '}
+                    <button
+                      className="text-primary underline cursor-pointer"
+                      onClick={() => {
+                        // Switch to repos tab - trigger click on the repos tab trigger
+                        const reposTab = document.querySelector('[data-slot="tabs-trigger"][value="repos"]');
+                        if (reposTab instanceof HTMLElement) reposTab.click();
+                      }}
+                    >
+                      Add repos to start collecting data.
+                    </button>
+                  </p>
+                </div>
+              )}
+
+              <div className="space-y-0">
+                {repoStatuses.map(repo => {
+                  const isActiveRepo =
+                    currentlyCollecting?.repoId === repo.repoId;
+                  // Merge SSE latest event if it's for this repo
+                  const liveItemCount =
+                    latestEvent?.repoId === repo.repoId && latestEvent?.totalItemsSoFar != null
+                      ? latestEvent.totalItemsSoFar
+                      : null;
+                  const displayCommits = liveItemCount != null && latestEvent?.resourceType === 'commits'
+                    ? liveItemCount
+                    : repo.commitsCollected;
+                  const displayPRs = liveItemCount != null && latestEvent?.resourceType === 'pull_requests'
+                    ? liveItemCount
+                    : repo.prsCollected;
+
+                  return (
+                    <div
+                      key={repo.repoId}
+                      className="flex items-center gap-3 py-2 border-b border-border"
+                    >
+                      {/* Status icon + repo name */}
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        {getStatusIcon(repo.status)}
+                        <span className="text-sm font-semibold truncate">{repo.name}</span>
+                        <span className="text-sm text-muted-foreground truncate">
+                          {repo.ownerLogin}/{repo.name}
+                        </span>
+                      </div>
+
+                      {/* Items fetched */}
+                      <span className="text-sm text-muted-foreground whitespace-nowrap">
+                        {displayCommits} commits, {displayPRs} PRs
+                      </span>
+
+                      {/* Status badge */}
+                      {getStatusBadge(repo.status, repo.isFirstSync)}
+
+                      {/* Last synced */}
+                      {repo.lastSyncedAt && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1 whitespace-nowrap">
+                          <Clock className="h-3 w-3" />
+                          {new Date(repo.lastSyncedAt).toLocaleDateString()}
+                        </span>
+                      )}
+
+                      {/* Per-repo sync button */}
+                      {!isCollecting && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Sync ${repo.ownerLogin}/${repo.name}`}
+                          onClick={() => startCollectionMutation.mutate([repo.repoId])}
+                          disabled={startCollectionMutation.isPending}
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      )}
+
+                      {/* Skip button for actively collecting repo */}
+                      {isActiveRepo && (
+                        <Button
+                          variant="ghost"
+                          className="text-sm"
+                          onClick={() => skipRepoMutation.mutate()}
+                          disabled={skipRepoMutation.isPending}
+                        >
+                          Skip
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bot exclusion footer */}
+              {collectionStatus && collectionStatus.botsExcludedCount > 0 && (
+                <p className="text-sm text-muted-foreground">
+                  {collectionStatus.botsExcludedCount} bot account{collectionStatus.botsExcludedCount !== 1 ? 's' : ''} excluded from contributor data
+                </p>
+              )}
             </div>
-          </div>
-        )}
+          </TabsContent>
+        </Tabs>
       </div>
 
-      {/* Sticky action bar — always visible at bottom of viewport */}
+      {/* Sticky action bar */}
       <div className="fixed bottom-0 left-0 right-0 z-10 border-t border-gray-200 bg-white px-4 py-3 shadow-md">
         <div className="mx-auto max-w-2xl flex items-center gap-4">
           <Button
