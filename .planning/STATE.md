@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: phase-complete
-stopped_at: Completed 02-03-PLAN.md — all tasks and post-checkpoint bug fixes done
-last_updated: "2026-03-22T20:00:00.000Z"
+status: unknown
+stopped_at: Completed 03-01-PLAN.md
+last_updated: "2026-03-22T20:51:15.470Z"
 progress:
   total_phases: 5
   completed_phases: 2
-  total_plans: 5
-  completed_plans: 5
+  total_plans: 9
+  completed_plans: 6
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Engineering leaders can see concrete, data-backed trends in how AI adoption is changing code contribution patterns — especially new developer ramp-up
-**Current focus:** Phase 03 — data-collection (next)
+**Current focus:** Phase 03 — data-collection
 
 ## Current Position
 
-Phase: 02 (auth-repo-management) — COMPLETE
-Plan: 3 of 3 — COMPLETE (all plans done)
+Phase: 03 (data-collection) — EXECUTING
+Plan: 2 of 4
 
 ## Performance Metrics
 
@@ -51,6 +51,7 @@ Plan: 3 of 3 — COMPLETE (all plans done)
 | Phase 02 P01 | 3m28s | 3 tasks | 9 files |
 | Phase 02 P02 | 4 | 2 tasks | 14 files |
 | Phase 02 P03 | ~15min | 3 tasks (incl. post-checkpoint fixes) | 4 files |
+| Phase 03 P01 | 2m43s | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,9 @@ Recent decisions affecting current work:
 - [Phase 02]: LandingPage tracked repos query always enabled (no token needed for local SQLite query) — fixes stale UI after ReposPage saves
 - [Phase 02]: handleSave computes stop-delta (tracked repos unchecked by user) and calls stop API before saving new selection
 - [Phase 02]: Checkbox visibility uses border-2 border-gray-400 bg-white — border-input was near-invisible in default theme
+- [Phase 03]: Used uniqueIndex on collection_state(repo_id, resource_type) for DB-level upsert uniqueness
+- [Phase 03]: Bot detection uses 3-signal classification: GitHub type field, [bot] suffix, known-bots Set
+- [Phase 03]: Rate-limit resetAt encoded in errorMessage field with pipe delimiter (avoids schema change)
 
 ### Pending Todos
 
@@ -89,6 +93,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T20:00:00.000Z
-Stopped at: Completed 02-03-PLAN.md — Phase 2 fully complete including post-checkpoint bug fixes
+Last session: 2026-03-22T20:51:15.467Z
+Stopped at: Completed 03-01-PLAN.md
 Resume file: None
