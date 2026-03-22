@@ -13,7 +13,11 @@ interface SaveResult {
   login?: string;
 }
 
-export default function TokenForm() {
+interface TokenFormProps {
+  onTokenSaved?: () => void;
+}
+
+export default function TokenForm({ onTokenSaved }: TokenFormProps) {
   const [status, setStatus] = useState<TokenStatus | null>(null);
   const [token, setToken] = useState('');
   const [saving, setSaving] = useState(false);
@@ -48,6 +52,7 @@ export default function TokenForm() {
         setStatus({ configured: true, maskedToken: data.maskedToken ?? null });
         setToken('');
         setIsEditing(false);
+        if (onTokenSaved) onTokenSaved();
       }
     } catch {
       setError('Failed to connect to server');

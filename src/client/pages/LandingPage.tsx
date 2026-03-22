@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 
 interface Props {
   onNavigateSettings: () => void;
+  onNavigateRepos: () => void;
 }
 
 type AppState = 'loading' | 'needs-token' | 'ready';
 
-export default function LandingPage({ onNavigateSettings }: Props) {
+export default function LandingPage({ onNavigateSettings, onNavigateRepos }: Props) {
   const [state, setState] = useState<AppState>('loading');
   const [apiStatus, setApiStatus] = useState<'checking' | 'ok' | 'error'>('checking');
 
@@ -58,10 +59,10 @@ export default function LandingPage({ onNavigateSettings }: Props) {
               No repos tracked yet -- add repos to get started.
             </p>
             <button
-              onClick={onNavigateSettings}
-              className="text-sm text-gray-400 hover:text-gray-600 underline"
+              onClick={onNavigateRepos}
+              className="inline-flex items-center rounded-md bg-gray-900 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
             >
-              Settings
+              Add Repos
             </button>
           </div>
         )}
