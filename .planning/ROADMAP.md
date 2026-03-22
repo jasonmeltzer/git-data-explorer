@@ -60,7 +60,12 @@ Plans:
   3. After a rate-limit pause or app restart, collection resumes from the exact cursor position where it stopped — no data gaps or duplicates
   4. The UI shows live collection progress: repos completed, estimated remaining data, and a data-completeness indicator showing which repos/date ranges are fully vs. partially collected
   5. Bot accounts (Dependabot, Renovate, GitHub Actions) are excluded from contributor analysis without requiring manual configuration
-**Plans**: TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 03-01-PLAN.md — Schema fix (unique constraint), shared types, bot detection service, collection state DB service
+- [ ] 03-02-PLAN.md — Collection engine (commits + PRs), queue orchestrator, Hono routes, SSE progress endpoint
+- [ ] 03-03-PLAN.md — Frontend Collection tab, SSE hook, progress display, bot toggle in Settings
+- [ ] 03-04-PLAN.md — Human verification of end-to-end data collection flow
 
 ### Phase 4: Query Service & Cohort Engine
 **Goal**: A tested analytics layer that produces correct cohort groupings, ramp-up curves, before/after AI marker comparisons, and rolling period comparisons from the collected data
@@ -96,6 +101,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation | 0/2 | Planning complete | - |
 | 2. Auth & Repo Management | 3/3 | Complete   | 2026-03-22 |
-| 3. Data Collection Engine | 0/TBD | Not started | - |
+| 3. Data Collection Engine | 0/4 | Planning complete | - |
 | 4. Query Service & Cohort Engine | 0/TBD | Not started | - |
 | 5. Dashboard UI | 0/TBD | Not started | - |
