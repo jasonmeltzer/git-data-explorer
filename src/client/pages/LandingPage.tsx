@@ -13,12 +13,13 @@ export default function LandingPage({ onNavigateSettings, onNavigateRepos }: Pro
   const [state, setState] = useState<AppState>('loading');
   const [apiStatus, setApiStatus] = useState<'checking' | 'ok' | 'error'>('checking');
 
-  // Fetch tracked repos via TanStack Query to share cache with ReposPage
+  // Fetch tracked repos via TanStack Query to share cache with ReposPage.
+  // Always enabled so that stale cache after ReposPage save is immediately visible
+  // without waiting for the token check effect to transition state first.
   const { data: trackedData } = useQuery({
     queryKey: ['repos', 'tracked'],
     queryFn: () =>
       fetch('/api/repos').then(r => r.json() as Promise<{ repos: TrackedRepo[] }>),
-    enabled: state === 'no-repos' || state === 'has-repos',
   });
 
   useEffect(() => {
