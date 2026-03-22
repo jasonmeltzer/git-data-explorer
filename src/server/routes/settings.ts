@@ -1,5 +1,8 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { eq } from 'drizzle-orm';
+import { db } from '../db/client.js';
+import { appConfig } from '../db/schema.js';
 import { getTokenStatus, validateAndSaveToken } from '../services/token.js';
 
 const settings = new Hono();
@@ -35,6 +38,49 @@ settings.post('/api/settings/token', async (c) => {
     scopes: result.scopes,
     login: result.login,
   });
+});
+
+// GET /api/settings/bots — get bot inclusion setting (D-19: default false)
+settings.get('/api/settings/bots', (c) => {
+  const row = db
+    .select()
+    .from(appConfig)
+    .where(eq(appConfig.key, 'include_bots'))
+    .get();
+
+  const includeBots = row?.value === 'true';
+  return c.json({ includeBots });
+});
+
+// PUT /api/settings/bots — update bot inclusion setting
+const botSchema = z.object({
+  includeBots: z.boolean(),
+});
+
+settings.put('/api/settings/bots', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = botSchema.safeParse(body);
+
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Invalid request' }, 400);
+  }
+
+  db.insert(appConfig)
+    .values({
+      key: 'include_bots',
+      value: String(parsed.data.includeBots),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: appConfig.key,
+      set: {
+        value: String(parsed.data.includeBots),
+        updatedAt: new Date(),
+      },
+    })
+    .run();
+
+  return c.json({ success: true, includeBots: parsed.data.includeBots });
 });
 
 export default settings;

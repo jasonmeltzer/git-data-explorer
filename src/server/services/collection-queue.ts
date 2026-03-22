@@ -1,0 +1,350 @@
+import { eq, sql } from 'drizzle-orm';
+import { db } from '../db/client.js';
+import { authors } from '../db/schema.js';
+import { CollectionEngine, RateLimitError, createCollectionOctokit } from './collection-engine.js';
+import { getTrackedRepos } from './repo-management.js';
+import {
+  getCollectionState,
+  getIncompleteCollections,
+  getRepoItemCounts,
+} from './collection-state.js';
+import type {
+  CollectionProgressEvent,
+  CollectionRepoStatus,
+  CollectionBatchStatus,
+  CollectionRepoOverallStatus,
+} from '../../shared/types.js';
+
+/**
+ * In-memory queue that orchestrates sequential repo collection.
+ * Provides start/stop/skip controls and exposes status for the API.
+ */
+export class CollectionQueue {
+  private engine: CollectionEngine;
+  private queue: Array<{
+    id: number;
+    fullName: string;
+    ownerLogin: string;
+    name: string;
+    defaultBranch: string;
+  }> = [];
+  private currentIndex: number = -1;
+  private _isActive: boolean = false;
+  private _listeners: Set<(event: CollectionProgressEvent) => void> = new Set();
+  private _rateLimitInfo: {
+    remaining: number | null;
+    total: number | null;
+    resetAt: string | null;
+  } = { remaining: null, total: null, resetAt: null };
+
+  constructor() {
+    this.engine = new CollectionEngine();
+
+    // Wire engine progress events to our listeners
+    this.engine.addProgressListener((event) => {
+      // Track rate limit info
+      if (event.type === 'rate_limit' || event.type === 'secondary_rate_limit') {
+        this._rateLimitInfo = {
+          remaining: event.rateLimitRemaining ?? 0,
+          total: event.rateLimitTotal ?? null,
+          resetAt: event.rateLimitResetAt ?? null,
+        };
+      }
+      this.emitProgress(event);
+    });
+
+    // Wire auto-resume to continue the batch
+    this.engine.setOnResume(() => {
+      this.resumeAfterRateLimit();
+    });
+  }
+
+  /**
+   * Start batch collection for all tracked repos (or a subset).
+   * Per D-01/D-03: processes repos sequentially.
+   * Per D-04: first sync orders by size ascending; subsequent by item count.
+   */
+  async startBatch(repoIds?: number[]): Promise<void> {
+    if (this._isActive) return;
+
+    const tracked = getTrackedRepos();
+    let repos = repoIds
+      ? tracked.filter((r) => repoIds.includes(r.id))
+      : tracked;
+
+    // Sort: first-time repos (no complete state) by name; rest by item count
+    repos = [...repos].sort((a, b) => {
+      const aCounts = getRepoItemCounts(a.id);
+      const bCounts = getRepoItemCounts(b.id);
+      const aTotal = aCounts.commits + aCounts.prs;
+      const bTotal = bCounts.commits + bCounts.prs;
+      // Repos with no data yet go first (first sync)
+      if (aTotal === 0 && bTotal > 0) return -1;
+      if (bTotal === 0 && aTotal > 0) return 1;
+      return aTotal - bTotal;
+    });
+
+    this.queue = repos.map((r) => ({
+      id: r.id,
+      fullName: r.fullName,
+      ownerLogin: r.ownerLogin,
+      name: r.name,
+      defaultBranch: r.defaultBranch,
+    }));
+    this.currentIndex = 0;
+    this._isActive = true;
+    this.engine.resetAbort();
+
+    await this.processQueue();
+  }
+
+  /**
+   * Start collection for a single repo immediately (D-02).
+   * Called from repositories.ts when exactly 1 repo is added.
+   */
+  async startSingleRepo(repoId: number): Promise<void> {
+    const tracked = getTrackedRepos();
+    const repo = tracked.find((r) => r.id === repoId);
+    if (!repo) return;
+
+    if (this._isActive) {
+      // Queue is already running — add to end
+      this.queue.push({
+        id: repo.id,
+        fullName: repo.fullName,
+        ownerLogin: repo.ownerLogin,
+        name: repo.name,
+        defaultBranch: repo.defaultBranch,
+      });
+      return;
+    }
+
+    this.queue = [{
+      id: repo.id,
+      fullName: repo.fullName,
+      ownerLogin: repo.ownerLogin,
+      name: repo.name,
+      defaultBranch: repo.defaultBranch,
+    }];
+    this.currentIndex = 0;
+    this._isActive = true;
+    this.engine.resetAbort();
+
+    await this.processQueue();
+  }
+
+  /**
+   * Stop all collection (D-05). Current repo's progress is checkpointed.
+   */
+  stopAll(): void {
+    this.engine.abort();
+    this._isActive = false;
+    this.currentIndex = -1;
+    this.queue = [];
+  }
+
+  /**
+   * Skip the current repo and continue with the next (D-05).
+   */
+  skipCurrent(): void {
+    this.engine.abort();
+    // The abort will cause collectRepo to checkpoint and return.
+    // processQueue loop will advance to next repo.
+  }
+
+  /**
+   * Get the full batch status including per-repo detail (D-09).
+   */
+  getStatus(): CollectionBatchStatus {
+    const tracked = getTrackedRepos();
+    const repoStatuses: CollectionRepoStatus[] = tracked.map((repo) => {
+      const commitState = getCollectionState(repo.id, 'commits');
+      const prState = getCollectionState(repo.id, 'pull_requests');
+      const counts = getRepoItemCounts(repo.id);
+
+      // Derive overall status
+      let status: CollectionRepoOverallStatus = 'pending';
+      const commitStatus = commitState?.status;
+      const prStatus = prState?.status;
+
+      if (commitStatus === 'error' || prStatus === 'error') {
+        status = 'error';
+      } else if (commitStatus === 'paused' || prStatus === 'paused') {
+        status = 'paused';
+      } else if (commitStatus === 'in_progress' || prStatus === 'in_progress') {
+        // Check if this is a re-sync (D-12)
+        const hasCompleted = (commitState?.status === 'complete') || (prState?.status === 'complete');
+        status = hasCompleted ? 'updating' : 'collecting';
+      } else if (commitStatus === 'complete' && prStatus === 'complete') {
+        status = 'complete';
+      }
+
+      // Determine if first sync
+      const isFirstSync = !commitState || commitState.status !== 'complete';
+
+      // Last synced: most recent lastRunAt where status='complete'
+      let lastSyncedAt: string | null = null;
+      if (commitState?.status === 'complete' && commitState.lastRunAt) {
+        lastSyncedAt = commitState.lastRunAt instanceof Date
+          ? commitState.lastRunAt.toISOString()
+          : String(commitState.lastRunAt);
+      }
+      if (prState?.status === 'complete' && prState.lastRunAt) {
+        const prSynced = prState.lastRunAt instanceof Date
+          ? prState.lastRunAt.toISOString()
+          : String(prState.lastRunAt);
+        if (!lastSyncedAt || prSynced > lastSyncedAt) {
+          lastSyncedAt = prSynced;
+        }
+      }
+
+      // Error message
+      const errorMessage = commitState?.errorMessage ?? prState?.errorMessage ?? null;
+
+      return {
+        repoId: repo.id,
+        fullName: repo.fullName,
+        ownerLogin: repo.ownerLogin,
+        name: repo.name,
+        status,
+        commitsCollected: counts.commits,
+        prsCollected: counts.prs,
+        lastSyncedAt,
+        errorMessage,
+        isFirstSync,
+      };
+    });
+
+    // Bot count
+    const botCountResult = db
+      .select({ count: sql<number>`count(*)` })
+      .from(authors)
+      .where(eq(authors.isBot, true))
+      .get();
+    const botsExcludedCount = botCountResult?.count ?? 0;
+
+    return {
+      isActive: this._isActive,
+      repoStatuses,
+      rateLimitRemaining: this._rateLimitInfo.remaining,
+      rateLimitTotal: this._rateLimitInfo.total,
+      rateLimitResetAt: this._rateLimitInfo.resetAt,
+      botsExcludedCount,
+    };
+  }
+
+  /**
+   * Add a progress listener (for SSE streaming).
+   */
+  addProgressListener(fn: (event: CollectionProgressEvent) => void): void {
+    this._listeners.add(fn);
+  }
+
+  /**
+   * Remove a progress listener.
+   */
+  removeProgressListener(fn: (event: CollectionProgressEvent) => void): void {
+    this._listeners.delete(fn);
+  }
+
+  /**
+   * Get incomplete collections for cross-session resume (D-16).
+   */
+  getIncompleteForResume(): {
+    hasIncomplete: boolean;
+    incomplete: Array<{
+      repoId: number;
+      resourceType: string;
+      status: string;
+      errorMessage: string | null;
+    }>;
+  } {
+    const incomplete = getIncompleteCollections();
+    return {
+      hasIncomplete: incomplete.length > 0,
+      incomplete: incomplete.map((c) => ({
+        repoId: c.repoId,
+        resourceType: c.resourceType,
+        status: c.status,
+        errorMessage: c.errorMessage,
+      })),
+    };
+  }
+
+  /**
+   * Emit a progress event to all listeners.
+   */
+  private emitProgress(event: CollectionProgressEvent): void {
+    for (const listener of this._listeners) {
+      try {
+        listener(event);
+      } catch {
+        // Listener errors should not break the queue
+      }
+    }
+  }
+
+  /**
+   * Process the queue sequentially — one repo at a time (D-03).
+   */
+  private async processQueue(): Promise<void> {
+    const octokit = createCollectionOctokit();
+    if (!octokit) {
+      this._isActive = false;
+      return;
+    }
+
+    while (this.currentIndex < this.queue.length && this._isActive) {
+      const repo = this.queue[this.currentIndex];
+      this.engine.resetAbort();
+
+      try {
+        await this.engine.collectRepo(octokit, repo);
+      } catch (err) {
+        if (err instanceof RateLimitError) {
+          // Rate limit hit — engine has scheduled auto-resume
+          // Don't advance; resume will pick up from here
+          return;
+        }
+        // Non-rate-limit error — skip this repo and continue
+      }
+
+      this.currentIndex++;
+
+      this.emitProgress({
+        type: 'repo_complete',
+        repoId: repo.id,
+        repoFullName: repo.fullName,
+        reposCompleted: this.currentIndex,
+        reposTotal: this.queue.length,
+      });
+    }
+
+    // Batch complete
+    if (this._isActive) {
+      this._isActive = false;
+      this.emitProgress({
+        type: 'batch_complete',
+        repoId: 0,
+        repoFullName: '',
+        reposCompleted: this.queue.length,
+        reposTotal: this.queue.length,
+      });
+    }
+  }
+
+  /**
+   * Resume collection after a rate-limit pause (D-14).
+   * Called by the engine's auto-resume timer.
+   */
+  private async resumeAfterRateLimit(): Promise<void> {
+    this._rateLimitInfo = { remaining: null, total: null, resetAt: null };
+
+    if (!this._isActive || this.currentIndex < 0) return;
+
+    await this.processQueue();
+  }
+}
+
+// Module-level singleton — shared by routes and repositories
+export const collectionQueue = new CollectionQueue();

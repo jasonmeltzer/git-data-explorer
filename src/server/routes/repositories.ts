@@ -10,6 +10,7 @@ import {
   getDeleteCounts,
   deleteRepoData,
 } from '../services/repo-management.js';
+import { collectionQueue } from '../services/collection-queue.js';
 
 const repos = new Hono();
 
@@ -78,6 +79,19 @@ repos.post('/api/repos', async (c) => {
   }
 
   addRepos(parsed.data.repos);
+
+  // D-02: Auto-start collection when exactly 1 repo is added
+  if (parsed.data.repos.length === 1) {
+    const tracked = getTrackedRepos();
+    const newRepo = tracked.find((r) => r.githubId === parsed.data.repos[0].githubId);
+    if (newRepo) {
+      // Fire-and-forget — collection runs in background
+      collectionQueue.startSingleRepo(newRepo.id).catch((err) => {
+        console.error('Auto-start collection error:', err);
+      });
+    }
+  }
+
   return c.json({ success: true });
 });
 
