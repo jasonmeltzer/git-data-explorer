@@ -63,7 +63,7 @@ Plans:
 **Plans:** 1/4 plans executed
 Plans:
 - [x] 03-01-PLAN.md — Schema fix (unique constraint), shared types, bot detection service, collection state DB service
-- [ ] 03-02-PLAN.md — Collection engine (commits + PRs), queue orchestrator, Hono routes, SSE progress endpoint
+- [x] 03-02-PLAN.md — Collection engine (commits + PRs), queue orchestrator, Hono routes, SSE progress endpoint
 - [ ] 03-03-PLAN.md — Frontend Collection tab, SSE hook, progress display, bot toggle in Settings
 - [ ] 03-04-PLAN.md — Human verification of end-to-end data collection flow
 

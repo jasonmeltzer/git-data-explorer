@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 03-01-PLAN.md
-last_updated: "2026-03-22T20:51:15.470Z"
+stopped_at: Completed 03-02-PLAN.md
+last_updated: "2026-03-22T20:59:13.847Z"
 progress:
   total_phases: 5
   completed_phases: 2
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 7
 ---
 
 # Project State
@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 ## Current Position
 
 Phase: 03 (data-collection) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 ## Performance Metrics
 
@@ -52,6 +52,7 @@ Plan: 2 of 4
 | Phase 02 P02 | 4 | 2 tasks | 14 files |
 | Phase 02 P03 | ~15min | 3 tasks (incl. post-checkpoint fixes) | 4 files |
 | Phase 03 P01 | 2m43s | 2 tasks | 7 files |
+| Phase 03 P02 | 6min | 2 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ Recent decisions affecting current work:
 - [Phase 03]: Used uniqueIndex on collection_state(repo_id, resource_type) for DB-level upsert uniqueness
 - [Phase 03]: Bot detection uses 3-signal classification: GitHub type field, [bot] suffix, known-bots Set
 - [Phase 03]: Rate-limit resetAt encoded in errorMessage field with pipe delimiter (avoids schema change)
+- [Phase 03]: Collection-specific Octokit throws RateLimitError for clean pause/resume flow
+- [Phase 03]: CollectionQueue is module-level singleton shared between routes and repositories
+- [Phase 03]: Upgraded (sha,repoId) and (githubId,repoId) indexes to unique for onConflictDoUpdate upsert
 
 ### Pending Todos
 
@@ -93,6 +97,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T20:51:15.467Z
-Stopped at: Completed 03-01-PLAN.md
+Last session: 2026-03-22T20:59:13.844Z
+Stopped at: Completed 03-02-PLAN.md
 Resume file: None
