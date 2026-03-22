@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: unknown
-stopped_at: Completed 02-03-PLAN.md — awaiting human verify checkpoint (Task 3)
-last_updated: "2026-03-22T19:08:10.730Z"
+status: phase-complete
+stopped_at: Completed 02-03-PLAN.md — all tasks and post-checkpoint bug fixes done
+last_updated: "2026-03-22T20:00:00.000Z"
 progress:
   total_phases: 5
   completed_phases: 2
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Engineering leaders can see concrete, data-backed trends in how AI adoption is changing code contribution patterns — especially new developer ramp-up
-**Current focus:** Phase 02 — auth-repo-management
+**Current focus:** Phase 03 — data-collection (next)
 
 ## Current Position
 
-Phase: 02 (auth-repo-management) — EXECUTING
-Plan: 3 of 3
+Phase: 02 (auth-repo-management) — COMPLETE
+Plan: 3 of 3 — COMPLETE (all plans done)
 
 ## Performance Metrics
 
@@ -50,7 +50,7 @@ Plan: 3 of 3
 | Phase 01 P02 | 2min | 1 tasks | 10 files |
 | Phase 02 P01 | 3m28s | 3 tasks | 9 files |
 | Phase 02 P02 | 4 | 2 tasks | 14 files |
-| Phase 02 P03 | 8min | 2 tasks | 3 files |
+| Phase 02 P03 | ~15min | 3 tasks (incl. post-checkpoint fixes) | 4 files |
 
 ## Accumulated Context
 
@@ -73,6 +73,9 @@ Recent decisions affecting current work:
 - [Phase 02]: shadcn/ui components installed at src/shared/components/ui/ — Plan 03 imports from @shared/components/ui/
 - [Phase 02]: ReposPage initializes selectedGithubIds from trackedData on first load via useEffect to pre-check already-tracked repos
 - [Phase 02]: Shared queryKey ['repos', 'tracked'] in both LandingPage and ReposPage enables automatic cache invalidation across pages
+- [Phase 02]: LandingPage tracked repos query always enabled (no token needed for local SQLite query) — fixes stale UI after ReposPage saves
+- [Phase 02]: handleSave computes stop-delta (tracked repos unchecked by user) and calls stop API before saving new selection
+- [Phase 02]: Checkbox visibility uses border-2 border-gray-400 bg-white — border-input was near-invisible in default theme
 
 ### Pending Todos
 
@@ -86,6 +89,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-22T19:08:10.728Z
-Stopped at: Completed 02-03-PLAN.md — awaiting human verify checkpoint (Task 3)
+Last session: 2026-03-22T20:00:00.000Z
+Stopped at: Completed 02-03-PLAN.md — Phase 2 fully complete including post-checkpoint bug fixes
 Resume file: None

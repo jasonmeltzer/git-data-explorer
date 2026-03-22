@@ -10,12 +10,10 @@ interface Props {
 type AppState = 'loading' | 'needs-token' | 'no-repos' | 'has-repos';
 
 export default function LandingPage({ onNavigateSettings, onNavigateRepos }: Props) {
-  const [state, setState] = useState<AppState>('loading');
+  const [tokenStatus, setTokenStatus] = useState<'checking' | 'configured' | 'missing'>('checking');
   const [apiStatus, setApiStatus] = useState<'checking' | 'ok' | 'error'>('checking');
 
   // Fetch tracked repos via TanStack Query to share cache with ReposPage.
-  // Always enabled so that stale cache after ReposPage save is immediately visible
-  // without waiting for the token check effect to transition state first.
   const { data: trackedData } = useQuery({
     queryKey: ['repos', 'tracked'],
     queryFn: () =>
@@ -23,34 +21,25 @@ export default function LandingPage({ onNavigateSettings, onNavigateRepos }: Pro
   });
 
   useEffect(() => {
-    // Check API health
     fetch('/api/health')
       .then(r => r.json())
       .then(() => setApiStatus('ok'))
       .catch(() => setApiStatus('error'));
 
-    // Check token status
     fetch('/api/settings/token')
       .then(r => r.json())
       .then((data: { configured: boolean }) => {
-        if (!data.configured) {
-          setState('needs-token');
-        } else {
-          // Token exists — set intermediate state, let TanStack Query fetch repos
-          setState('no-repos');
-        }
+        setTokenStatus(data.configured ? 'configured' : 'missing');
       })
-      .catch(() => setState('needs-token'));
+      .catch(() => setTokenStatus('missing'));
   }, []);
 
-  // Separate effect to react to trackedData changes
-  useEffect(() => {
-    if (trackedData?.repos && trackedData.repos.length > 0) {
-      setState('has-repos');
-    }
-  }, [trackedData]);
-
+  // Derive state from data — no racing effects
   const trackedCount = trackedData?.repos?.length ?? 0;
+  const state: AppState =
+    tokenStatus === 'checking' ? 'loading' :
+    tokenStatus === 'missing' ? 'needs-token' :
+    trackedCount > 0 ? 'has-repos' : 'no-repos';
 
   return (
     <div className="flex h-screen items-center justify-center bg-gray-50">
