@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { z } from 'zod';
 import { collectionQueue } from '../services/collection-queue.js';
+import { getDepthSetting } from '../services/collection-state.js';
 import type { CollectionProgressEvent } from '../../shared/types.js';
 
 const collection = new Hono();
@@ -9,7 +10,10 @@ const collection = new Hono();
 // POST /api/collection/start — start batch or specific repos
 collection.post('/api/collection/start', async (c) => {
   const body = await c.req.json().catch(() => ({}));
-  const schema = z.object({ repoIds: z.array(z.number()).optional() });
+  const schema = z.object({
+    repoIds: z.array(z.number()).optional(),
+    fetchAll: z.boolean().optional(),
+  });
   const parsed = schema.safeParse(body);
 
   if (!parsed.success) {
@@ -17,7 +21,8 @@ collection.post('/api/collection/start', async (c) => {
   }
 
   // Start collection in the background (don't await — returns immediately)
-  collectionQueue.startBatch(parsed.data.repoIds).catch((err) => {
+  // fetchAll is passed for Plan 02's engine to use; current queue ignores it
+  collectionQueue.startBatch(parsed.data.repoIds, { fetchAll: parsed.data.fetchAll }).catch((err) => {
     console.error('Collection batch error:', err);
   });
 
@@ -38,7 +43,9 @@ collection.post('/api/collection/skip', (c) => {
 
 // GET /api/collection/status — current batch status (polling fallback)
 collection.get('/api/collection/status', (c) => {
-  return c.json(collectionQueue.getStatus());
+  const status = collectionQueue.getStatus();
+  const depthMonths = getDepthSetting();
+  return c.json({ ...status, depthMonths });
 });
 
 // GET /api/collection/resume-info — check for incomplete collections (D-16)

@@ -66,7 +66,7 @@ export class CollectionQueue {
    * Per D-01/D-03: processes repos sequentially.
    * Per D-04: first sync orders by size ascending; subsequent by item count.
    */
-  async startBatch(repoIds?: number[]): Promise<void> {
+  async startBatch(repoIds?: number[], _options?: { fetchAll?: boolean }): Promise<void> {
     if (this._isActive) return;
 
     const tracked = getTrackedRepos();
