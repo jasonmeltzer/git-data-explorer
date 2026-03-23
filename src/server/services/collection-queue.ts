@@ -256,6 +256,14 @@ export class CollectionQueue {
       .get();
     const botsExcludedCount = botCountResult?.count ?? 0;
 
+    // Compute max meaningful depth from oldest tracked repo's addedAt date
+    const oldestAddedAt = tracked.reduce((oldest, r) => {
+      return !oldest || r.addedAt < oldest ? r.addedAt : oldest;
+    }, null as Date | null);
+    const maxDepthMonths = oldestAddedAt
+      ? Math.max(1, differenceInCalendarMonths(startOfMonth(new Date()), startOfMonth(oldestAddedAt)) + 1)
+      : 1;
+
     return {
       isActive: this._isActive,
       repoStatuses,
@@ -264,6 +272,7 @@ export class CollectionQueue {
       rateLimitResetAt: this._rateLimitInfo.resetAt,
       botsExcludedCount,
       depthMonths,
+      maxDepthMonths,
     };
   }
 

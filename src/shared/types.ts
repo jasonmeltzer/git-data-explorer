@@ -105,6 +105,7 @@ export interface CollectionBatchStatus {
   rateLimitResetAt: string | null;
   botsExcludedCount: number;
   depthMonths: number;  // global depth setting
+  maxDepthMonths: number; // max meaningful depth based on oldest tracked repo
 }
 
 // Settings (bot toggle + collection depth)

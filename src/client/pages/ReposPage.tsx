@@ -455,6 +455,7 @@ export default function ReposPage() {
       : 0;
 
   // Depth-aware computed values
+  const maxDepth = collectionStatus?.maxDepthMonths ?? 24;
   const boundaryLabel = format(
     startOfMonth(subMonths(new Date(), depthMonths - 1)),
     'MMMM yyyy'
@@ -800,8 +801,8 @@ export default function ReposPage() {
                 <input
                   type="range"
                   min={1}
-                  max={24}
-                  value={depthMonths}
+                  max={maxDepth}
+                  value={Math.min(depthMonths, maxDepth)}
                   onChange={(e) => setLocalDepth(Number(e.target.value))}
                   onMouseUp={() => saveDepthMutation.mutate(depthMonths)}
                   onTouchEnd={() => saveDepthMutation.mutate(depthMonths)}
