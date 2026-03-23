@@ -719,5 +719,48 @@ describe('CollectionEngine', () => {
       expect(smallEvents.every(e => e.repoId === 1)).toBe(true);
       expect(bigEvents.every(e => e.repoId === 2)).toBe(true);
     });
+
+    it('incremental sync picks up new commits after initial collection', async () => {
+      const now = new Date();
+      const oldDate = new Date(now.getTime() - 3600000).toISOString(); // 1 hour ago
+      const newDate = new Date(now.getTime() + 3600000).toISOString(); // 1 hour from now
+      const { upsertCollectionState: upsert } = await import('../services/collection-state.js');
+      const { startOfMonth: som } = await import('date-fns');
+
+      const depthBoundary = som(now);
+
+      // First collection: one commit
+      const octokit1 = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [[makeCommit('s1', 'alice', oldDate, { additions: 1, deletions: 0 }, [{}])]],
+          prPages: [],
+        },
+      });
+      await engine.collectRepo(octokit1!, smallRepo, { depthBoundary });
+
+      expect(getRepoItemCounts(1).commits).toBe(1);
+      const state1 = getCollectionState(1, 'commits');
+      expect(state1!.status).toBe('complete');
+      expect(state1!.cursor).toBe(oldDate); // cursor tracks newest commit
+
+      // Second collection: new commit appeared (mock returns both old + new)
+      engine.resetAbort();
+      const octokit2 = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [[
+            makeCommit('s2', 'alice', newDate, { additions: 5, deletions: 0 }, [{}]),
+            makeCommit('s1', 'alice', oldDate, { additions: 1, deletions: 0 }, [{}]),
+          ]],
+          prPages: [],
+        },
+      });
+      await engine.collectRepo(octokit2!, smallRepo, { depthBoundary });
+
+      // Should now have 2 commits
+      expect(getRepoItemCounts(1).commits).toBe(2);
+      const state2 = getCollectionState(1, 'commits');
+      expect(state2!.status).toBe('complete');
+      expect(state2!.cursor).toBe(newDate); // cursor updated to newest
+    });
   });
 });
