@@ -762,5 +762,209 @@ describe('CollectionEngine', () => {
       expect(state2!.status).toBe('complete');
       expect(state2!.cursor).toBe(newDate); // cursor updated to newest
     });
+
+    it('incremental sync with no new commits makes zero writes', async () => {
+      const now = new Date();
+      const commitDate = new Date(now.getTime() - 3600000).toISOString();
+      const { upsertCollectionState: upsert } = await import('../services/collection-state.js');
+      const { startOfMonth: som } = await import('date-fns');
+
+      const depthBoundary = som(now);
+
+      // Initial collection
+      const octokit1 = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [[makeCommit('s1', 'alice', commitDate, { additions: 1, deletions: 0 }, [{}])]],
+          prPages: [],
+        },
+      });
+      await engine.collectRepo(octokit1!, smallRepo, { depthBoundary });
+      expect(getRepoItemCounts(1).commits).toBe(1);
+
+      // Re-sync: API returns empty (no commits newer than cursor)
+      engine.resetAbort();
+      const octokit2 = createPerRepoMockOctokit({
+        'small-repo': { commitPages: [[]], prPages: [] },
+      });
+      await engine.collectRepo(octokit2!, smallRepo, { depthBoundary });
+
+      // Count unchanged, state still complete
+      expect(getRepoItemCounts(1).commits).toBe(1);
+      expect(getCollectionState(1, 'commits')!.status).toBe('complete');
+      expect(getCollectionState(1, 'commits')!.cursor).toBe(commitDate);
+    });
+
+    it('incremental sync picks up new PRs after initial collection', async () => {
+      const now = new Date();
+      const oldPRDate = new Date(now.getTime() - 7200000).toISOString(); // 2 hours ago
+      const newPRDate = new Date(now.getTime() + 3600000).toISOString(); // 1 hour from now
+      const { upsertCollectionState: upsert } = await import('../services/collection-state.js');
+      const { startOfMonth: som } = await import('date-fns');
+
+      const depthBoundary = som(now);
+
+      // Initial collection: one PR
+      const octokit1 = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [],
+          prPages: [[makePR(1001, 1, 'alice', oldPRDate, oldPRDate)]],
+        },
+      });
+      await engine.collectRepo(octokit1!, smallRepo, { depthBoundary });
+
+      expect(getRepoItemCounts(1).prs).toBe(1);
+      const prState1 = getCollectionState(1, 'pull_requests');
+      expect(prState1!.status).toBe('complete');
+      expect(prState1!.cursor).toBe(oldPRDate);
+
+      // Re-sync: new PR appeared (sorted desc: new first, then old)
+      engine.resetAbort();
+      const octokit2 = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [],
+          prPages: [[
+            makePR(1002, 2, 'bob', newPRDate, newPRDate),
+            makePR(1001, 1, 'alice', oldPRDate, oldPRDate),
+          ]],
+        },
+      });
+      await engine.collectRepo(octokit2!, smallRepo, { depthBoundary });
+
+      expect(getRepoItemCounts(1).prs).toBe(2);
+      const prState2 = getCollectionState(1, 'pull_requests');
+      expect(prState2!.status).toBe('complete');
+      expect(prState2!.cursor).toBe(newPRDate);
+    });
+
+    it('incremental sync does not re-count commits from the big repo on the small repo', async () => {
+      const now = new Date();
+      const date1 = new Date(now.getTime() - 7200000).toISOString();
+      const date2 = new Date(now.getTime() - 3600000).toISOString();
+      const newDate = new Date(now.getTime() + 3600000).toISOString();
+      const { startOfMonth: som } = await import('date-fns');
+      const depthBoundary = som(now);
+
+      // Initial collection: small=2 commits, big=50 commits
+      const bigCommits = Array.from({ length: 50 }, (_, i) =>
+        makeCommit(`b${i}`, 'bob', date1, { additions: i, deletions: 0 }, [{}])
+      );
+      const octokit1 = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [[
+            makeCommit('s1', 'alice', date1, { additions: 1, deletions: 0 }, [{}]),
+            makeCommit('s2', 'alice', date2, { additions: 2, deletions: 0 }, [{}]),
+          ]],
+          prPages: [],
+        },
+        'big-repo': { commitPages: [bigCommits], prPages: [] },
+      });
+
+      await engine.collectRepo(octokit1!, smallRepo, { depthBoundary });
+      engine.resetAbort();
+      await engine.collectRepo(octokit1!, bigRepo, { depthBoundary });
+
+      expect(getRepoItemCounts(1).commits).toBe(2);
+      expect(getRepoItemCounts(2).commits).toBe(50);
+
+      // Incremental sync: 1 new commit on small, 10 new on big
+      engine.resetAbort();
+      const newBigCommits = Array.from({ length: 10 }, (_, i) =>
+        makeCommit(`bn${i}`, 'bob', newDate, { additions: i, deletions: 0 }, [{}])
+      );
+      const octokit2 = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [[makeCommit('s3', 'alice', newDate, { additions: 3, deletions: 0 }, [{}])]],
+          prPages: [],
+        },
+        'big-repo': { commitPages: [newBigCommits], prPages: [] },
+      });
+
+      await engine.collectRepo(octokit2!, smallRepo, { depthBoundary });
+      engine.resetAbort();
+      await engine.collectRepo(octokit2!, bigRepo, { depthBoundary });
+
+      // Counts should be exactly right — no cross-contamination
+      expect(getRepoItemCounts(1).commits).toBe(3);  // was 2, +1 new
+      expect(getRepoItemCounts(2).commits).toBe(60);  // was 50, +10 new
+    });
+
+    it('fetchAll=true bypasses incremental sync and does full collection', async () => {
+      const now = new Date();
+      const commitDate = new Date(now.getTime() - 3600000).toISOString();
+      const { upsertCollectionState: upsert } = await import('../services/collection-state.js');
+      const { startOfMonth: som } = await import('date-fns');
+      const depthBoundary = som(now);
+
+      // Mark as complete with cursor
+      upsert(1, 'commits', {
+        status: 'complete', direction: 'reverse',
+        oldestMonthCollected: depthBoundary.toISOString(),
+        depthTarget: depthBoundary.toISOString(),
+        cursor: commitDate,
+      });
+      upsert(1, 'pull_requests', {
+        status: 'complete', direction: 'reverse',
+        depthTarget: depthBoundary.toISOString(),
+        cursor: commitDate,
+      });
+
+      const octokit = createPerRepoMockOctokit({
+        'small-repo': {
+          commitPages: [[makeCommit('s1', 'alice', commitDate, { additions: 1, deletions: 0 }, [{}])]],
+          prPages: [],
+        },
+      });
+
+      // With fetchAll=true, should do full collection (uses month windows, not incremental)
+      await engine.collectRepo(octokit!, smallRepo, { depthBoundary, fetchAll: true });
+
+      const iteratorCalls = (octokit!.paginate.iterator as ReturnType<typeof vi.fn>).mock.calls;
+      // Should have called the API (full collection, not skipped)
+      expect(iteratorCalls.length).toBeGreaterThan(0);
+      // The commit call should have 'since' AND 'until' (month-window), not just 'since' (incremental)
+      const commitCall = iteratorCalls.find(
+        (c: unknown[]) => c[0] === octokit!.rest.repos.listCommits
+      );
+      expect(commitCall).toBeDefined();
+      const params = commitCall![1] as Record<string, unknown>;
+      expect(params.until).toBeDefined(); // month-window has until; incremental doesn't
+    });
+
+    it('complete repo without cursor skips incremental (no crash)', async () => {
+      const now = new Date();
+      const { upsertCollectionState: upsert } = await import('../services/collection-state.js');
+      const { startOfMonth: som } = await import('date-fns');
+      const depthBoundary = som(now);
+
+      // Mark complete but WITHOUT a cursor (e.g. legacy data)
+      upsert(1, 'commits', {
+        status: 'complete', direction: 'reverse',
+        oldestMonthCollected: depthBoundary.toISOString(),
+        depthTarget: depthBoundary.toISOString(),
+        // no cursor
+      });
+      upsert(1, 'pull_requests', {
+        status: 'complete', direction: 'reverse',
+        depthTarget: depthBoundary.toISOString(),
+        // no cursor
+      });
+
+      const octokit = createPerRepoMockOctokit({
+        'small-repo': { commitPages: [], prPages: [] },
+      });
+
+      // Should not crash — just marks complete again without incremental fetch
+      await engine.collectRepo(octokit!, smallRepo, { depthBoundary });
+
+      expect(getCollectionState(1, 'commits')!.status).toBe('complete');
+      expect(getCollectionState(1, 'pull_requests')!.status).toBe('complete');
+
+      // No API calls since there's no cursor to do incremental from
+      const iteratorCalls = (octokit!.paginate.iterator as ReturnType<typeof vi.fn>).mock.calls;
+      const smallCalls = iteratorCalls.filter(
+        (c: unknown[]) => (c[1] as Record<string, unknown>).repo === 'small-repo'
+      );
+      expect(smallCalls).toHaveLength(0);
+    });
   });
 });
