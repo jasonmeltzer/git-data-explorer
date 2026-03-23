@@ -1,6 +1,6 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { collectionState, commits, pullRequests } from '../db/schema.js';
+import { collectionState, commits, pullRequests, appConfig } from '../db/schema.js';
 
 interface CollectionStateRow {
   cursor: string | null;
@@ -8,6 +8,9 @@ interface CollectionStateRow {
   lastPage: number | null;
   lastRunAt: Date | null;
   errorMessage: string | null;
+  direction: string | null;
+  oldestMonthCollected: string | null;
+  depthTarget: string | null;
 }
 
 /**
@@ -17,7 +20,15 @@ interface CollectionStateRow {
 export function upsertCollectionState(
   repoId: number,
   resourceType: 'commits' | 'pull_requests',
-  data: { cursor?: string; status?: string; lastPage?: number; errorMessage?: string | null }
+  data: {
+    cursor?: string;
+    status?: string;
+    lastPage?: number;
+    errorMessage?: string | null;
+    direction?: string;
+    oldestMonthCollected?: string;
+    depthTarget?: string;
+  }
 ): void {
   db.insert(collectionState)
     .values({
@@ -28,6 +39,9 @@ export function upsertCollectionState(
       lastPage: data.lastPage ?? null,
       lastRunAt: new Date(),
       errorMessage: data.errorMessage ?? null,
+      direction: data.direction ?? null,
+      oldestMonthCollected: data.oldestMonthCollected ?? null,
+      depthTarget: data.depthTarget ?? null,
     })
     .onConflictDoUpdate({
       target: [collectionState.repoId, collectionState.resourceType],
@@ -37,6 +51,9 @@ export function upsertCollectionState(
         ...(data.lastPage !== undefined ? { lastPage: data.lastPage } : {}),
         lastRunAt: new Date(),
         ...(data.errorMessage !== undefined ? { errorMessage: data.errorMessage } : {}),
+        ...(data.direction !== undefined ? { direction: data.direction } : {}),
+        ...(data.oldestMonthCollected !== undefined ? { oldestMonthCollected: data.oldestMonthCollected } : {}),
+        ...(data.depthTarget !== undefined ? { depthTarget: data.depthTarget } : {}),
       },
     })
     .run();
@@ -117,4 +134,48 @@ export function getRepoItemCounts(repoId: number): { commits: number; prs: numbe
     commits: commitCount?.count ?? 0,
     prs: prCount?.count ?? 0,
   };
+}
+
+/**
+ * Get the collection depth setting in months. Defaults to 3 (per D-06).
+ */
+export function getDepthSetting(): number {
+  const row = db.select().from(appConfig).where(eq(appConfig.key, 'collection_depth_months')).get();
+  return row ? parseInt(row.value, 10) : 3;
+}
+
+/**
+ * Persist the collection depth setting in months.
+ */
+export function setDepthSetting(months: number): void {
+  db.insert(appConfig)
+    .values({ key: 'collection_depth_months', value: String(months), updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: appConfig.key,
+      set: { value: String(months), updatedAt: new Date() },
+    })
+    .run();
+}
+
+/**
+ * Get the oldest month collected for a specific repo/resource.
+ */
+export function getOldestMonthCollected(repoId: number, resourceType: 'commits' | 'pull_requests'): string | null {
+  const state = getCollectionState(repoId, resourceType);
+  return state?.oldestMonthCollected ?? null;
+}
+
+/**
+ * Reset a mid-collection repo — delete all collected data and reset collection state to pending (D-11).
+ * Used by the queue on startup when it detects a repo was in_progress.
+ */
+export function resetMidCollectionRepo(repoId: number): void {
+  // Delete commits and PRs for this repo
+  db.delete(commits).where(eq(commits.repoId, repoId)).run();
+  db.delete(pullRequests).where(eq(pullRequests.repoId, repoId)).run();
+  // Reset collection state to pending
+  db.update(collectionState)
+    .set({ status: 'pending', cursor: null, lastPage: null, errorMessage: null, direction: null, oldestMonthCollected: null, depthTarget: null })
+    .where(eq(collectionState.repoId, repoId))
+    .run();
 }

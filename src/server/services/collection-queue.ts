@@ -7,6 +7,8 @@ import {
   getCollectionState,
   getIncompleteCollections,
   getRepoItemCounts,
+  getDepthSetting,
+  getOldestMonthCollected,
 } from './collection-state.js';
 import type {
   CollectionProgressEvent,
@@ -157,6 +159,7 @@ export class CollectionQueue {
    */
   getStatus(): CollectionBatchStatus {
     const tracked = getTrackedRepos();
+    const depthMonths = getDepthSetting();
     const repoStatuses: CollectionRepoStatus[] = tracked.map((repo) => {
       const commitState = getCollectionState(repo.id, 'commits');
       const prState = getCollectionState(repo.id, 'pull_requests');
@@ -201,6 +204,16 @@ export class CollectionQueue {
       // Error message
       const errorMessage = commitState?.errorMessage ?? prState?.errorMessage ?? null;
 
+      // Compute months collected: if oldestMonthCollected is set, calculate from oldest to now
+      let monthsCollected: number | null = null;
+      const oldestMonth = getOldestMonthCollected(repo.id, 'commits');
+      if (oldestMonth) {
+        const oldest = new Date(oldestMonth);
+        const now = new Date();
+        const monthsDiff = (now.getFullYear() - oldest.getFullYear()) * 12 + (now.getMonth() - oldest.getMonth());
+        monthsCollected = Math.max(1, monthsDiff);
+      }
+
       return {
         repoId: repo.id,
         fullName: repo.fullName,
@@ -212,6 +225,8 @@ export class CollectionQueue {
         lastSyncedAt,
         errorMessage,
         isFirstSync,
+        monthsCollected,
+        depthMonths,
       };
     });
 
@@ -230,6 +245,7 @@ export class CollectionQueue {
       rateLimitTotal: this._rateLimitInfo.total,
       rateLimitResetAt: this._rateLimitInfo.resetAt,
       botsExcludedCount,
+      depthMonths,
     };
   }
 

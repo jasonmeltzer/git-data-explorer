@@ -74,7 +74,10 @@ function createTestDb() {
       last_page INTEGER,
       status TEXT NOT NULL DEFAULT 'pending',
       last_run_at INTEGER,
-      error_message TEXT
+      error_message TEXT,
+      direction TEXT,
+      oldest_month_collected TEXT,
+      depth_target TEXT
     );
 
     CREATE UNIQUE INDEX idx_collection_repo_type_unique ON collection_state (repo_id, resource_type);

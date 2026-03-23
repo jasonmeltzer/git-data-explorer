@@ -79,6 +79,9 @@ export const collectionState = sqliteTable('collection_state', {
   status: text('status').notNull().default('pending'), // pending, in_progress, complete, paused
   lastRunAt: integer('last_run_at', { mode: 'timestamp' }),
   errorMessage: text('error_message'),
+  direction: text('direction'),                    // 'reverse' | null (null = legacy forward from Phase 3)
+  oldestMonthCollected: text('oldest_month_collected'), // ISO timestamp of oldest fully-collected month start (e.g., '2026-01-01T00:00:00Z')
+  depthTarget: text('depth_target'),               // ISO timestamp of the depth boundary when collection started
 }, (table) => [
   uniqueIndex('idx_collection_repo_type_unique').on(table.repoId, table.resourceType),
 ]);

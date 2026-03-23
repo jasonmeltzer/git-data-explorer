@@ -22,6 +22,13 @@
       "when": 1774212832756,
       "tag": "0002_aspiring_morlun",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1774230393314,
+      "tag": "0003_moaning_mephistopheles",
+      "breakpoints": true
     }
   ]
 }

@@ -76,6 +76,8 @@ export interface CollectionRepoStatus {
   lastSyncedAt: string | null;   // ISO timestamp
   errorMessage: string | null;
   isFirstSync: boolean;          // true if never completed before
+  monthsCollected: number | null; // how many months of data collected for this repo
+  depthMonths: number;            // current global depth setting
 }
 
 // SSE progress event shape
@@ -102,9 +104,11 @@ export interface CollectionBatchStatus {
   rateLimitTotal: number | null;
   rateLimitResetAt: string | null;
   botsExcludedCount: number;
+  depthMonths: number;  // global depth setting
 }
 
-// Settings (bot toggle)
+// Settings (bot toggle + collection depth)
 export interface AppSettings {
   includeBots: boolean;
+  depthMonths: number;
 }
