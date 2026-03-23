@@ -1,6 +1,7 @@
 import { Octokit } from '@octokit/rest';
 import { throttling } from '@octokit/plugin-throttling';
-import { eq, sql, and } from 'drizzle-orm';
+import { startOfMonth, endOfMonth, subMonths } from 'date-fns';
+import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { commits, pullRequests, authors } from '../db/schema.js';
 import { readToken } from './token.js';
@@ -64,6 +65,16 @@ interface RepoInfo {
 }
 
 /**
+ * Compute the ISO since/until boundaries for a full calendar month.
+ */
+function getMonthWindow(date: Date): { since: string; until: string } {
+  return {
+    since: startOfMonth(date).toISOString(),
+    until: endOfMonth(date).toISOString(),
+  };
+}
+
+/**
  * Upsert an author into the authors table.
  * Returns the author's DB id.
  */
@@ -102,7 +113,7 @@ function upsertAuthor(
 
 /**
  * Core collection engine that fetches GitHub commits and PRs for a repo,
- * checkpoints after each page, handles rate limits, and supports abort.
+ * checkpoints after each page/month, handles rate limits, and supports abort.
  */
 export class CollectionEngine {
   private _listeners: Set<(event: CollectionProgressEvent) => void> = new Set();
@@ -176,9 +187,16 @@ export class CollectionEngine {
 
   /**
    * Collect all commits and PRs for a single repo.
-   * Emits progress events throughout. Checkpoints after each page.
+   * Emits progress events throughout. Checkpoints after each page/month.
+   *
+   * @param options.depthBoundary - oldest month to collect (default: 3 months back per D-02)
+   * @param options.fetchAll - if true, bypass depth limit and collect full history (D-09)
    */
-  async collectRepo(octokit: OctokitInstance, repo: RepoInfo): Promise<void> {
+  async collectRepo(
+    octokit: OctokitInstance,
+    repo: RepoInfo,
+    options?: { depthBoundary?: Date; fetchAll?: boolean }
+  ): Promise<void> {
     this.emitProgress({
       type: 'repo_start',
       repoId: repo.id,
@@ -186,8 +204,8 @@ export class CollectionEngine {
     });
 
     try {
-      await this.collectCommits(octokit, repo);
-      await this.collectPRs(octokit, repo);
+      await this.collectCommits(octokit, repo, options);
+      await this.collectPRs(octokit, repo, options);
 
       this.emitProgress({
         type: 'repo_complete',
@@ -236,46 +254,105 @@ export class CollectionEngine {
   }
 
   /**
-   * Fetch commits page-by-page using paginate.iterator (D-07: raw /commits endpoint).
-   * Checkpoints after each page. Supports incremental collection via cursor (since param).
+   * Fetch commits using month-window iteration from newest to oldest (D-01, D-02).
+   * Uses since+until params for bounded month windows — never fetches full history by accident.
+   * Checkpoints oldest month collected after each complete month.
+   * Supports resume: if direction='reverse' and oldestMonthCollected exists, resumes from there.
    */
-  private async collectCommits(octokit: OctokitInstance, repo: RepoInfo): Promise<void> {
+  private async collectCommits(
+    octokit: OctokitInstance,
+    repo: RepoInfo,
+    options?: { depthBoundary?: Date; fetchAll?: boolean }
+  ): Promise<void> {
     const existing = getCollectionState(repo.id, 'commits');
-    const cursor = existing?.cursor ?? null;
 
-    const params: Record<string, unknown> = {
-      owner: repo.ownerLogin,
-      repo: repo.name,
-      per_page: 100,
-    };
-    if (cursor) {
-      params.since = cursor;
+    // Compute depth boundary:
+    // - fetchAll=true → go back to epoch (all history)
+    // - options.depthBoundary provided → use it
+    // - default → 3 months back from start of current month (D-02)
+    const depthBoundary = options?.fetchAll
+      ? new Date(0)
+      : (options?.depthBoundary ?? startOfMonth(subMonths(new Date(), 2)));
+
+    // Determine starting month for iteration:
+    // - If resuming from a reverse-direction collection, start from month before oldestMonthCollected
+    // - Otherwise start from current month
+    let currentMonth = startOfMonth(new Date());
+
+    if (existing?.direction === 'reverse' && existing.oldestMonthCollected) {
+      currentMonth = startOfMonth(subMonths(new Date(existing.oldestMonthCollected), 1));
     }
 
-    let pageNumber = existing?.lastPage ?? 0;
+    // If we have a cursor from a previous in-progress incremental sync but no direction,
+    // start fresh with reverse collection from the current month
+    let totalItems = 0;
+
+    while (currentMonth >= depthBoundary && !this._aborted) {
+      const { since, until } = getMonthWindow(currentMonth);
+      await this.collectCommitsForMonth(octokit, repo, since, until);
+
+      if (this._aborted) {
+        // Checkpoint partial month progress — mark month not yet complete
+        upsertCollectionState(repo.id, 'commits', {
+          direction: 'reverse',
+          status: 'paused',
+          depthTarget: depthBoundary.toISOString(),
+        });
+        return;
+      }
+
+      // Month complete — checkpoint
+      upsertCollectionState(repo.id, 'commits', {
+        direction: 'reverse',
+        oldestMonthCollected: since,
+        depthTarget: depthBoundary.toISOString(),
+        status: 'in_progress',
+      });
+
+      totalItems++;
+
+      this.emitProgress({
+        type: 'page_complete',
+        repoId: repo.id,
+        repoFullName: repo.fullName,
+        resourceType: 'commits',
+        itemsInPage: 0, // month boundary checkpoint, not individual items
+        totalItemsSoFar: totalItems,
+      });
+
+      currentMonth = startOfMonth(subMonths(currentMonth, 1));
+    }
+
+    markCollectionComplete(repo.id, 'commits');
+  }
+
+  /**
+   * Fetch all commits for a single calendar month using since+until bounds.
+   * Processes all pages for the month. Checkpoints within-month cursor for rate-limit resume.
+   */
+  private async collectCommitsForMonth(
+    octokit: OctokitInstance,
+    repo: RepoInfo,
+    since: string,
+    until: string,
+  ): Promise<void> {
     let totalItems = 0;
 
     const iterator = octokit.paginate.iterator(
       octokit.rest.repos.listCommits,
-      params as Parameters<typeof octokit.rest.repos.listCommits>[0]
+      {
+        owner: repo.ownerLogin,
+        repo: repo.name,
+        since,
+        until,
+        per_page: 100,
+      } as Parameters<typeof octokit.rest.repos.listCommits>[0]
     );
 
     for await (const response of iterator) {
-      if (this._aborted) {
-        // Checkpoint current progress and return
-        if (totalItems > 0) {
-          upsertCollectionState(repo.id, 'commits', {
-            cursor: cursor ?? undefined,
-            status: 'paused',
-            lastPage: pageNumber,
-          });
-        }
-        return;
-      }
+      if (this._aborted) return;
 
-      pageNumber++;
       const page = response.data;
-
       if (page.length === 0) break;
 
       // Check if we need individual stats fetches
@@ -357,11 +434,11 @@ export class CollectionEngine {
         lastCommitDate = dateStr;
       }
 
-      // Checkpoint after writing page
+      // Checkpoint within-month cursor for rate-limit resume (Pitfall 6)
       upsertCollectionState(repo.id, 'commits', {
         cursor: lastCommitDate,
         status: 'in_progress',
-        lastPage: pageNumber,
+        direction: 'reverse',
       });
 
       totalItems += page.length;
@@ -375,19 +452,23 @@ export class CollectionEngine {
         totalItemsSoFar: totalItems,
       });
     }
-
-    markCollectionComplete(repo.id, 'commits');
   }
 
   /**
-   * Fetch PRs page-by-page. Fetches individual PR details for stats.
-   * Supports incremental collection via cursor (updated_at comparison).
+   * Fetch PRs using reverse-chronological sort (sort=created direction=desc) with early-exit
+   * at depthBoundary (D-03). Checkpoints the most-recent cursor for incremental forward syncs (D-04).
+   *
+   * Per Pitfall 2: process ALL PRs on a page that are within the window BEFORE breaking.
    */
-  private async collectPRs(octokit: OctokitInstance, repo: RepoInfo): Promise<void> {
-    const existing = getCollectionState(repo.id, 'pull_requests');
-    const cursor = existing?.cursor ?? null;
+  private async collectPRs(
+    octokit: OctokitInstance,
+    repo: RepoInfo,
+    options?: { depthBoundary?: Date; fetchAll?: boolean }
+  ): Promise<void> {
+    const depthBoundary = options?.fetchAll
+      ? new Date(0)
+      : (options?.depthBoundary ?? startOfMonth(subMonths(new Date(), 2)));
 
-    let pageNumber = existing?.lastPage ?? 0;
     let totalItems = 0;
 
     const iterator = octokit.paginate.iterator(
@@ -396,8 +477,8 @@ export class CollectionEngine {
         owner: repo.ownerLogin,
         repo: repo.name,
         state: 'all',
-        sort: 'updated',
-        direction: 'asc',
+        sort: 'created',
+        direction: 'desc',
         per_page: 100,
       }
     );
@@ -405,31 +486,29 @@ export class CollectionEngine {
     for await (const response of iterator) {
       if (this._aborted) {
         upsertCollectionState(repo.id, 'pull_requests', {
-          cursor: cursor ?? undefined,
           status: 'paused',
-          lastPage: pageNumber,
+          direction: 'reverse',
+          depthTarget: depthBoundary.toISOString(),
         });
         return;
       }
 
-      pageNumber++;
       const page = response.data;
-
       if (page.length === 0) break;
 
-      let allSkipped = true;
-      let lastUpdatedAt: string | undefined;
+      let reachedBoundary = false;
+      let pageItems = 0;
 
       for (const pr of page) {
         const prData = pr as Record<string, unknown>;
-        const updatedAt = prData.updated_at as string;
+        const createdAt = new Date(prData.created_at as string);
 
-        // Skip PRs we've already seen (cursor-based incremental)
-        if (cursor && updatedAt <= cursor) {
-          continue;
+        if (createdAt < depthBoundary) {
+          // Per Pitfall 2: mark boundary reached but continue processing remaining PRs in this page
+          // that ARE within the window (since sort is desc, all subsequent PRs are also older)
+          reachedBoundary = true;
+          break; // All subsequent PRs in this page and future pages are also older — stop
         }
-
-        allSkipped = false;
 
         // Fetch full PR details for stats
         const prNumber = prData.number as number;
@@ -456,13 +535,13 @@ export class CollectionEngine {
         const user = prData.user as { login?: string; type?: string } | null;
         const login = user?.login ?? 'unknown';
         const userType = user?.type ?? null;
-        const createdAt = new Date(prData.created_at as string);
 
         const authorId = upsertAuthor(login, null, userType, createdAt);
 
         const githubId = prData.id as number;
         const title = prData.title as string;
         const state = prData.state as string;
+        const updatedAt = prData.updated_at as string;
         const mergedAt = prData.merged_at ? new Date(prData.merged_at as string) : null;
         const closedAt = prData.closed_at ? new Date(prData.closed_at as string) : null;
 
@@ -501,34 +580,31 @@ export class CollectionEngine {
           })
           .run();
 
-        lastUpdatedAt = updatedAt;
+        pageItems++;
       }
 
-      // If all PRs in page were skipped (all <= cursor), stop pagination
-      if (allSkipped) {
-        break;
-      }
-
-      // Checkpoint after writing page
+      // Checkpoint: track the most recent PR's created_at as cursor for incremental forward syncs (D-04)
+      // The first PR in the first page is the most recent (desc sort)
+      const newestPR = page[0] as Record<string, unknown>;
       upsertCollectionState(repo.id, 'pull_requests', {
-        cursor: lastUpdatedAt,
+        cursor: newestPR.created_at as string,
         status: 'in_progress',
-        lastPage: pageNumber,
+        direction: 'reverse',
+        depthTarget: depthBoundary.toISOString(),
       });
 
-      totalItems += page.filter((pr) => {
-        if (!cursor) return true;
-        return (pr as Record<string, unknown>).updated_at as string > cursor;
-      }).length;
+      totalItems += pageItems;
 
       this.emitProgress({
         type: 'page_complete',
         repoId: repo.id,
         repoFullName: repo.fullName,
         resourceType: 'pull_requests',
-        itemsInPage: page.length,
+        itemsInPage: pageItems,
         totalItemsSoFar: totalItems,
       });
+
+      if (reachedBoundary) break;
     }
 
     markCollectionComplete(repo.id, 'pull_requests');

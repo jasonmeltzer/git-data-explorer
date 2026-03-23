@@ -1,4 +1,5 @@
 import { eq, sql } from 'drizzle-orm';
+import { startOfMonth, subMonths, differenceInCalendarMonths } from 'date-fns';
 import { db } from '../db/client.js';
 import { authors } from '../db/schema.js';
 import { CollectionEngine, RateLimitError, createCollectionOctokit } from './collection-engine.js';
@@ -9,6 +10,7 @@ import {
   getRepoItemCounts,
   getDepthSetting,
   getOldestMonthCollected,
+  resetMidCollectionRepo,
 } from './collection-state.js';
 import type {
   CollectionProgressEvent,
@@ -16,6 +18,9 @@ import type {
   CollectionBatchStatus,
   CollectionRepoOverallStatus,
 } from '../../shared/types.js';
+
+// Module-level flag: ensure legacy repo transition runs only once per process (D-10/D-11)
+let _transitionDone = false;
 
 /**
  * In-memory queue that orchestrates sequential repo collection.
@@ -32,6 +37,7 @@ export class CollectionQueue {
   }> = [];
   private currentIndex: number = -1;
   private _isActive: boolean = false;
+  private _fetchAll: boolean = false;
   private _listeners: Set<(event: CollectionProgressEvent) => void> = new Set();
   private _rateLimitInfo: {
     remaining: number | null;
@@ -65,9 +71,15 @@ export class CollectionQueue {
    * Start batch collection for all tracked repos (or a subset).
    * Per D-01/D-03: processes repos sequentially.
    * Per D-04: first sync orders by size ascending; subsequent by item count.
+   * Per D-10/D-11: transitions legacy Phase 3 repos on first batch start.
    */
-  async startBatch(repoIds?: number[], _options?: { fetchAll?: boolean }): Promise<void> {
+  async startBatch(repoIds?: number[], options?: { fetchAll?: boolean }): Promise<void> {
     if (this._isActive) return;
+
+    this._fetchAll = options?.fetchAll ?? false;
+
+    // Transition legacy Phase 3 repos (runs only once per process)
+    this.transitionLegacyRepos();
 
     const tracked = getTrackedRepos();
     let repos = repoIds
@@ -104,10 +116,12 @@ export class CollectionQueue {
    * Start collection for a single repo immediately (D-02).
    * Called from repositories.ts when exactly 1 repo is added.
    */
-  async startSingleRepo(repoId: number): Promise<void> {
+  async startSingleRepo(repoId: number, options?: { fetchAll?: boolean }): Promise<void> {
     const tracked = getTrackedRepos();
     const repo = tracked.find((r) => r.id === repoId);
     if (!repo) return;
+
+    this._fetchAll = options?.fetchAll ?? false;
 
     if (this._isActive) {
       // Queue is already running — add to end
@@ -204,14 +218,18 @@ export class CollectionQueue {
       // Error message
       const errorMessage = commitState?.errorMessage ?? prState?.errorMessage ?? null;
 
-      // Compute months collected: if oldestMonthCollected is set, calculate from oldest to now
+      // Compute months collected using date-fns differenceInCalendarMonths (D-13)
+      // Use the more conservative (later/fewer months) of commits and PRs oldest month
       let monthsCollected: number | null = null;
-      const oldestMonth = getOldestMonthCollected(repo.id, 'commits');
-      if (oldestMonth) {
-        const oldest = new Date(oldestMonth);
-        const now = new Date();
-        const monthsDiff = (now.getFullYear() - oldest.getFullYear()) * 12 + (now.getMonth() - oldest.getMonth());
-        monthsCollected = Math.max(1, monthsDiff);
+      const commitOldest = getOldestMonthCollected(repo.id, 'commits');
+      const prOldest = getOldestMonthCollected(repo.id, 'pull_requests');
+      const effectiveOldest = commitOldest && prOldest
+        ? (commitOldest > prOldest ? commitOldest : prOldest) // later date = fewer months = bottleneck
+        : (commitOldest ?? prOldest);
+
+      if (effectiveOldest) {
+        const oldestDate = new Date(effectiveOldest);
+        monthsCollected = differenceInCalendarMonths(startOfMonth(new Date()), oldestDate) + 1;
       }
 
       return {
@@ -288,6 +306,41 @@ export class CollectionQueue {
   }
 
   /**
+   * Transition legacy Phase 3 repos to the new reverse-chronological strategy (D-10, D-11).
+   * Runs only once per process (controlled by module-level _transitionDone flag).
+   *
+   * D-10: Complete repos keep all data — skipped here.
+   * D-11: Mid-collection repos (in_progress/paused with no direction or direction='forward')
+   *       are reset: data deleted and collection state cleared for restart.
+   */
+  private transitionLegacyRepos(): void {
+    if (_transitionDone) return;
+    _transitionDone = true;
+
+    const tracked = getTrackedRepos();
+    for (const repo of tracked) {
+      const commitState = getCollectionState(repo.id, 'commits');
+      const prState = getCollectionState(repo.id, 'pull_requests');
+
+      // D-10: Complete repos keep all data — skip them entirely
+      if (commitState?.status === 'complete' && prState?.status === 'complete') {
+        continue;
+      }
+
+      // D-11: Mid-collection repos (in_progress or paused with no direction or direction='forward')
+      // are reset: delete data and restart with reverse strategy
+      const isMidCollection = (state: typeof commitState): boolean =>
+        !!(state &&
+        (state.status === 'in_progress' || state.status === 'paused') &&
+        (!state.direction || state.direction === 'forward'));
+
+      if (isMidCollection(commitState) || isMidCollection(prState)) {
+        resetMidCollectionRepo(repo.id);
+      }
+    }
+  }
+
+  /**
    * Emit a progress event to all listeners.
    */
   private emitProgress(event: CollectionProgressEvent): void {
@@ -310,12 +363,20 @@ export class CollectionQueue {
       return;
     }
 
+    // Compute depth boundary from global setting (D-06, D-07)
+    // depthMonths=3, today=March → boundary=start of January (current month - (depthMonths-1))
+    const depthMonths = getDepthSetting();
+    const depthBoundary = startOfMonth(subMonths(new Date(), depthMonths - 1));
+
     while (this.currentIndex < this.queue.length && this._isActive) {
       const repo = this.queue[this.currentIndex];
       this.engine.resetAbort();
 
       try {
-        await this.engine.collectRepo(octokit, repo);
+        await this.engine.collectRepo(octokit, repo, {
+          depthBoundary,
+          fetchAll: this._fetchAll,
+        });
       } catch (err) {
         if (err instanceof RateLimitError) {
           // Rate limit hit — engine has scheduled auto-resume
