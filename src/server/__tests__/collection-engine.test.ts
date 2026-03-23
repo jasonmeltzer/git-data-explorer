@@ -215,16 +215,18 @@ function makeCommit(sha: string, login: string, date: string, stats?: { addition
   };
 }
 
-function makePR(id: number, number: number, login: string, updatedAt: string) {
+function makePR(id: number, number: number, login: string, updatedAt: string, createdAt?: string) {
+  // Default created_at is recent (within 3-month depth boundary) so PRs pass the depth filter
+  const defaultCreatedAt = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(); // 1 week ago
   return {
     id,
     number,
     title: `PR #${number}`,
     state: 'closed',
     user: { login, type: 'User' },
-    created_at: '2025-01-01T00:00:00Z',
-    merged_at: '2025-01-02T00:00:00Z',
-    closed_at: '2025-01-02T00:00:00Z',
+    created_at: createdAt ?? defaultCreatedAt,
+    merged_at: createdAt ?? defaultCreatedAt,
+    closed_at: createdAt ?? defaultCreatedAt,
     updated_at: updatedAt,
   };
 }
@@ -272,25 +274,31 @@ describe('CollectionEngine', () => {
     expect(state!.status).toBe('complete');
   });
 
-  it('collectCommits with existing cursor only fetches since that cursor', async () => {
-    // Pre-set a cursor
-    const { upsertCollectionState } = await import('../services/collection-state.js');
-    upsertCollectionState(1, 'commits', { cursor: '2025-06-01T00:00:00Z', status: 'in_progress', lastPage: 1 });
-
+  it('collectCommits uses since+until month-window params (newest-first)', async () => {
+    // New behavior: collectCommits uses month windows (since + until) not a single cursor
+    const recentDate = new Date();
+    const recentIso = recentDate.toISOString();
     const page1 = [
-      makeCommit('ddd444', 'alice', '2025-06-02T10:00:00Z', { additions: 10, deletions: 2 }, [{}]),
+      makeCommit('ddd444', 'alice', recentIso, { additions: 10, deletions: 2 }, [{}]),
     ];
 
     const octokit = createMockOctokit({ commitPages: [page1], prPages: [] });
 
-    // Capture what params were passed to paginate.iterator
     await engine.collectRepo(octokit!, testRepo);
 
-    // The iterator was called with since param
+    // The iterator was called with both since AND until params (month-window approach)
     const iteratorCalls = (octokit!.paginate.iterator as ReturnType<typeof vi.fn>).mock.calls;
     const commitCall = iteratorCalls.find((c: unknown[]) => c[0] === octokit!.rest.repos.listCommits);
     expect(commitCall).toBeDefined();
-    expect((commitCall![1] as Record<string, unknown>).since).toBe('2025-06-01T00:00:00Z');
+    const params = commitCall![1] as Record<string, unknown>;
+    // since should be start of a month (ISO string)
+    expect(params.since).toBeDefined();
+    expect(typeof params.since).toBe('string');
+    // until should also be set (month-window requires both since and until)
+    expect(params.until).toBeDefined();
+    expect(typeof params.until).toBe('string');
+    // since should be before until
+    expect(new Date(params.since as string) < new Date(params.until as string)).toBe(true);
   });
 
   it('collectPRs fetches individual PR stats and stores to DB', async () => {
@@ -316,27 +324,31 @@ describe('CollectionEngine', () => {
     expect(prState!.status).toBe('complete');
   });
 
-  it('collectPRs stops pagination when all PRs <= cursor', async () => {
-    // Pre-set cursor
-    const { upsertCollectionState } = await import('../services/collection-state.js');
-    upsertCollectionState(1, 'pull_requests', { cursor: '2025-06-10T00:00:00Z', status: 'in_progress', lastPage: 1 });
+  it('collectPRs stops pagination at depth boundary — skips PRs older than depth', async () => {
+    // New behavior: PRs are sorted newest-first (sort=created direction=desc).
+    // When a PR's created_at is older than the depth boundary, stop pagination.
+    // PRs within the depth window are stored; PRs beyond are not.
+    const recentDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(); // 1 week ago
+    const oldDate = '2024-01-01T00:00:00Z'; // way before any 3-month depth boundary
 
+    // Page 1: one recent PR (within depth), one old PR (beyond depth)
     const prPage = [
-      makePR(1001, 1, 'alice', '2025-06-01T10:00:00Z'),
-      makePR(1002, 2, 'bob', '2025-06-02T10:00:00Z'),
+      makePR(1001, 1, 'alice', recentDate, recentDate),  // recent — should be stored
+      makePR(1002, 2, 'bob', oldDate, oldDate),           // old — beyond depth, triggers stop
     ];
 
-    // Second page shouldn't be reached
+    // Page 2 should not be reached because depth boundary was hit on page 1
     const prPage2 = [
-      makePR(1003, 3, 'charlie', '2025-06-11T10:00:00Z'),
+      makePR(1003, 3, 'charlie', recentDate, recentDate),
     ];
 
     const octokit = createMockOctokit({ commitPages: [], prPages: [prPage, prPage2] });
     await engine.collectRepo(octokit!, testRepo);
 
-    // No PRs should be stored (all were <= cursor)
+    // Only the recent PR should be stored; old PR beyond depth boundary skips
     const allPRs = testDb.select().from(schema.pullRequests).all();
-    expect(allPRs).toHaveLength(0);
+    expect(allPRs).toHaveLength(1);
+    expect(allPRs[0].githubId).toBe(1001);
   });
 
   it('duplicate commits are upserted, not duplicated', async () => {
