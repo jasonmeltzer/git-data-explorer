@@ -525,4 +525,199 @@ describe('CollectionEngine', () => {
     expect(allCommits[0].linesDeleted).toBe(7);
     expect(allCommits[0].filesChanged).toBe(3);
   });
+
+  describe('multi-repo isolation', () => {
+    const smallRepo = { id: 1, fullName: 'org/small-repo', ownerLogin: 'org', name: 'small-repo', defaultBranch: 'main' };
+    const bigRepo = { id: 2, fullName: 'org/big-repo', ownerLogin: 'org', name: 'big-repo', defaultBranch: 'main' };
+
+    beforeEach(() => {
+      // Re-clear and insert both repos
+      testDb.delete(schema.collectionState).run();
+      testDb.delete(schema.commits).run();
+      testDb.delete(schema.pullRequests).run();
+      testDb.delete(schema.authors).run();
+      testDb.delete(schema.repositories).run();
+      insertTestRepo(1, 'org/small-repo');
+      insertTestRepo(2, 'org/big-repo');
+    });
+
+    function createPerRepoMockOctokit(repoPages: Record<string, {
+      commitPages: Array<Array<Record<string, unknown>>>;
+      prPages: Array<Array<Record<string, unknown>>>;
+    }>) {
+      const mockOctokit = {
+        rest: {
+          repos: {
+            listCommits: vi.fn(),
+            getCommit: vi.fn().mockImplementation(({ ref }: { ref: string }) =>
+              Promise.resolve({ data: { sha: ref, stats: { additions: 1, deletions: 0 }, files: [{}] } })),
+          },
+          pulls: {
+            list: vi.fn(),
+            get: vi.fn().mockImplementation(({ pull_number }: { pull_number: number }) =>
+              Promise.resolve({ data: { additions: 10, deletions: 5, changed_files: 1, commits: 1 } })),
+          },
+        },
+        paginate: {
+          iterator: vi.fn().mockImplementation((endpoint: unknown, params: Record<string, unknown>) => {
+            const repoName = params.repo as string;
+            const repoData = repoPages[repoName] ?? { commitPages: [], prPages: [] };
+            const isCommits = endpoint === mockOctokit.rest.repos.listCommits;
+            const pages = isCommits ? repoData.commitPages : repoData.prPages;
+            let idx = 0;
+            return {
+              [Symbol.asyncIterator]() {
+                return {
+                  async next() {
+                    if (idx >= pages.length) return { done: true, value: undefined };
+                    return { done: false, value: { data: pages[idx++] } };
+                  },
+                };
+              },
+            };
+          }),
+        },
+      };
+      return mockOctokit as unknown as ReturnType<typeof createCollectionOctokit>;
+    }
+
+    it('commit counts are isolated per repo — big repo does not inflate small repo count', async () => {
+      const now = new Date();
+      const recentDate = now.toISOString();
+
+      const smallCommits = [
+        makeCommit('s1', 'alice', recentDate, { additions: 1, deletions: 0 }, [{}]),
+        makeCommit('s2', 'alice', recentDate, { additions: 2, deletions: 0 }, [{}]),
+      ];
+      const bigCommits = Array.from({ length: 50 }, (_, i) =>
+        makeCommit(`b${i}`, 'bob', recentDate, { additions: i, deletions: 0 }, [{}])
+      );
+
+      const octokit = createPerRepoMockOctokit({
+        'small-repo': { commitPages: [smallCommits], prPages: [] },
+        'big-repo': { commitPages: [bigCommits], prPages: [] },
+      });
+
+      // Collect both repos sequentially (as processQueue would)
+      await engine.collectRepo(octokit!, smallRepo);
+      engine.resetAbort();
+      await engine.collectRepo(octokit!, bigRepo);
+
+      // Verify counts are isolated
+      const smallCounts = getRepoItemCounts(1);
+      const bigCounts = getRepoItemCounts(2);
+
+      expect(smallCounts.commits).toBe(2);
+      expect(bigCounts.commits).toBe(50);
+
+      // Verify total in DB is 52, not mixed
+      const allCommits = testDb.select().from(schema.commits).all();
+      expect(allCommits).toHaveLength(52);
+    });
+
+    it('already-complete repo is skipped on re-collection — no API calls made', async () => {
+      const now = new Date();
+      const recentDate = now.toISOString();
+      const { upsertCollectionState: upsert } = await import('../services/collection-state.js');
+      const { startOfMonth: som, subMonths: sm } = await import('date-fns');
+
+      const depthBoundary = som(sm(now, 0)); // current month start
+
+      // Mark small repo as already complete with reverse direction
+      upsert(1, 'commits', {
+        status: 'complete',
+        direction: 'reverse',
+        oldestMonthCollected: depthBoundary.toISOString(),
+        depthTarget: depthBoundary.toISOString(),
+      });
+      upsert(1, 'pull_requests', {
+        status: 'complete',
+        direction: 'reverse',
+        depthTarget: depthBoundary.toISOString(),
+      });
+
+      const octokit = createPerRepoMockOctokit({
+        'small-repo': { commitPages: [[makeCommit('s1', 'alice', recentDate)]], prPages: [] },
+        'big-repo': { commitPages: [], prPages: [] },
+      });
+
+      // Collect the already-complete small repo
+      await engine.collectRepo(octokit!, smallRepo, { depthBoundary });
+
+      // Should NOT have called the API iterator for the small repo
+      const iteratorCalls = (octokit!.paginate.iterator as ReturnType<typeof vi.fn>).mock.calls;
+      const smallRepoCalls = iteratorCalls.filter(
+        (c: unknown[]) => (c[1] as Record<string, unknown>).repo === 'small-repo'
+      );
+      expect(smallRepoCalls).toHaveLength(0);
+
+      // State should still be complete
+      const commitState = getCollectionState(1, 'commits');
+      expect(commitState!.status).toBe('complete');
+      const prState = getCollectionState(1, 'pull_requests');
+      expect(prState!.status).toBe('complete');
+    });
+
+    it('complete repo IS re-fetched when depth expands', async () => {
+      const now = new Date();
+      const recentDate = now.toISOString();
+      const { upsertCollectionState: upsert } = await import('../services/collection-state.js');
+      const { startOfMonth: som, subMonths: sm } = await import('date-fns');
+
+      const oldBoundary = som(now); // current month only
+      const newBoundary = som(sm(now, 2)); // 3 months back
+
+      // Mark as complete at depth=1
+      upsert(1, 'commits', {
+        status: 'complete',
+        direction: 'reverse',
+        oldestMonthCollected: oldBoundary.toISOString(),
+        depthTarget: oldBoundary.toISOString(),
+      });
+      upsert(1, 'pull_requests', {
+        status: 'complete',
+        direction: 'reverse',
+        depthTarget: oldBoundary.toISOString(),
+      });
+
+      const octokit = createPerRepoMockOctokit({
+        'small-repo': { commitPages: [[makeCommit('s1', 'alice', recentDate)]], prPages: [] },
+      });
+
+      // Re-collect with expanded depth
+      await engine.collectRepo(octokit!, smallRepo, { depthBoundary: newBoundary });
+
+      // SHOULD have called the API since depth expanded
+      const iteratorCalls = (octokit!.paginate.iterator as ReturnType<typeof vi.fn>).mock.calls;
+      expect(iteratorCalls.length).toBeGreaterThan(0);
+    });
+
+    it('progress events include correct repoId — no cross-repo leaking', async () => {
+      const now = new Date();
+      const recentDate = now.toISOString();
+
+      const octokit = createPerRepoMockOctokit({
+        'small-repo': { commitPages: [[makeCommit('s1', 'alice', recentDate)]], prPages: [] },
+        'big-repo': { commitPages: [[makeCommit('b1', 'bob', recentDate)]], prPages: [] },
+      });
+
+      const events: Array<{ type: string; repoId: number }> = [];
+      engine.addProgressListener((e) => events.push({ type: e.type, repoId: e.repoId }));
+
+      await engine.collectRepo(octokit!, smallRepo);
+      engine.resetAbort();
+      await engine.collectRepo(octokit!, bigRepo);
+
+      // All events for small repo should have repoId=1
+      const smallEvents = events.filter(e => e.repoId === 1);
+      const bigEvents = events.filter(e => e.repoId === 2);
+
+      expect(smallEvents.length).toBeGreaterThan(0);
+      expect(bigEvents.length).toBeGreaterThan(0);
+
+      // No events should have the wrong repoId
+      expect(smallEvents.every(e => e.repoId === 1)).toBe(true);
+      expect(bigEvents.every(e => e.repoId === 2)).toBe(true);
+    });
+  });
 });

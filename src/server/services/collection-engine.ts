@@ -274,6 +274,15 @@ export class CollectionEngine {
       ? new Date(0)
       : (options?.depthBoundary ?? startOfMonth(subMonths(new Date(), 2)));
 
+    // Skip if already complete with reverse direction and depth hasn't expanded
+    if (existing?.status === 'complete' && existing.direction === 'reverse' && existing.depthTarget && !options?.fetchAll) {
+      const prevTarget = new Date(existing.depthTarget);
+      if (depthBoundary >= prevTarget) {
+        markCollectionComplete(repo.id, 'commits');
+        return;
+      }
+    }
+
     // Determine starting month for iteration:
     // - If resuming from a reverse-direction collection, start from month before oldestMonthCollected
     // - Otherwise start from current month
@@ -465,6 +474,19 @@ export class CollectionEngine {
     repo: RepoInfo,
     options?: { depthBoundary?: Date; fetchAll?: boolean }
   ): Promise<void> {
+    const existing = getCollectionState(repo.id, 'pull_requests');
+
+    // Skip if already complete with reverse direction and depth hasn't expanded
+    if (existing?.status === 'complete' && existing.direction === 'reverse' && existing.depthTarget && !options?.fetchAll) {
+      const prevTarget = new Date(existing.depthTarget);
+      const depthBoundary = options?.depthBoundary ?? startOfMonth(subMonths(new Date(), 2));
+      if (depthBoundary >= prevTarget) {
+        // Depth hasn't expanded — no need to re-fetch
+        markCollectionComplete(repo.id, 'pull_requests');
+        return;
+      }
+    }
+
     const depthBoundary = options?.fetchAll
       ? new Date(0)
       : (options?.depthBoundary ?? startOfMonth(subMonths(new Date(), 2)));
