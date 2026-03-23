@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { startOfMonth, subMonths, format } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Checkbox } from '@shared/components/ui/checkbox';
 import { Badge } from '@shared/components/ui/badge';
@@ -54,7 +55,17 @@ function getStatusIcon(status: CollectionRepoOverallStatus) {
   }
 }
 
-function getStatusBadge(status: CollectionRepoOverallStatus, isFirstSync: boolean) {
+function getStatusBadge(
+  status: CollectionRepoOverallStatus,
+  isFirstSync: boolean,
+  monthsCollected?: number | null,
+  depthMonths?: number,
+) {
+  // For complete repos with partial month coverage, show partial badge
+  if (status === 'complete' && monthsCollected != null && depthMonths != null && monthsCollected < depthMonths) {
+    return <Badge variant="secondary">{monthsCollected} of {depthMonths} months</Badge>;
+  }
+
   switch (status) {
     case 'pending':
       return <Badge variant="secondary">Queued</Badge>;
@@ -161,6 +172,23 @@ export default function ReposPage() {
       fetch('/api/collection/resume-info').then(r => r.json() as Promise<{ hasIncomplete: boolean; repoName?: string }>),
   });
 
+  const { data: depthData } = useQuery({
+    queryKey: ['settings', 'depth'],
+    queryFn: () =>
+      fetch('/api/settings/depth').then(r => r.json() as Promise<{ depthMonths: number }>),
+  });
+
+  // Local optimistic depth state
+  const [localDepth, setLocalDepth] = useState<number | null>(null);
+  // Sync from server when data arrives
+  useEffect(() => {
+    if (depthData?.depthMonths && localDepth === null) {
+      setLocalDepth(depthData.depthMonths);
+    }
+  }, [depthData, localDepth]);
+
+  const depthMonths = localDepth ?? depthData?.depthMonths ?? 3;
+
   // SSE for live progress
   const { latestEvent } = useCollectionSSE({ enabled: isCollecting });
 
@@ -186,6 +214,32 @@ export default function ReposPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ repoIds }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      setIsCollecting(true);
+      queryClient.invalidateQueries({ queryKey: ['collection', 'status'] });
+    },
+  });
+
+  const saveDepthMutation = useMutation({
+    mutationFn: (months: number) =>
+      fetch('/api/settings/depth', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ months }),
+      }).then(r => r.json()),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings', 'depth'] });
+      queryClient.invalidateQueries({ queryKey: ['collection', 'status'] });
+    },
+  });
+
+  const startFetchAllMutation = useMutation({
+    mutationFn: () =>
+      fetch('/api/collection/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fetchAll: true }),
       }).then(r => r.json()),
     onSuccess: () => {
       setIsCollecting(true);
@@ -221,6 +275,7 @@ export default function ReposPage() {
   const [deleteCounts, setDeleteCounts] = useState<RepoDeleteCounts | null>(null);
   const [showStopped, setShowStopped] = useState(false);
   const [stoppingIds, setStoppingIds] = useState<Set<number>>(new Set());
+  const [showFetchAllDialog, setShowFetchAllDialog] = useState(false);
 
   // Initialize selection from tracked repos
   useEffect(() => {
@@ -398,6 +453,17 @@ export default function ReposPage() {
     repoStatuses.length > 0
       ? Math.round((completedRepos.length / repoStatuses.length) * 100)
       : 0;
+
+  // Depth-aware computed values
+  const boundaryLabel = format(
+    startOfMonth(subMonths(new Date(), depthMonths - 1)),
+    'MMMM yyyy'
+  );
+
+  // Check if any repo has fewer months collected than the depth setting
+  const depthExceedsCollected = repoStatuses.some(r =>
+    r.monthsCollected !== null && r.monthsCollected < depthMonths
+  );
 
   // Rate limit state
   const isRateLimited =
@@ -728,6 +794,34 @@ export default function ReposPage() {
           {/* ====== COLLECTION TAB ====== */}
           {activeTab === 'collection' && (
             <div className="mt-4 space-y-4">
+              {/* Depth control row — per D-06, D-14 */}
+              <div className="bg-muted rounded-lg px-4 py-3 mb-4 flex items-center gap-3 min-h-[44px]">
+                <span className="text-sm font-semibold text-foreground">Collection depth</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={24}
+                  value={depthMonths}
+                  onChange={(e) => setLocalDepth(Number(e.target.value))}
+                  onMouseUp={() => saveDepthMutation.mutate(depthMonths)}
+                  onTouchEnd={() => saveDepthMutation.mutate(depthMonths)}
+                  onBlur={() => saveDepthMutation.mutate(depthMonths)}
+                  className="h-1.5 w-40 cursor-pointer accent-primary"
+                />
+                <span className="text-sm text-muted-foreground">
+                  Back to {boundaryLabel}
+                </span>
+                <span className="text-muted-foreground mx-1">|</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-sm text-muted-foreground"
+                  onClick={() => setShowFetchAllDialog(true)}
+                >
+                  Fetch all history
+                </Button>
+              </div>
+
               {/* Cross-session resume banner */}
               {resumeInfo?.hasIncomplete && !isCollecting && (
                 <div className="bg-muted border border-border rounded-lg p-3 flex items-center justify-between">
@@ -762,6 +856,7 @@ export default function ReposPage() {
                     <Button
                       onClick={() => startCollectionMutation.mutate(undefined)}
                       disabled={!hasTrackedRepos || startCollectionMutation.isPending || isCollecting}
+                      className={depthExceedsCollected && !isCollecting ? 'ring-2 ring-primary ring-offset-1' : ''}
                     >
                       {startCollectionMutation.isPending || isCollecting ? (
                         <>
@@ -861,7 +956,7 @@ export default function ReposPage() {
                       </span>
 
                       {/* Status badge */}
-                      {getStatusBadge(repo.status, repo.isFirstSync)}
+                      {getStatusBadge(repo.status, repo.isFirstSync, repo.monthsCollected, repo.depthMonths)}
 
                       {/* Last synced */}
                       {repo.lastSyncedAt && (
@@ -941,6 +1036,33 @@ export default function ReposPage() {
           )}
         </div>
       </div>
+
+      {/* Fetch all history confirmation — per D-09 */}
+      <AlertDialog open={showFetchAllDialog} onOpenChange={setShowFetchAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Fetch all history?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will collect all commits and pull requests beyond your current depth
+              setting. For large repos, this can use hundreds of API requests and may
+              exhaust your GitHub rate limit for the day (5,000 requests/hour). Collection
+              will pause automatically if the limit is reached.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                startFetchAllMutation.mutate();
+                setShowFetchAllDialog(false);
+              }}
+              className="bg-primary text-primary-foreground"
+            >
+              Fetch all history
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Delete confirmation dialog */}
       <AlertDialog
