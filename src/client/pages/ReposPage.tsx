@@ -456,14 +456,15 @@ export default function ReposPage() {
 
   // Depth-aware computed values
   const maxDepth = collectionStatus?.maxDepthMonths ?? 24;
+  const effectiveDepth = Math.min(depthMonths, maxDepth);
   const boundaryLabel = format(
-    startOfMonth(subMonths(new Date(), depthMonths - 1)),
+    startOfMonth(subMonths(new Date(), effectiveDepth - 1)),
     'MMMM yyyy'
   );
 
   // Check if any repo has fewer months collected than the depth setting
   const depthExceedsCollected = repoStatuses.some(r =>
-    r.monthsCollected !== null && r.monthsCollected < depthMonths
+    r.monthsCollected !== null && r.monthsCollected < effectiveDepth
   );
 
   // Rate limit state
@@ -802,11 +803,11 @@ export default function ReposPage() {
                   type="range"
                   min={1}
                   max={maxDepth}
-                  value={Math.min(depthMonths, maxDepth)}
+                  value={effectiveDepth}
                   onChange={(e) => setLocalDepth(Number(e.target.value))}
-                  onMouseUp={() => saveDepthMutation.mutate(depthMonths)}
-                  onTouchEnd={() => saveDepthMutation.mutate(depthMonths)}
-                  onBlur={() => saveDepthMutation.mutate(depthMonths)}
+                  onMouseUp={() => saveDepthMutation.mutate(effectiveDepth)}
+                  onTouchEnd={() => saveDepthMutation.mutate(effectiveDepth)}
+                  onBlur={() => saveDepthMutation.mutate(effectiveDepth)}
                   className="h-1.5 w-40 cursor-pointer accent-primary"
                 />
                 <span className="text-sm text-muted-foreground">
