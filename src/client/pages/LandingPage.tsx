@@ -21,17 +21,39 @@ export default function LandingPage({ onNavigateSettings, onNavigateRepos }: Pro
   });
 
   useEffect(() => {
-    fetch('/api/health')
-      .then(r => r.json())
-      .then(() => setApiStatus('ok'))
-      .catch(() => setApiStatus('error'));
+    let cancelled = false;
 
-    fetch('/api/settings/token')
-      .then(r => r.json())
-      .then((data: { configured: boolean }) => {
-        setTokenStatus(data.configured ? 'configured' : 'missing');
-      })
-      .catch(() => setTokenStatus('missing'));
+    async function checkServer() {
+      // Retry loop — server may still be starting when the frontend loads
+      for (let attempt = 0; attempt < 10; attempt++) {
+        try {
+          const r = await fetch('/api/health');
+          await r.json();
+          if (!cancelled) setApiStatus('ok');
+
+          // Server is up — now check token
+          try {
+            const tokenRes = await fetch('/api/settings/token');
+            const data = await tokenRes.json() as { configured: boolean };
+            if (!cancelled) setTokenStatus(data.configured ? 'configured' : 'missing');
+          } catch {
+            if (!cancelled) setTokenStatus('missing');
+          }
+          return;
+        } catch {
+          // Server not ready yet — wait and retry
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+      // All retries exhausted
+      if (!cancelled) {
+        setApiStatus('error');
+        setTokenStatus('missing');
+      }
+    }
+
+    checkServer();
+    return () => { cancelled = true; };
   }, []);
 
   // Derive state from data — no racing effects

@@ -1,6 +1,6 @@
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { collectionState, commits, pullRequests, appConfig } from '../db/schema.js';
+import { collectionState, commits, pullRequests, appConfig, repositories } from '../db/schema.js';
 
 interface CollectionStateRow {
   cursor: string | null;
@@ -103,7 +103,8 @@ export function markCollectionComplete(
 
 /**
  * Get incomplete collections for cross-session resume (COLL-08).
- * Returns rows with status IN ('pending', 'in_progress', 'paused').
+ * Returns rows with status IN ('pending', 'in_progress', 'paused')
+ * but only for repos that are still tracked (removed_at IS NULL).
  */
 export function getIncompleteCollections(): Array<{
   repoId: number;
@@ -112,9 +113,19 @@ export function getIncompleteCollections(): Array<{
   status: string;
   errorMessage: string | null;
 }> {
-  return db.select()
+  return db.select({
+      repoId: collectionState.repoId,
+      resourceType: collectionState.resourceType,
+      cursor: collectionState.cursor,
+      status: collectionState.status,
+      errorMessage: collectionState.errorMessage,
+    })
     .from(collectionState)
-    .where(inArray(collectionState.status, ['pending', 'in_progress', 'paused']))
+    .innerJoin(repositories, eq(collectionState.repoId, repositories.id))
+    .where(and(
+      inArray(collectionState.status, ['pending', 'in_progress', 'paused']),
+      sql`${repositories.removedAt} IS NULL`,
+    ))
     .all();
 }
 
