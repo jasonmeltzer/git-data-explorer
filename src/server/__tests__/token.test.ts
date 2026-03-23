@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -8,8 +8,9 @@ const ENV_PATH = path.join(process.cwd(), '.env');
 const BACKUP_PATH = ENV_PATH + '.test-backup';
 
 describe('Token Service (INFR-03)', () => {
-  // Back up existing .env if present
-  beforeEach(() => {
+  // Back up existing .env once before all tests (not beforeEach, which would
+  // overwrite the backup with test data on the second test run)
+  beforeAll(() => {
     if (fs.existsSync(ENV_PATH)) {
       fs.copyFileSync(ENV_PATH, BACKUP_PATH);
     }
