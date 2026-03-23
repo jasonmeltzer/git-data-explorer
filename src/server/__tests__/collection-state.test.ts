@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
+import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import { vi } from 'vitest';
 
@@ -101,6 +102,10 @@ const {
   markCollectionComplete,
   getIncompleteCollections,
   getRepoItemCounts,
+  getDepthSetting,
+  setDepthSetting,
+  getOldestMonthCollected,
+  resetMidCollectionRepo,
 } = await import('../services/collection-state.js');
 
 // Helper to insert a test repo
@@ -311,6 +316,230 @@ describe('Collection State Service', () => {
       const counts = getRepoItemCounts(repoId);
       expect(counts.commits).toBe(0);
       expect(counts.prs).toBe(0);
+    });
+  });
+
+  describe('getIncompleteCollections() — stopped repo exclusion', () => {
+    it('excludes stopped repos from incomplete results', () => {
+      const activeRepoId = insertTestRepo(2001, 'org/active-repo');
+      const stoppedRepoId = insertTestRepo(2002, 'org/stopped-repo');
+
+      // Soft-delete the stopped repo
+      testDb.update(schema.repositories)
+        .set({ removedAt: new Date() })
+        .where(eq(schema.repositories.id, stoppedRepoId))
+        .run();
+
+      // Both repos have paused collection state
+      upsertCollectionState(activeRepoId, 'commits', { status: 'paused', errorMessage: 'Rate limit' });
+      upsertCollectionState(stoppedRepoId, 'commits', { status: 'paused', errorMessage: 'Rate limit' });
+
+      const incomplete = getIncompleteCollections();
+      expect(incomplete).toHaveLength(1);
+      expect(incomplete[0].repoId).toBe(activeRepoId);
+    });
+
+    it('returns empty when only stopped repos have incomplete state', () => {
+      const stoppedRepoId = insertTestRepo(2003, 'org/only-stopped');
+      testDb.update(schema.repositories)
+        .set({ removedAt: new Date() })
+        .where(eq(schema.repositories.id, stoppedRepoId))
+        .run();
+
+      upsertCollectionState(stoppedRepoId, 'commits', { status: 'in_progress' });
+      upsertCollectionState(stoppedRepoId, 'pull_requests', { status: 'paused' });
+
+      const incomplete = getIncompleteCollections();
+      expect(incomplete).toHaveLength(0);
+    });
+  });
+
+  describe('getDepthSetting()', () => {
+    it('returns default of 3 when no config exists', () => {
+      expect(getDepthSetting()).toBe(3);
+    });
+
+    it('returns stored value', () => {
+      setDepthSetting(6);
+      expect(getDepthSetting()).toBe(6);
+    });
+
+    it('returns updated value after change', () => {
+      setDepthSetting(12);
+      expect(getDepthSetting()).toBe(12);
+      setDepthSetting(1);
+      expect(getDepthSetting()).toBe(1);
+    });
+  });
+
+  describe('setDepthSetting()', () => {
+    it('creates config row on first call', () => {
+      setDepthSetting(5);
+      const rows = testDb.select().from(schema.appConfig).all();
+      const depthRow = rows.find(r => r.key === 'collection_depth_months');
+      expect(depthRow).toBeDefined();
+      expect(depthRow!.value).toBe('5');
+    });
+
+    it('updates without duplicating on second call', () => {
+      setDepthSetting(5);
+      setDepthSetting(10);
+      const rows = testDb.select().from(schema.appConfig).all();
+      const depthRows = rows.filter(r => r.key === 'collection_depth_months');
+      expect(depthRows).toHaveLength(1);
+      expect(depthRows[0].value).toBe('10');
+    });
+  });
+
+  describe('getOldestMonthCollected()', () => {
+    it('returns null when no collection state exists', () => {
+      const repoId = insertTestRepo(3001, 'org/no-state');
+      expect(getOldestMonthCollected(repoId, 'commits')).toBeNull();
+    });
+
+    it('returns null when oldestMonthCollected is not set', () => {
+      const repoId = insertTestRepo(3002, 'org/no-oldest');
+      upsertCollectionState(repoId, 'commits', { status: 'in_progress' });
+      expect(getOldestMonthCollected(repoId, 'commits')).toBeNull();
+    });
+
+    it('returns the stored value', () => {
+      const repoId = insertTestRepo(3003, 'org/has-oldest');
+      upsertCollectionState(repoId, 'commits', {
+        status: 'complete',
+        direction: 'reverse',
+        oldestMonthCollected: '2026-01-01T00:00:00Z',
+      });
+      expect(getOldestMonthCollected(repoId, 'commits')).toBe('2026-01-01T00:00:00Z');
+    });
+
+    it('returns different values for commits vs pull_requests', () => {
+      const repoId = insertTestRepo(3004, 'org/dual-resource');
+      upsertCollectionState(repoId, 'commits', {
+        status: 'complete', direction: 'reverse',
+        oldestMonthCollected: '2026-01-01T00:00:00Z',
+      });
+      upsertCollectionState(repoId, 'pull_requests', {
+        status: 'complete', direction: 'reverse',
+        oldestMonthCollected: '2026-02-01T00:00:00Z',
+      });
+
+      expect(getOldestMonthCollected(repoId, 'commits')).toBe('2026-01-01T00:00:00Z');
+      expect(getOldestMonthCollected(repoId, 'pull_requests')).toBe('2026-02-01T00:00:00Z');
+    });
+  });
+
+  describe('resetMidCollectionRepo()', () => {
+    it('deletes commits and PRs for the repo', () => {
+      const repoId = insertTestRepo(4001, 'org/reset-me');
+
+      testDb.insert(schema.commits).values([
+        { sha: 'r1', repoId, message: 'c1', committedAt: new Date() },
+        { sha: 'r2', repoId, message: 'c2', committedAt: new Date() },
+      ]).run();
+      testDb.insert(schema.pullRequests).values([
+        { githubId: 5001, repoId, number: 1, title: 'PR1', state: 'merged', createdAt: new Date(), updatedAt: new Date() },
+      ]).run();
+
+      expect(getRepoItemCounts(repoId).commits).toBe(2);
+      expect(getRepoItemCounts(repoId).prs).toBe(1);
+
+      resetMidCollectionRepo(repoId);
+
+      expect(getRepoItemCounts(repoId).commits).toBe(0);
+      expect(getRepoItemCounts(repoId).prs).toBe(0);
+    });
+
+    it('resets collection state fields to pending/null', () => {
+      const repoId = insertTestRepo(4002, 'org/reset-state');
+      upsertCollectionState(repoId, 'commits', {
+        status: 'in_progress', cursor: 'abc', direction: 'forward',
+        oldestMonthCollected: '2026-01-01', depthTarget: '2026-01-01',
+      });
+      upsertCollectionState(repoId, 'pull_requests', {
+        status: 'paused', cursor: 'def', errorMessage: 'Rate limit',
+      });
+
+      resetMidCollectionRepo(repoId);
+
+      const commitState = getCollectionState(repoId, 'commits');
+      expect(commitState!.status).toBe('pending');
+      expect(commitState!.cursor).toBeNull();
+      expect(commitState!.direction).toBeNull();
+      expect(commitState!.oldestMonthCollected).toBeNull();
+      expect(commitState!.depthTarget).toBeNull();
+      expect(commitState!.errorMessage).toBeNull();
+
+      const prState = getCollectionState(repoId, 'pull_requests');
+      expect(prState!.status).toBe('pending');
+      expect(prState!.cursor).toBeNull();
+    });
+
+    it('does not affect other repos', () => {
+      const repoId1 = insertTestRepo(4003, 'org/keep-me');
+      const repoId2 = insertTestRepo(4004, 'org/reset-me2');
+
+      testDb.insert(schema.commits).values([
+        { sha: 'k1', repoId: repoId1, message: 'keep', committedAt: new Date() },
+        { sha: 'r1', repoId: repoId2, message: 'reset', committedAt: new Date() },
+      ]).run();
+
+      upsertCollectionState(repoId1, 'commits', { status: 'complete' });
+      upsertCollectionState(repoId2, 'commits', { status: 'in_progress' });
+
+      resetMidCollectionRepo(repoId2);
+
+      // Repo 1 untouched
+      expect(getRepoItemCounts(repoId1).commits).toBe(1);
+      expect(getCollectionState(repoId1, 'commits')!.status).toBe('complete');
+
+      // Repo 2 reset
+      expect(getRepoItemCounts(repoId2).commits).toBe(0);
+      expect(getCollectionState(repoId2, 'commits')!.status).toBe('pending');
+    });
+  });
+
+  describe('upsertCollectionState() — new Phase 03.1 fields', () => {
+    it('stores and retrieves direction field', () => {
+      const repoId = insertTestRepo(5001, 'org/direction-test');
+      upsertCollectionState(repoId, 'commits', { status: 'in_progress', direction: 'reverse' });
+      const state = getCollectionState(repoId, 'commits');
+      expect(state!.direction).toBe('reverse');
+    });
+
+    it('stores and retrieves oldestMonthCollected field', () => {
+      const repoId = insertTestRepo(5002, 'org/oldest-test');
+      upsertCollectionState(repoId, 'commits', {
+        status: 'in_progress', oldestMonthCollected: '2026-01-01T00:00:00Z',
+      });
+      const state = getCollectionState(repoId, 'commits');
+      expect(state!.oldestMonthCollected).toBe('2026-01-01T00:00:00Z');
+    });
+
+    it('stores and retrieves depthTarget field', () => {
+      const repoId = insertTestRepo(5003, 'org/depth-test');
+      upsertCollectionState(repoId, 'commits', {
+        status: 'in_progress', depthTarget: '2025-12-01T00:00:00Z',
+      });
+      const state = getCollectionState(repoId, 'commits');
+      expect(state!.depthTarget).toBe('2025-12-01T00:00:00Z');
+    });
+
+    it('partial update preserves unmentioned fields', () => {
+      const repoId = insertTestRepo(5004, 'org/partial-test');
+      upsertCollectionState(repoId, 'commits', {
+        status: 'in_progress', direction: 'reverse',
+        oldestMonthCollected: '2026-01-01T00:00:00Z', cursor: 'abc',
+      });
+
+      // Update only status — other fields should be preserved
+      upsertCollectionState(repoId, 'commits', { status: 'complete' });
+
+      const state = getCollectionState(repoId, 'commits');
+      expect(state!.status).toBe('complete');
+      expect(state!.direction).toBe('reverse');
+      expect(state!.oldestMonthCollected).toBe('2026-01-01T00:00:00Z');
+      expect(state!.cursor).toBe('abc');
     });
   });
 });
