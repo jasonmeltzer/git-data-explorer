@@ -142,3 +142,18 @@ export interface CohortMetricsParams {
 export interface AiMarkerConfig {
   date: Date | null;
 }
+
+export interface RampUpBucket {
+  weekIndex: number;           // 0-11 (first 12 weeks after first commit)
+  avgLinesChanged: number;     // avg (linesAdded + linesDeleted) per commit in this bucket
+  avgFilesChanged: number;     // avg files changed per commit in this bucket
+  contributionCount: number;   // total commits in this week bucket
+  contributorCount: number;    // distinct authors contributing in this bucket
+  joinPeriod: string;          // e.g., '2025-Q1', '2025-H1', '2025' — groups authors by when they joined
+}
+
+export interface RampUpParams {
+  tenureMode: TenureMode;
+  repoIds?: number[];
+  joinPeriodGranularity: 'quarter' | 'half' | 'year';
+}
