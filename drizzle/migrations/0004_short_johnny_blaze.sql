@@ -1,0 +1,1 @@
+CREATE INDEX `idx_commits_author_repo` ON `commits` (`author_id`,`repo_id`);
