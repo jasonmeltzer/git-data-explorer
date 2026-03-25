@@ -113,3 +113,32 @@ export interface AppSettings {
   includeBots: boolean;
   depthMonths: number;
 }
+
+// --- Analytics Types (Phase 4) ---
+
+export type TenureMode = 'global' | 'repo';
+export type CohortLabel = '0-3mo' | '3-12mo' | '1yr+';
+export type PeriodLabel = 'before' | 'after' | 'all';
+
+export interface CohortMetricsRow {
+  cohort: CohortLabel;
+  period: PeriodLabel;
+  periodMonth: string;         // ISO month 'YYYY-MM'
+  avgLinesAdded: number;
+  avgLinesDeleted: number;
+  avgFilesChanged: number;
+  totalCount: number;          // number of commits or PRs
+  contributorCount: number;    // distinct authors in this bucket
+}
+
+export interface CohortMetricsParams {
+  startDate: Date;
+  endDate: Date;
+  tenureMode: TenureMode;
+  repoIds?: number[];          // filter to specific repos (empty = all complete repos)
+  aiMarkerDate?: Date | null;  // from app_config; null = no split
+}
+
+export interface AiMarkerConfig {
+  date: Date | null;
+}
