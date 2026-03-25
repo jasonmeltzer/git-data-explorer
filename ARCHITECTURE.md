@@ -11,8 +11,9 @@ Git Data Explorer is a local-first full-stack TypeScript application. The fronte
 │  │  React 19 SPA (Vite 8)                            │  │
 │  │  ┌─────────┐ ┌──────────┐ ┌────────────────────┐ │  │
 │  │  │ Landing  │ │  Repos   │ │     Settings       │ │  │
-│  │  │  Page    │ │  Page    │ │     Page           │ │  │
+│  │  │  Page    │ │  Page    │ │  Page (PAT+depth)  │ │  │
 │  │  └─────────┘ └──────────┘ └────────────────────┘ │  │
+│  │  Collection progress (SSE) on Landing page       │  │
 │  │  TanStack Query cache ──── shared query keys      │  │
 │  └───────────────────────────────────────────────────┘  │
 │                        │ HTTP /api/*                      │
@@ -23,11 +24,14 @@ Git Data Explorer is a local-first full-stack TypeScript application. The fronte
 │  ┌─────────────────────┼─────────────────────────────┐  │
 │  │  Routes             │                              │  │
 │  │  /api/health    /api/settings    /api/repos/*      │  │
+│  │  /api/collection/*  /api/analytics/*               │  │
 │  └─────────────────────┼─────────────────────────────┘  │
 │  ┌─────────────────────┼─────────────────────────────┐  │
 │  │  Services                                          │  │
 │  │  token.ts  octokit.ts  github-repos.ts             │  │
-│  │  repo-management.ts                                │  │
+│  │  repo-management.ts  collection-*.ts               │  │
+│  │  analytics-config.ts  analytics-cohorts.ts         │  │
+│  │  analytics-rampup.ts  analytics-rolling.ts         │  │
 │  └─────────────────────┼─────────────────────────────┘  │
 │                        │                                 │
 │  ┌─────────────────────┼─────────────────────────────┐  │
@@ -60,19 +64,28 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 
 **Routes** (`src/server/routes/`):
 - `health.ts` — `GET /api/health` — DB connection check
-- `settings.ts` — `GET/POST /api/settings/token` — PAT management
+- `settings.ts` — `GET/POST /api/settings/token`, `GET/PUT /api/settings` — PAT and app settings management
 - `repositories.ts` — 7 endpoints for repo CRUD, GitHub browsing, stop/delete
+- `collection.ts` — `POST /api/collection/start`, `POST /api/collection/stop`, `GET /api/collection/status`, `GET /api/collection/progress` (SSE) — data collection control and progress streaming
+- `analytics.ts` — 6 analytics endpoints: `GET/POST /api/analytics/marker`, `GET /api/analytics/cohorts/commits`, `GET /api/analytics/cohorts/prs`, `GET /api/analytics/rampup`, `GET /api/analytics/rolling`
 
 **Services** (`src/server/services/`):
 - `token.ts` — Reads/writes the GitHub PAT from `.env` file
 - `octokit.ts` — Creates Octokit client instances with throttling plugin. Reads token fresh per call (no stale singleton)
 - `github-repos.ts` — Lists all repos accessible to the authenticated user via paginated API calls
 - `repo-management.ts` — SQLite CRUD for tracked repos, including soft-delete (stop tracking) and hard-delete (remove all data + orphan author cleanup)
+- `collection-state.ts` — Collection cursor management (per-repo, per-resource status tracking, depth settings)
+- `collection-queue.ts` — Queue orchestration for incremental data collection with pause/resume
+- `collection-engine.ts` — Reverse-chronological month-window GitHub API fetcher with rate-limit handling and SSE progress events
+- `analytics-config.ts` — AI adoption marker date get/set/clear from `app_config`
+- `analytics-cohorts.ts` — Cohort assignment engine: dynamic tenure bucketing (0-3mo, 3-12mo, 1yr+) with CASE WHEN epoch arithmetic, global and per-repo tenure modes, AI marker before/after split, bot exclusion
+- `analytics-rampup.ts` — New developer ramp-up curves: weekly contribution trajectories (weeks 0-11) grouped by join period (quarter/half/year) for cross-cohort comparison
+- `analytics-rolling.ts` — Rolling window comparisons: month-over-month and quarter-over-quarter with partial-period normalization to daily averages
 
 ### Shared (`src/shared/`)
 
 Code imported by both frontend and backend:
-- `types.ts` — TypeScript interfaces for API request/response shapes (GitHubRepo, TrackedRepo, AvailableReposResponse, RepoDeleteCounts)
+- `types.ts` — TypeScript interfaces for API request/response shapes (GitHubRepo, TrackedRepo, CollectionRepoStatus, CohortMetricsRow, CohortMetricsParams, RampUpBucket, RampUpParams, RollingComparisonResult, etc.)
 - `components/ui/` — shadcn/ui primitives (used only by frontend, but placed in shared for the `@shared/*` path alias)
 - `lib/utils.ts` — `cn()` helper for Tailwind class merging
 
@@ -89,7 +102,7 @@ SQLite via better-sqlite3 (synchronous API — no async complexity for a single-
 | `authors` | Contributors identified by `github_login`, with bot flag and first-commit date |
 | `commits` | Commit data with line/file stats, indexed on `(repo_id, committed_at)` |
 | `pull_requests` | PR data with size stats and state tracking |
-| `collection_state` | Cursor tracking for incremental API collection — stores last page/SHA per repo per resource type |
+| `collection_state` | Cursor tracking for incremental API collection — stores last page/SHA per repo per resource type, status (pending/in_progress/complete/paused/error) |
 
 Migrations are applied synchronously at server startup via `runMigrations()` before any requests are accepted.
 
@@ -118,11 +131,62 @@ User checks repos → local state (Set<number>) →
        LandingPage auto-updates via shared cache
 ```
 
+## Data Collection Flow
+
+```
+User clicks "Start Collection" →
+  POST /api/collection/start →
+    collection-queue.ts builds ordered repo list →
+      collection-engine.ts fetches commits/PRs per repo:
+        - Reverse-chronological month-window strategy
+        - Respects configurable depth (months of history)
+        - Handles GitHub rate limits (429/403) with automatic backoff
+        - Emits SSE progress events → frontend shows live progress
+        - Stores cursor in collection_state for resume-on-interrupt
+```
+
+## Analytics Architecture
+
+The analytics layer is a set of pure query services that read from the SQLite database. No writes, no side effects (except AI marker config).
+
+```
+API Request → analytics.ts route → Zod validation → service function → SQL query → response
+
+Services:
+┌─────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│ analytics-cohorts.ts │  │ analytics-rampup.ts  │  │ analytics-rolling.ts │
+│                     │  │                      │  │                      │
+│ getCohortCommit     │  │ getRampUpCurves()    │  │ getRollingComparison()│
+│   Metrics()         │  │                      │  │                      │
+│ getCohortPrMetrics()│  │ SQL fetch + TS       │  │ MoM / QoQ with       │
+│                     │  │ week bucketing       │  │ daily normalization  │
+│ Dynamic tenure:     │  │ Weeks 0-11 per       │  │                      │
+│ 0-3mo / 3-12mo /   │  │ new developer        │  │ pctChange() returns  │
+│ 1yr+ via CASE WHEN  │  │                      │  │ null on zero-prior   │
+│ epoch arithmetic    │  │ Join period grouping │  │                      │
+└─────────────────────┘  └──────────────────────┘  └──────────────────────┘
+         │                        │                         │
+         └────────────────────────┼─────────────────────────┘
+                                  │
+                    ┌─────────────────────────┐
+                    │  analytics-config.ts    │
+                    │  AI marker date in      │
+                    │  app_config table       │
+                    │  Splits queries into    │
+                    │  before/after periods   │
+                    └─────────────────────────┘
+```
+
+**Key design decisions:**
+- **Cohort assignment is dynamic** — uses the data point's timestamp, not today's date. The same author appears in different cohorts depending on when the commit occurred.
+- **Both global and per-repo tenure** — global uses `authors.firstCommitAt`; per-repo uses `MIN(commits.committedAt)` per (author, repo) pair via correlated subquery.
+- **Only complete repos** — all analytics queries filter to repos where both commits and PRs have `collection_state.status = 'complete'`.
+- **Bot exclusion** — all queries filter `authors.is_bot = 0`.
+- **Partial period normalization** — rolling window comparisons normalize to daily averages so a 10-day current month is fairly compared to a full prior month.
+
 ## What's Not Built Yet
 
-- **Data collection engine** (Phase 3) — The `collection_state` table and cursor schema exist but no collection logic yet
-- **Query/analytics layer** (Phase 4) — No cohort assignments, AI markers, or aggregate queries
-- **Dashboard UI** (Phase 5) — No charts or trend visualization
+- **Dashboard UI** (Phase 5) — No charts or trend visualization yet. The analytics API is complete and ready for frontend consumption
 
 ## File Map
 
@@ -146,13 +210,22 @@ src/
 │   │   └── migrate.ts        # Migration runner
 │   ├── routes/
 │   │   ├── health.ts         # GET /api/health
-│   │   ├── settings.ts       # GET/POST /api/settings/token
-│   │   └── repositories.ts   # 7 repo endpoints
+│   │   ├── settings.ts       # GET/POST /api/settings/token, GET/PUT /api/settings
+│   │   ├── repositories.ts   # 7 repo endpoints
+│   │   ├── collection.ts     # Collection start/stop/status/progress (SSE)
+│   │   └── analytics.ts      # 6 analytics endpoints (marker, cohorts, rampup, rolling)
 │   └── services/
 │       ├── token.ts          # PAT read/write from .env
 │       ├── octokit.ts        # Octokit factory with throttling
 │       ├── github-repos.ts   # GitHub API repo listing
-│       └── repo-management.ts # SQLite repo CRUD
+│       ├── repo-management.ts # SQLite repo CRUD
+│       ├── collection-state.ts   # Collection cursor/status management
+│       ├── collection-queue.ts   # Queue orchestration with pause/resume
+│       ├── collection-engine.ts  # GitHub API fetcher with rate-limit handling
+│       ├── analytics-config.ts   # AI marker date config
+│       ├── analytics-cohorts.ts  # Cohort assignment + metrics queries
+│       ├── analytics-rampup.ts   # New developer ramp-up curves
+│       └── analytics-rolling.ts  # Rolling window MoM/QoQ comparisons
 └── shared/
     ├── types.ts              # Shared TypeScript interfaces
     ├── lib/utils.ts          # cn() class merge helper

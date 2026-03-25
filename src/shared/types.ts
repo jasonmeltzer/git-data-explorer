@@ -113,3 +113,95 @@ export interface AppSettings {
   includeBots: boolean;
   depthMonths: number;
 }
+
+// --- Analytics Types (Phase 4) ---
+
+export type TenureMode = 'global' | 'repo';
+export type CohortLabel = '0-3mo' | '3-12mo' | '1yr+';
+export type PeriodLabel = 'before' | 'after' | 'all';
+
+export interface CohortMetricsRow {
+  cohort: CohortLabel;
+  period: PeriodLabel;
+  periodMonth: string;         // ISO month 'YYYY-MM'
+  avgLinesAdded: number;
+  avgLinesDeleted: number;
+  avgFilesChanged: number;
+  totalCount: number;          // number of commits or PRs
+  contributorCount: number;    // distinct authors in this bucket
+}
+
+export interface CohortMetricsParams {
+  startDate: Date;
+  endDate: Date;
+  tenureMode: TenureMode;
+  repoIds?: number[];          // filter to specific repos (empty = all complete repos)
+  aiMarkerDate?: Date | null;  // from app_config; null = no split
+}
+
+export interface AiMarkerConfig {
+  date: Date | null;
+}
+
+export interface RampUpBucket {
+  weekIndex: number;           // 0-11 (first 12 weeks after first commit)
+  avgLinesChanged: number;     // avg (linesAdded + linesDeleted) per commit in this bucket
+  avgFilesChanged: number;     // avg files changed per commit in this bucket
+  contributionCount: number;   // total commits in this week bucket
+  contributorCount: number;    // distinct authors contributing in this bucket
+  joinPeriod: string;          // e.g., '2025-Q1', '2025-H1', '2025' — groups authors by when they joined
+}
+
+export interface RampUpParams {
+  tenureMode: TenureMode;
+  repoIds?: number[];
+  joinPeriodGranularity: 'quarter' | 'half' | 'year';
+}
+
+// --- Rolling Window Comparison Types (Phase 4 Plan 03) ---
+
+export type RollingGranularity = 'month' | 'quarter';
+
+export interface RollingPeriod {
+  label: string;               // e.g., 'Mar 2026', 'Q1 2026'
+  startDate: Date;
+  endDate: Date;
+}
+
+export interface RollingComparisonResult {
+  granularity: RollingGranularity;
+  current: RollingPeriodMetrics;
+  prior: RollingPeriodMetrics;
+  changes: RollingPeriodChanges;
+}
+
+export interface RollingPeriodMetrics {
+  label: string;
+  startDate: string;           // ISO
+  endDate: string;             // ISO
+  avgCommitSize: number;       // avg (linesAdded + linesDeleted) per commit
+  avgPrSize: number;           // avg (linesAdded + linesDeleted) per PR
+  commitCount: number;
+  prCount: number;
+  avgFilesPerCommit: number;
+  avgFilesPerPr: number;
+  dailyAvgCommitSize: number;  // normalized for partial period comparison
+  dailyAvgPrSize: number;
+  dailyCommitCount: number;
+  dailyPrCount: number;
+}
+
+export interface RollingPeriodChanges {
+  commitSize: number | null;   // percentage change, null if prior=0
+  prSize: number | null;
+  commitFrequency: number | null;
+  prFrequency: number | null;
+}
+
+export interface RollingComparisonParams {
+  granularity: RollingGranularity;
+  referenceDate?: Date;        // defaults to now; allows testing
+  tenureMode?: TenureMode;     // optional cohort filter
+  cohort?: CohortLabel;        // optional: filter to a specific cohort
+  repoIds?: number[];
+}

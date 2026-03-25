@@ -9,6 +9,7 @@ import health from './routes/health.js';
 import settings from './routes/settings.js';
 import repositories from './routes/repositories.js';
 import collection from './routes/collection.js';
+import analytics from './routes/analytics.js';
 
 // Run migrations synchronously before accepting requests
 runMigrations();
@@ -24,6 +25,7 @@ app.route('/', health);
 app.route('/', settings);
 app.route('/', repositories);
 app.route('/', collection);
+app.route('/', analytics);
 
 const port = parseInt(process.env.PORT ?? '3001', 10);
 

@@ -44,6 +44,7 @@ export const commits = sqliteTable('commits', {
   index('idx_commits_repo_date').on(table.repoId, table.committedAt),
   index('idx_commits_author').on(table.authorId),
   uniqueIndex('idx_commits_sha_repo').on(table.sha, table.repoId),
+  index('idx_commits_author_repo').on(table.authorId, table.repoId),
 ]);
 
 // Pull requests
