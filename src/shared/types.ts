@@ -113,3 +113,26 @@ export interface AppSettings {
   includeBots: boolean;
   depthMonths: number;
 }
+
+// ─── Cohort / Analytics types ────────────────────────────────────────────────
+
+// How to measure a contributor's tenure: from their first commit globally vs. per-repo
+export type TenureMode = 'global' | 'repo';
+
+// A single weekly bucket in a ramp-up curve, representing one cohort's activity
+// during one week of their first 12 weeks
+export interface RampUpBucket {
+  weekIndex: number;           // 0-11 (first 12 weeks after first commit)
+  avgLinesChanged: number;     // avg (linesAdded + linesDeleted) per commit in this bucket
+  avgFilesChanged: number;     // avg files changed per commit in this bucket
+  contributionCount: number;   // total commits in this week bucket
+  contributorCount: number;    // distinct authors contributing in this bucket
+  joinPeriod: string;          // e.g., '2025-Q1', '2025-H1', '2025' — groups authors by when they joined
+}
+
+// Parameters for ramp-up curve queries
+export interface RampUpParams {
+  tenureMode: TenureMode;                          // 'global' | 'repo'
+  repoIds?: number[];                              // optional filter to specific repos
+  joinPeriodGranularity: 'quarter' | 'half' | 'year'; // how to group authors by join date
+}

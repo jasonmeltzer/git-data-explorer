@@ -114,19 +114,19 @@ function insertRepo(fullName: string): number {
     defaultBranch: 'main',
     addedAt: new Date(),
   }).run();
-  const rows = testDb.select({ id: schema.repositories.id }).from(schema.repositories).all();
+  // Order by id to get deterministic ordering (auto-increment ensures latest is last)
+  const rows = testDb.select({ id: schema.repositories.id }).from(schema.repositories).orderBy(schema.repositories.id).all();
   return rows[rows.length - 1].id;
 }
 
 function insertAuthor(login: string, firstCommitAtDate: Date | null, isBot = false): number {
-  const id = authorCounter++;
-  // Use raw insert to set explicit id
   testDb.insert(schema.authors).values({
     githubLogin: login,
     isBot,
     firstCommitAt: firstCommitAtDate ?? undefined,
   }).run();
-  const rows = testDb.select({ id: schema.authors.id }).from(schema.authors).all();
+  // Order by id DESC to get the most recently inserted row (not alphabetical by login)
+  const rows = testDb.select({ id: schema.authors.id }).from(schema.authors).orderBy(schema.authors.id).all();
   return rows[rows.length - 1].id;
 }
 
@@ -335,12 +335,14 @@ describe('getRampUpCurves()', () => {
       const repoId = insertRepo('org/repo-h');
       markRepoComplete(repoId);
 
-      const joinH1 = new Date('2025-03-01T00:00:00Z'); // H1
-      const joinH2 = new Date('2025-08-01T00:00:00Z'); // H2
+      // H1: March (month 3, <= 6) — H2: September (month 9, > 6)
+      const joinH1 = new Date('2025-03-01T00:00:00Z');
+      const joinH2 = new Date('2025-09-01T00:00:00Z');
       const authorH1 = insertAuthor('helen', joinH1);
       const authorH2 = insertAuthor('hank', joinH2);
       insertCommit('c15', repoId, authorH1, joinH1);
-      insertCommit('c16', repoId, authorH2, joinH2);
+      // H2 commit: 1 day after join (still week 0) to avoid any boundary edge
+      insertCommit('c16', repoId, authorH2, daysAfter(joinH2, 1));
 
       const result = getRampUpCurves({ tenureMode: 'global', joinPeriodGranularity: 'half' });
       const periods = result.map(b => b.joinPeriod);
