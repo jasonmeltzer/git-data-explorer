@@ -157,3 +157,51 @@ export interface RampUpParams {
   repoIds?: number[];
   joinPeriodGranularity: 'quarter' | 'half' | 'year';
 }
+
+// --- Rolling Window Comparison Types (Phase 4 Plan 03) ---
+
+export type RollingGranularity = 'month' | 'quarter';
+
+export interface RollingPeriod {
+  label: string;               // e.g., 'Mar 2026', 'Q1 2026'
+  startDate: Date;
+  endDate: Date;
+}
+
+export interface RollingComparisonResult {
+  granularity: RollingGranularity;
+  current: RollingPeriodMetrics;
+  prior: RollingPeriodMetrics;
+  changes: RollingPeriodChanges;
+}
+
+export interface RollingPeriodMetrics {
+  label: string;
+  startDate: string;           // ISO
+  endDate: string;             // ISO
+  avgCommitSize: number;       // avg (linesAdded + linesDeleted) per commit
+  avgPrSize: number;           // avg (linesAdded + linesDeleted) per PR
+  commitCount: number;
+  prCount: number;
+  avgFilesPerCommit: number;
+  avgFilesPerPr: number;
+  dailyAvgCommitSize: number;  // normalized for partial period comparison
+  dailyAvgPrSize: number;
+  dailyCommitCount: number;
+  dailyPrCount: number;
+}
+
+export interface RollingPeriodChanges {
+  commitSize: number | null;   // percentage change, null if prior=0
+  prSize: number | null;
+  commitFrequency: number | null;
+  prFrequency: number | null;
+}
+
+export interface RollingComparisonParams {
+  granularity: RollingGranularity;
+  referenceDate?: Date;        // defaults to now; allows testing
+  tenureMode?: TenureMode;     // optional cohort filter
+  cohort?: CohortLabel;        // optional: filter to a specific cohort
+  repoIds?: number[];
+}
