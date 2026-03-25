@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 2 of 5 complete** — Auth & Repo Management
+**Phase 4 of 5 complete** — Analytics Query Layer
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -39,12 +39,18 @@ What works today:
 - Browse all repos your token has access to, grouped by owner
 - Select/deselect repos to track with search, select all/unselect all
 - Stop tracking and delete cached data with confirmation
-- Landing page with status overview
+- Landing page with status overview and collection progress
+- **Incremental data collection** — reverse-chronological month-window fetching with rate-limit handling, pause/resume, and SSE progress streaming
+- **Configurable collection depth** — choose how many months of history to collect
+- **Bot detection** — automatic bot author identification and exclusion
+- **Cohort assignment engine** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing based on data-point timestamps (not today's date), with both global and per-repo tenure modes
+- **AI adoption marker** — set a date to split all analytics into before/after periods
+- **Ramp-up curve analysis** — weekly contribution trajectories for new developers' first 12 weeks, grouped by join period for cross-cohort comparison
+- **Rolling window comparisons** — month-over-month and quarter-over-quarter with partial-period normalization
+- **Analytics API** — 6 REST endpoints exposing all analytics services with Zod validation
 
 What's next:
-- **Phase 3:** Incremental GitHub data collection with rate-limit handling and checkpointing
-- **Phase 4:** Analytics query layer with cohort assignments and AI markers
-- **Phase 5:** Dashboard UI with trend charts and drill-down exploration
+- **Phase 5:** Dashboard UI with trend charts, cohort visualizations, and drill-down exploration
 
 ## Tech Stack
 
