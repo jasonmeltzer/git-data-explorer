@@ -11,4 +11,3 @@ data/test.db-shm
 .env
 .env.local
 *.tsbuildinfo
-CLAUDE.md
