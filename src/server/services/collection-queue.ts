@@ -202,14 +202,10 @@ export class CollectionQueue {
       // Last synced: most recent lastRunAt where status='complete'
       let lastSyncedAt: string | null = null;
       if (commitState?.status === 'complete' && commitState.lastRunAt) {
-        lastSyncedAt = commitState.lastRunAt instanceof Date
-          ? commitState.lastRunAt.toISOString()
-          : String(commitState.lastRunAt);
+        lastSyncedAt = new Date(commitState.lastRunAt).toISOString();
       }
       if (prState?.status === 'complete' && prState.lastRunAt) {
-        const prSynced = prState.lastRunAt instanceof Date
-          ? prState.lastRunAt.toISOString()
-          : String(prState.lastRunAt);
+        const prSynced = new Date(prState.lastRunAt).toISOString();
         if (!lastSyncedAt || prSynced > lastSyncedAt) {
           lastSyncedAt = prSynced;
         }
