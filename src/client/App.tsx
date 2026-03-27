@@ -43,7 +43,6 @@ export default function App() {
         )}
         {page === 'settings' && (
           <SettingsPage
-            onBack={() => navigate('landing')}
             onNavigateRepos={() => navigate('repos')}
           />
         )}

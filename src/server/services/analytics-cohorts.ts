@@ -1,37 +1,11 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
+import { getCompleteRepoIds } from './analytics-utils.js';
 import type { CohortMetricsParams, CohortMetricsRow, CohortLabel, PeriodLabel } from '../../shared/types.js';
 
 // Tenure bucket boundaries in seconds (~91 days, ~365 days)
 const THREE_MONTHS_S = 3 * 30 * 24 * 3600;   // ~91 days in seconds
 const TWELVE_MONTHS_S = 12 * 30 * 24 * 3600;  // ~365 days in seconds
-
-/**
- * Get repo IDs where BOTH 'commits' and 'pull_requests' have status='complete'.
- * Optionally filtered to a provided set of repoIds.
- */
-function getCompleteRepoIds(repoIds?: number[]): number[] {
-  // Query collectionState grouped by repoId; require both resource types to be 'complete'
-  const rows = db.all(sql`
-    SELECT repo_id
-    FROM collection_state
-    WHERE status = 'complete'
-    GROUP BY repo_id
-    HAVING COUNT(*) >= 2
-  `) as Array<{ repo_id: number }>;
-
-  const completeIds = rows.map(r => r.repo_id);
-  // Safety: ensure all IDs are positive integers before sql.raw interpolation (SEC-01)
-  const safeIds = completeIds.filter(id => Number.isInteger(id) && id > 0);
-
-  if (!repoIds || repoIds.length === 0) {
-    return safeIds;
-  }
-
-  // Filter to intersection of complete IDs and requested IDs
-  const requested = new Set(repoIds);
-  return safeIds.filter(id => requested.has(id));
-}
 
 /**
  * Build the CASE WHEN SQL for cohort assignment.

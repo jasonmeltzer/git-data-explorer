@@ -3,7 +3,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import TokenForm from '../components/TokenForm.js';
 
 interface Props {
-  onBack: () => void;
   onNavigateRepos: () => void;
 }
 
