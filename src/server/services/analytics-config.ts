@@ -11,7 +11,9 @@ const AI_MARKER_KEY = 'ai_adoption_marker';
 export function getAiMarkerDate(): Date | null {
   const row = db.select().from(appConfig).where(eq(appConfig.key, AI_MARKER_KEY)).get();
   if (!row) return null;
-  return new Date(row.value);
+  const date = new Date(row.value);
+  if (isNaN(date.getTime())) return null;
+  return date;
 }
 
 /**

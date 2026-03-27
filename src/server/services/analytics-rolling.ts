@@ -124,13 +124,15 @@ function getCompleteRepoIds(repoIds?: number[]): number[] {
   `) as Array<{ repo_id: number }>;
 
   const completeIds = rows.map(r => r.repo_id);
+  // Safety: ensure all IDs are positive integers before sql.raw interpolation (SEC-01)
+  const safeIds = completeIds.filter(id => Number.isInteger(id) && id > 0);
 
   if (!repoIds || repoIds.length === 0) {
-    return completeIds;
+    return safeIds;
   }
 
   const requested = new Set(repoIds);
-  return completeIds.filter(id => requested.has(id));
+  return safeIds.filter(id => requested.has(id));
 }
 
 interface PeriodAggregates {
@@ -157,6 +159,8 @@ function getPeriodAggregates(
 ): PeriodAggregates {
   const startEpoch = Math.floor(startDate.getTime() / 1000);
   const endEpoch = Math.floor(endDate.getTime() / 1000);
+  // SAFETY: repoIdList values come from DB query + integer guard (SEC-01).
+  // These are never user-supplied. Do NOT pass user input here without parameterization.
   const repoIdList = completeRepoIds.join(',');
 
   // If no complete repos, return zero aggregates
