@@ -1,35 +1,11 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
+import { getCompleteRepoIds } from './analytics-utils.js';
 import type { CohortMetricsParams, CohortMetricsRow, CohortLabel, PeriodLabel } from '../../shared/types.js';
 
 // Tenure bucket boundaries in seconds (~91 days, ~365 days)
 const THREE_MONTHS_S = 3 * 30 * 24 * 3600;   // ~91 days in seconds
 const TWELVE_MONTHS_S = 12 * 30 * 24 * 3600;  // ~365 days in seconds
-
-/**
- * Get repo IDs where BOTH 'commits' and 'pull_requests' have status='complete'.
- * Optionally filtered to a provided set of repoIds.
- */
-function getCompleteRepoIds(repoIds?: number[]): number[] {
-  // Query collectionState grouped by repoId; require both resource types to be 'complete'
-  const rows = db.all(sql`
-    SELECT repo_id
-    FROM collection_state
-    WHERE status = 'complete'
-    GROUP BY repo_id
-    HAVING COUNT(*) >= 2
-  `) as Array<{ repo_id: number }>;
-
-  const completeIds = rows.map(r => r.repo_id);
-
-  if (!repoIds || repoIds.length === 0) {
-    return completeIds;
-  }
-
-  // Filter to intersection of complete IDs and requested IDs
-  const requested = new Set(repoIds);
-  return completeIds.filter(id => requested.has(id));
-}
 
 /**
  * Build the CASE WHEN SQL for cohort assignment.
@@ -75,6 +51,8 @@ export function getCohortCommitMetrics(params: CohortMetricsParams): CohortMetri
   const startEpoch = Math.floor(params.startDate.getTime() / 1000);
   const endEpoch = Math.floor(params.endDate.getTime() / 1000);
 
+  // SAFETY: repoIdList values come from DB query + integer guard (SEC-01).
+  // These are never user-supplied. Do NOT pass user input here without parameterization.
   const repoIdList = completeRepoIds.join(',');
   const cohortCase = buildCohortCase(params.tenureMode, 'c.committed_at');
   const periodCase = buildPeriodCase('c.committed_at', params.aiMarkerDate);
@@ -134,6 +112,8 @@ export function getCohortPrMetrics(params: CohortMetricsParams): CohortMetricsRo
   const startEpoch = Math.floor(params.startDate.getTime() / 1000);
   const endEpoch = Math.floor(params.endDate.getTime() / 1000);
 
+  // SAFETY: repoIdList values come from DB query + integer guard (SEC-01).
+  // These are never user-supplied. Do NOT pass user input here without parameterization.
   const repoIdList = completeRepoIds.join(',');
 
   // For PR per-repo tenure, we still use commits table to find MIN(committed_at)

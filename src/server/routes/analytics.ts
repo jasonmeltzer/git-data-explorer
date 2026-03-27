@@ -52,8 +52,12 @@ analytics.post('/api/analytics/marker', async (c) => {
 // ─── Cohort endpoints ─────────────────────────────────────────────────────────
 
 const cohortQuerySchema = z.object({
-  startDate: z.string(),
-  endDate: z.string(),
+  startDate: z.string().refine(v => !isNaN(new Date(v).getTime()), {
+    message: 'startDate must be a valid date string',
+  }),
+  endDate: z.string().refine(v => !isNaN(new Date(v).getTime()), {
+    message: 'endDate must be a valid date string',
+  }),
   tenureMode: z.enum(['global', 'repo']).default('global'),
   repoIds: z.string().optional(),
 });
@@ -67,7 +71,7 @@ analytics.get('/api/analytics/cohorts/commits', (c) => {
     }
 
     const { startDate, endDate, tenureMode, repoIds } = parsed.data;
-    const repoIdsParsed = repoIds?.split(',').map(Number).filter(Boolean);
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
     const aiMarkerDate = getAiMarkerDate();
 
     const results = getCohortCommitMetrics({
@@ -94,7 +98,7 @@ analytics.get('/api/analytics/cohorts/prs', (c) => {
     }
 
     const { startDate, endDate, tenureMode, repoIds } = parsed.data;
-    const repoIdsParsed = repoIds?.split(',').map(Number).filter(Boolean);
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
     const aiMarkerDate = getAiMarkerDate();
 
     const results = getCohortPrMetrics({
@@ -129,7 +133,7 @@ analytics.get('/api/analytics/rampup', (c) => {
     }
 
     const { tenureMode, repoIds, joinPeriodGranularity } = parsed.data;
-    const repoIdsParsed = repoIds?.split(',').map(Number).filter(Boolean);
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
 
     const results = getRampUpCurves({
       tenureMode,
@@ -160,7 +164,7 @@ analytics.get('/api/analytics/rolling', (c) => {
     }
 
     const { granularity, repoIds } = parsed.data;
-    const repoIdsParsed = repoIds?.split(',').map(Number).filter(Boolean);
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
 
     const result = getRollingComparison({
       granularity,

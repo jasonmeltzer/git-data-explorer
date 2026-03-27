@@ -87,8 +87,8 @@ export async function validateAndSaveToken(token: string): Promise<{
   // Write to .env file
   writeTokenToEnv(token);
 
-  // Update process.env so the running server can use it immediately
-  process.env.GITHUB_TOKEN = token;
+  // Note: process.env.GITHUB_TOKEN is already set by dotenv on startup.
+  // readToken() reads from .env file directly, so no env assignment needed here.
 
   return {
     success: true,

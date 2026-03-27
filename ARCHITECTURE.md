@@ -70,7 +70,8 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 - `analytics.ts` — 6 analytics endpoints: `GET/POST /api/analytics/marker`, `GET /api/analytics/cohorts/commits`, `GET /api/analytics/cohorts/prs`, `GET /api/analytics/rampup`, `GET /api/analytics/rolling`
 
 **Services** (`src/server/services/`):
-- `token.ts` — Reads/writes the GitHub PAT from `.env` file
+- `analytics-utils.ts` — Shared analytics helpers: canonical `getCompleteRepoIds()` with integer safety guard (SEC-01), used by all analytics services
+- `token.ts` — Reads/writes the GitHub PAT from `.env` file (no longer leaks PAT to `process.env`)
 - `octokit.ts` — Creates Octokit client instances with throttling plugin. Reads token fresh per call (no stale singleton)
 - `github-repos.ts` — Lists all repos accessible to the authenticated user via paginated API calls
 - `repo-management.ts` — SQLite CRUD for tracked repos, including soft-delete (stop tracking) and hard-delete (remove all data + orphan author cleanup)
@@ -180,9 +181,10 @@ Services:
 **Key design decisions:**
 - **Cohort assignment is dynamic** — uses the data point's timestamp, not today's date. The same author appears in different cohorts depending on when the commit occurred.
 - **Both global and per-repo tenure** — global uses `authors.firstCommitAt`; per-repo uses `MIN(commits.committedAt)` per (author, repo) pair via correlated subquery.
-- **Only complete repos** — all analytics queries filter to repos where both commits and PRs have `collection_state.status = 'complete'`.
+- **Only complete repos** — all analytics queries filter to repos where both commits and PRs have `collection_state.status = 'complete'`. The shared `getCompleteRepoIds()` in `analytics-utils.ts` is the single canonical implementation (SEC-01 integer guard included).
 - **Bot exclusion** — all queries filter `authors.is_bot = 0`.
 - **Partial period normalization** — rolling window comparisons normalize to daily averages so a 10-day current month is fairly compared to a full prior month.
+- **SQL injection prevention** — all `sql.raw()` interpolation sites validate IDs are positive integers before interpolation (SEC-01). Route-level Zod schemas validate date string inputs (BUG-06).
 
 ## What's Not Built Yet
 
@@ -223,9 +225,10 @@ src/
 │       ├── collection-queue.ts   # Queue orchestration with pause/resume
 │       ├── collection-engine.ts  # GitHub API fetcher with rate-limit handling
 │       ├── analytics-config.ts   # AI marker date config
-│       ├── analytics-cohorts.ts  # Cohort assignment + metrics queries
-│       ├── analytics-rampup.ts   # New developer ramp-up curves
-│       └── analytics-rolling.ts  # Rolling window MoM/QoQ comparisons
+│       ├── analytics-utils.ts      # Shared: getCompleteRepoIds() with SEC-01 guard
+│       ├── analytics-cohorts.ts   # Cohort assignment + metrics queries
+│       ├── analytics-rampup.ts    # New developer ramp-up curves
+│       └── analytics-rolling.ts   # Rolling window MoM/QoQ comparisons
 └── shared/
     ├── types.ts              # Shared TypeScript interfaces
     ├── lib/utils.ts          # cn() class merge helper

@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 4 of 5 complete** — Analytics Query Layer
+**Phase 4.1 of 5 complete** — Codebase Hardening
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -48,6 +48,9 @@ What works today:
 - **Ramp-up curve analysis** — weekly contribution trajectories for new developers' first 12 weeks, grouped by join period for cross-cohort comparison
 - **Rolling window comparisons** — month-over-month and quarter-over-quarter with partial-period normalization
 - **Analytics API** — 6 REST endpoints exposing all analytics services with Zod validation
+- **Hardened analytics pipeline** — SQL injection guards on `sql.raw()` interpolation, Zod route validation for date params, Invalid Date protection, integer-only repoIds filtering
+- **Reliable collection engine** — SSE status event handling, race condition guards, depth target sync, null safety on author upsert
+- **Code quality** — shared `getCompleteRepoIds` utility (3 duplicates removed), dead code cleanup, 0 production npm audit vulnerabilities
 
 What's next:
 - **Phase 5:** Dashboard UI with trend charts, cohort visualizations, and drill-down exploration

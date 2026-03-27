@@ -108,7 +108,10 @@ function upsertAuthor(
     .from(authors)
     .where(eq(authors.githubLogin, login))
     .get();
-  return row!.id;
+  if (!row) {
+    throw new Error(`Failed to retrieve author row after upsert for login="${login}"`);
+  }
+  return row.id;
 }
 
 /**
@@ -282,6 +285,10 @@ export class CollectionEngine {
         if (existing.cursor) {
           await this.collectCommitsIncremental(octokit, repo, existing.cursor);
         }
+        // Update depthTarget to current boundary so future depth comparisons use the latest setting (BUG-04)
+        upsertCollectionState(repo.id, 'commits', {
+          depthTarget: depthBoundary.toISOString(),
+        });
         markCollectionComplete(repo.id, 'commits');
         return;
       }
@@ -294,7 +301,6 @@ export class CollectionEngine {
       currentMonth = startOfMonth(subMonths(new Date(existing.oldestMonthCollected), 1));
     }
 
-    let totalItems = 0;
     let newestCommitDate: string | undefined;
 
     while (currentMonth >= depthBoundary && !this._aborted) {
@@ -321,17 +327,6 @@ export class CollectionEngine {
         depthTarget: depthBoundary.toISOString(),
         status: 'in_progress',
         ...(newestCommitDate ? { cursor: newestCommitDate } : {}),
-      });
-
-      totalItems++;
-
-      this.emitProgress({
-        type: 'page_complete',
-        repoId: repo.id,
-        repoFullName: repo.fullName,
-        resourceType: 'commits',
-        itemsInPage: 0,
-        totalItemsSoFar: totalItems,
       });
 
       currentMonth = startOfMonth(subMonths(currentMonth, 1));
@@ -586,6 +581,10 @@ export class CollectionEngine {
         if (existing.cursor) {
           await this.collectPRsIncremental(octokit, repo, existing.cursor);
         }
+        // Update depthTarget for PRs to current boundary (BUG-04)
+        upsertCollectionState(repo.id, 'pull_requests', {
+          depthTarget: depthBoundary.toISOString(),
+        });
         markCollectionComplete(repo.id, 'pull_requests');
         return;
       }

@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: Ready to plan
-stopped_at: Completed 04-query-service-cohort-engine-03-PLAN.md
-last_updated: "2026-03-25T14:19:43.094Z"
+status: Ready to execute
+stopped_at: Completed 04.1-03-PLAN.md
+last_updated: "2026-03-26T21:30:00.000Z"
 progress:
-  total_phases: 7
+  total_phases: 10
   completed_phases: 5
-  total_plans: 16
-  completed_plans: 16
+  total_plans: 19
+  completed_plans: 19
 ---
 
 # Project State
@@ -19,12 +19,12 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-22)
 
 **Core value:** Engineering leaders can see concrete, data-backed trends in how AI adoption is changing code contribution patterns — especially new developer ramp-up
-**Current focus:** Phase 04 — query-service-cohort-engine
+**Current focus:** Phase 04.1 — codebase-hardening-fix-bugs-security-issues-and-correctness-problems-from-phase-1-4-audit
 
 ## Current Position
 
-Phase: 05
-Plan: Not started
+Phase: 04.1 (codebase-hardening-fix-bugs-security-issues-and-correctness-problems-from-phase-1-4-audit) — COMPLETE
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Plan: Not started
 | Phase 04 P01 | 3min | 1 tasks | 7 files |
 | Phase 04-query-service-cohort-engine P02 | 11min | 1 tasks | 3 files |
 | Phase 04-query-service-cohort-engine P03 | 3min | 2 tasks | 5 files |
+| Phase 04.1 P02 | 384s | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -109,10 +110,16 @@ Recent decisions affecting current work:
 - [Phase 04]: UTC-safe period boundaries using Date.UTC() instead of date-fns startOfMonth/startOfQuarter to avoid timezone offset issues in epoch comparisons
 - [Phase 04]: pctChange returns null on zero prior period value — allows UI to distinguish no-data from zero-change
 - [Phase 04]: Rolling window changes computed on daily averages — normalizes partial current period for fair MoM/QoQ comparison
+- [Phase 04.1]: BUG-04 depthTarget must be updated in both collectCommits and collectPRs incremental paths — prevents false full-collection triggers on depth shrink→expand cycles
+- [Phase 04.1]: skipCurrent guarded with if (!this._isActive) return — prevents engine.abort() on idle queue
+- [Phase 04.1]: Shared getCompleteRepoIds in analytics-utils.ts uses Drizzle query builder with inArray for resource type filter and SEC-01 integer guard
+- [Phase 04.1]: drizzle-kit esbuild advisory (dev-only) accepted risk — 0.31.10 above affected range, npm metadata stale, --force would break compatibility
+- [Phase 04.1]: new Date(value).toISOString() canonical pattern for timestamp normalization — handles Date objects and epoch integers from Drizzle mode:timestamp columns
 
 ### Roadmap Evolution
 
 - Phase 03.1 inserted after Phase 3: Recency-optimized collection — fetch newest-first by full calendar month, depth-first per repo (smallest first), 3-month default depth before moving to next repo (URGENT)
+- Phase 04.1 inserted after Phase 4: Codebase Hardening — Fix bugs, security issues, and correctness problems from Phase 1-4 audit (URGENT)
 
 ### Pending Todos
 
@@ -126,6 +133,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-25T14:15:01.129Z
-Stopped at: Completed 04-query-service-cohort-engine-03-PLAN.md
+Last session: 2026-03-27T04:13:30.562Z
+Stopped at: Completed 04.1-02-PLAN.md
 Resume file: None

@@ -29,8 +29,21 @@ export function useCollectionSSE({ enabled }: UseCollectionSSEOptions): UseColle
     esRef.current = es;
 
     es.addEventListener('progress', (e) => {
-      const event: CollectionProgressEvent = JSON.parse(e.data);
-      setLatestEvent(event);
+      try {
+        const event: CollectionProgressEvent = JSON.parse(e.data);
+        setLatestEvent(event);
+      } catch {
+        // Ignore malformed progress events
+      }
+    });
+
+    es.addEventListener('status', (e) => {
+      try {
+        const event: CollectionProgressEvent = JSON.parse(e.data);
+        setLatestEvent(event);
+      } catch {
+        // Ignore malformed status events
+      }
     });
 
     es.onopen = () => setIsConnected(true);

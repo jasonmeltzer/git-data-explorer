@@ -163,9 +163,10 @@ export class CollectionQueue {
    * Skip the current repo and continue with the next (D-05).
    */
   skipCurrent(): void {
+    if (!this._isActive) return;
     this.engine.abort();
-    // The abort will cause collectRepo to checkpoint and return.
-    // processQueue loop will advance to next repo.
+    // The abort will cause the current collectRepo call to checkpoint and return.
+    // processQueue loop will then advance to next repo.
   }
 
   /**
@@ -202,14 +203,10 @@ export class CollectionQueue {
       // Last synced: most recent lastRunAt where status='complete'
       let lastSyncedAt: string | null = null;
       if (commitState?.status === 'complete' && commitState.lastRunAt) {
-        lastSyncedAt = commitState.lastRunAt instanceof Date
-          ? commitState.lastRunAt.toISOString()
-          : String(commitState.lastRunAt);
+        lastSyncedAt = new Date(commitState.lastRunAt).toISOString();
       }
       if (prState?.status === 'complete' && prState.lastRunAt) {
-        const prSynced = prState.lastRunAt instanceof Date
-          ? prState.lastRunAt.toISOString()
-          : String(prState.lastRunAt);
+        const prSynced = new Date(prState.lastRunAt).toISOString();
         if (!lastSyncedAt || prSynced > lastSyncedAt) {
           lastSyncedAt = prSynced;
         }
