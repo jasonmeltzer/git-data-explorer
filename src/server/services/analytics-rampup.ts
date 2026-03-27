@@ -1,6 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { collectionState, commits, authors } from '../db/schema.js';
+import { commits, authors } from '../db/schema.js';
+import { getCompleteRepoIds } from './analytics-utils.js';
 import type { RampUpBucket, RampUpParams } from '../../shared/types.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -8,38 +9,6 @@ import type { RampUpBucket, RampUpParams } from '../../shared/types.js';
 const RAMP_UP_WEEKS = 12;
 const ONE_WEEK_S = 7 * 24 * 3600;
 const RAMP_UP_WINDOW_S = RAMP_UP_WEEKS * ONE_WEEK_S;
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-/**
- * Returns IDs of repos where BOTH commits and pull_requests have status='complete'.
- * Optionally filtered to a specific set of repoIds.
- */
-function getCompleteRepoIds(repoIds?: number[]): number[] {
-  const rows = db
-    .select({
-      repoId: collectionState.repoId,
-      completedCount: sql<number>`COUNT(*)`.as('completed_count'),
-    })
-    .from(collectionState)
-    .where(
-      and(
-        eq(collectionState.status, 'complete'),
-        inArray(collectionState.resourceType, ['commits', 'pull_requests']),
-      )
-    )
-    .groupBy(collectionState.repoId)
-    .having(sql`COUNT(*) >= 2`)
-    .all();
-
-  const completeIds = rows.map(r => r.repoId);
-
-  if (repoIds && repoIds.length > 0) {
-    return completeIds.filter(id => repoIds.includes(id));
-  }
-
-  return completeIds;
-}
 
 /**
  * Formats a date as a join period string based on granularity.

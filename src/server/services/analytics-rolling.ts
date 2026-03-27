@@ -1,15 +1,6 @@
-import {
-  startOfMonth,
-  endOfMonth,
-  subMonths,
-  startOfQuarter,
-  endOfQuarter,
-  subQuarters,
-  format,
-  getQuarter,
-} from 'date-fns';
 import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
+import { getCompleteRepoIds } from './analytics-utils.js';
 import type {
   RollingComparisonParams,
   RollingComparisonResult,
@@ -110,28 +101,6 @@ export function getQuarterOverQuarterPeriods(referenceDate: Date): [RollingPerio
 }
 
 // ─── Internal helpers ────────────────────────────────────────────────────────
-
-/**
- * Get IDs of repos where BOTH commits and pull_requests have status='complete'.
- */
-function getCompleteRepoIds(repoIds?: number[]): number[] {
-  const rows = db.all(sql`
-    SELECT repo_id
-    FROM collection_state
-    WHERE status = 'complete'
-    GROUP BY repo_id
-    HAVING COUNT(*) >= 2
-  `) as Array<{ repo_id: number }>;
-
-  const completeIds = rows.map(r => r.repo_id);
-
-  if (!repoIds || repoIds.length === 0) {
-    return completeIds;
-  }
-
-  const requested = new Set(repoIds);
-  return completeIds.filter(id => requested.has(id));
-}
 
 interface PeriodAggregates {
   commits: {
