@@ -82,7 +82,7 @@ export interface CollectionRepoStatus {
 
 // SSE progress event shape
 export interface CollectionProgressEvent {
-  type: 'repo_start' | 'page_complete' | 'repo_complete' | 'rate_limit' | 'secondary_rate_limit' | 'error' | 'batch_complete';
+  type: 'repo_start' | 'page_complete' | 'repo_complete' | 'rate_limit' | 'secondary_rate_limit' | 'error' | 'batch_complete' | 'status_snapshot';
   repoId: number;
   repoFullName: string;
   resourceType?: 'commits' | 'pull_requests';

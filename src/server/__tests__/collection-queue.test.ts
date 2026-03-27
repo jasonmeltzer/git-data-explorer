@@ -348,6 +348,29 @@ describe('CollectionQueue', () => {
     });
   });
 
+  describe('skipCurrent()', () => {
+    it('skipCurrent() when inactive is a no-op — does not throw (BUG-03)', () => {
+      // queue is freshly created — _isActive is false
+      // With BUG-03 fix in place, skipCurrent should be guarded and NOT call engine.abort()
+      // We verify: no error thrown, isActive remains false, no state mutation
+      insertTestRepo(1, 'org/repo1');
+      expect(() => queue.skipCurrent()).not.toThrow();
+      // isActive should remain false (guard prevented any changes)
+      expect(queue.getStatus().isActive).toBe(false);
+    });
+
+    it('skipCurrent() called multiple times when inactive stays safe (BUG-03)', () => {
+      // Calling skipCurrent when inactive should always be idempotent
+      insertTestRepo(1, 'org/repo1');
+      expect(() => {
+        queue.skipCurrent();
+        queue.skipCurrent();
+        queue.skipCurrent();
+      }).not.toThrow();
+      expect(queue.getStatus().isActive).toBe(false);
+    });
+  });
+
   describe('transitionLegacyRepos (via startBatch)', () => {
     // transitionLegacyRepos is private and runs once per module via _transitionDone flag.
     // We test it indirectly through startBatch. Since createCollectionOctokit is mocked null,

@@ -163,9 +163,10 @@ export class CollectionQueue {
    * Skip the current repo and continue with the next (D-05).
    */
   skipCurrent(): void {
+    if (!this._isActive) return;
     this.engine.abort();
-    // The abort will cause collectRepo to checkpoint and return.
-    // processQueue loop will advance to next repo.
+    // The abort will cause the current collectRepo call to checkpoint and return.
+    // processQueue loop will then advance to next repo.
   }
 
   /**
