@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: Ready to execute
-stopped_at: Completed 04.1-02-PLAN.md
-last_updated: "2026-03-27T04:13:30.565Z"
+stopped_at: Completed 04.1-03-PLAN.md
+last_updated: "2026-03-26T21:30:00.000Z"
 progress:
   total_phases: 10
   completed_phases: 5
   total_plans: 19
-  completed_plans: 18
+  completed_plans: 19
 ---
 
 # Project State
@@ -23,8 +23,8 @@ See: .planning/PROJECT.md (updated 2026-03-22)
 
 ## Current Position
 
-Phase: 04.1 (codebase-hardening-fix-bugs-security-issues-and-correctness-problems-from-phase-1-4-audit) — EXECUTING
-Plan: 2 of 3
+Phase: 04.1 (codebase-hardening-fix-bugs-security-issues-and-correctness-problems-from-phase-1-4-audit) — COMPLETE
+Plan: 3 of 3
 
 ## Performance Metrics
 
@@ -112,6 +112,9 @@ Recent decisions affecting current work:
 - [Phase 04]: Rolling window changes computed on daily averages — normalizes partial current period for fair MoM/QoQ comparison
 - [Phase 04.1]: BUG-04 depthTarget must be updated in both collectCommits and collectPRs incremental paths — prevents false full-collection triggers on depth shrink→expand cycles
 - [Phase 04.1]: skipCurrent guarded with if (!this._isActive) return — prevents engine.abort() on idle queue
+- [Phase 04.1]: Shared getCompleteRepoIds in analytics-utils.ts uses Drizzle query builder with inArray for resource type filter and SEC-01 integer guard
+- [Phase 04.1]: drizzle-kit esbuild advisory (dev-only) accepted risk — 0.31.10 above affected range, npm metadata stale, --force would break compatibility
+- [Phase 04.1]: new Date(value).toISOString() canonical pattern for timestamp normalization — handles Date objects and epoch integers from Drizzle mode:timestamp columns
 
 ### Roadmap Evolution
 
