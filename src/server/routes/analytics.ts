@@ -4,6 +4,7 @@ import { getAiMarkerDate, setAiMarkerDate } from '../services/analytics-config.j
 import { getCohortCommitMetrics, getCohortPrMetrics } from '../services/analytics-cohorts.js';
 import { getRampUpCurves } from '../services/analytics-rampup.js';
 import { getRollingComparison } from '../services/analytics-rolling.js';
+import { getContributorStats } from '../services/analytics-contributors.js';
 
 const analytics = new Hono();
 
@@ -175,6 +176,33 @@ analytics.get('/api/analytics/rolling', (c) => {
   } catch (err) {
     console.error('GET /api/analytics/rolling error:', err);
     return c.json({ error: 'Failed to fetch rolling comparison' }, 500);
+  }
+});
+
+// ─── Contributors endpoint ────────────────────────────────────────────────────
+
+// GET /api/analytics/contributors — per-author aggregate stats
+analytics.get('/api/analytics/contributors', (c) => {
+  try {
+    const parsed = cohortQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, tenureMode, repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const results = getContributorStats({
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      tenureMode,
+      repoIds: repoIdsParsed,
+    });
+
+    return c.json(results);
+  } catch (err) {
+    console.error('GET /api/analytics/contributors error:', err);
+    return c.json({ error: 'Failed to fetch contributor stats' }, 500);
   }
 });
 
