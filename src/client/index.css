@@ -21,6 +21,10 @@
     --color-chart-3: var(--chart-3);
     --color-chart-2: var(--chart-2);
     --color-chart-1: var(--chart-1);
+    --color-chart-cohort-new:    var(--chart-cohort-new);
+    --color-chart-cohort-mid:    var(--chart-cohort-mid);
+    --color-chart-cohort-senior: var(--chart-cohort-senior);
+    --color-chart-ai-marker:     var(--chart-ai-marker);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -72,6 +76,11 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
+    /* Phase 5: Cohort chart colors — colorblind-safe (IBM Design palette) */
+    --chart-cohort-new:    oklch(0.65 0.18 258);  /* blue — 0-3mo cohort */
+    --chart-cohort-mid:    oklch(0.75 0.15 145);  /* teal-green — 3-12mo cohort */
+    --chart-cohort-senior: oklch(0.72 0.16 50);   /* amber — 1yr+ cohort */
+    --chart-ai-marker:     oklch(0.55 0.12 300);  /* muted purple — AI marker line */
     --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);

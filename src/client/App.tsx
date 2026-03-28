@@ -2,15 +2,18 @@ import { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage.js';
 import SettingsPage from './pages/SettingsPage.js';
 import ReposPage from './pages/ReposPage.js';
+import DashboardPage from './pages/DashboardPage.js';
 import NavBar from './components/NavBar.js';
 
-type Page = 'landing' | 'repos' | 'settings';
+type Page = 'dashboard' | 'landing' | 'repos' | 'settings';
 
 function getPageFromHash(): Page {
   const hash = window.location.hash;
   if (hash === '#/settings') return 'settings';
   if (hash === '#/repos') return 'repos';
-  return 'landing';
+  if (hash === '#/landing') return 'landing';
+  if (hash === '#/dashboard') return 'dashboard';
+  return 'dashboard';
 }
 
 export default function App() {
@@ -29,8 +32,10 @@ export default function App() {
       window.location.hash = '#/settings';
     } else if (to === 'repos') {
       window.location.hash = '#/repos';
+    } else if (to === 'landing') {
+      window.location.hash = '#/landing';
     } else {
-      window.location.hash = '#/';
+      window.location.hash = '#/dashboard';
     }
   };
 
@@ -38,6 +43,9 @@ export default function App() {
     <div className="min-h-screen bg-gray-50">
       <NavBar activePage={page} />
       <main>
+        {page === 'dashboard' && (
+          <DashboardPage />
+        )}
         {page === 'repos' && (
           <ReposPage />
         )}
