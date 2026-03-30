@@ -28,14 +28,16 @@ export function addRepos(
     ownerLogin: string;
     isPrivate: boolean;
     defaultBranch: string;
+    repoCreatedAt?: string;
   }>
 ) {
   for (const repo of repos) {
+    const repoCreatedAt = repo.repoCreatedAt ? new Date(repo.repoCreatedAt) : null;
     db.insert(repositories)
-      .values({ ...repo, addedAt: new Date(), removedAt: null })
+      .values({ ...repo, repoCreatedAt, addedAt: new Date(), removedAt: null })
       .onConflictDoUpdate({
         target: repositories.githubId,
-        set: { removedAt: null, addedAt: new Date() },
+        set: { removedAt: null, addedAt: new Date(), repoCreatedAt },
       })
       .run();
   }

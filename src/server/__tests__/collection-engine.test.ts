@@ -23,6 +23,7 @@ function createTestDb() {
       name TEXT NOT NULL,
       is_private INTEGER NOT NULL DEFAULT 0,
       default_branch TEXT NOT NULL DEFAULT 'main',
+      repo_created_at INTEGER,
       added_at INTEGER NOT NULL,
       removed_at INTEGER
     );

@@ -294,6 +294,7 @@ export default function ReposPage() {
       }).then(r => r.json()),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['repos'] });
+      queryClient.invalidateQueries({ queryKey: ['collection', 'status'] });
     },
   });
 

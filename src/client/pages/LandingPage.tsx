@@ -122,13 +122,19 @@ export default function LandingPage({ onNavigateSettings, onNavigateRepos }: Pro
                 ready to collect data
               </p>
             </div>
-            <button
-              onClick={onNavigateRepos}
+            <a
+              href="#/dashboard"
               className="mt-4 inline-flex items-center rounded-md bg-gray-900 px-6 py-3 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900"
             >
-              Go to Repos
-            </button>
-            <div className="mt-3">
+              View Dashboard
+            </a>
+            <div className="mt-3 flex items-center justify-center gap-4">
+              <button
+                onClick={onNavigateRepos}
+                className="text-sm text-gray-400 hover:text-gray-600 underline"
+              >
+                Repos
+              </button>
               <button
                 onClick={onNavigateSettings}
                 className="text-sm text-gray-400 hover:text-gray-600 underline"

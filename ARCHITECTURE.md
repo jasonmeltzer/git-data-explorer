@@ -9,11 +9,12 @@ Git Data Explorer is a local-first full-stack TypeScript application. The fronte
 │  Browser (localhost:5173)                                │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  React 19 SPA (Vite 8)                            │  │
-│  │  ┌─────────┐ ┌──────────┐ ┌────────────────────┐ │  │
-│  │  │ Landing  │ │  Repos   │ │     Settings       │ │  │
-│  │  │  Page    │ │  Page    │ │  Page (PAT+depth)  │ │  │
-│  │  └─────────┘ └──────────┘ └────────────────────┘ │  │
-│  │  Collection progress (SSE) on Landing page       │  │
+│  │  ┌───────────┐ ┌─────────┐ ┌──────────┐ ┌──────┐│  │
+│  │  │ Dashboard │ │ Landing │ │  Repos   │ │ Set- ││  │
+│  │  │  (default)│ │  Page   │ │  Page    │ │ tings││  │
+│  │  └───────────┘ └─────────┘ └──────────┘ └──────┘│  │
+│  │  Charts: CohortAreaChart, RampUpLineChart        │  │
+│  │  FilterBar, RollingCards, ContributorTable        │  │
 │  │  TanStack Query cache ──── shared query keys      │  │
 │  └───────────────────────────────────────────────────┘  │
 │                        │ HTTP /api/*                      │
@@ -51,11 +52,15 @@ Git Data Explorer is a local-first full-stack TypeScript application. The fronte
 
 ### Frontend (`src/client/`)
 
-Single-page React app using hash-based routing (`#/`, `#/repos`, `#/settings`). No React Router — a simple `useState` switch in `App.tsx` handles navigation.
+Single-page React app using hash-based routing (`#/dashboard`, `#/landing`, `#/repos`, `#/settings`). No React Router — a simple `useState` switch in `App.tsx` handles navigation. Default route (`#/`) goes to Dashboard.
 
 - **Pages:** Each page is a self-contained component that fetches its own data via TanStack Query hooks
+- **Dashboard:** Primary view with FilterBar, 4 chart sections (PR trends, commit trends, ramp-up, rolling comparison), narrative cards, and collapsible contributor table
+- **Hooks:** `useDashboardFilters` provides shared filter state (date range, repo selection, tenure mode) consumed by all chart sections. 6 analytics query hooks (`useCohortPrs`, `useCohortCommits`, `useRampUp`, `useRolling`, `useAiMarker`, `useContributors`) wrap TanStack Query with typed API calls
+- **Charts:** Built on Recharts via shadcn chart primitives. `CohortAreaChart` renders stacked areas with 3 cohort layers. `RampUpLineChart` renders per-join-period lines. `RollingCards` shows metric cards with change percentages
+- **Data transforms:** `chartTransforms.ts` converts `CohortMetricsRow[]` to Recharts-compatible `ChartPoint[]` with zero-filled missing cohorts. `narratives.ts` generates direction+magnitude trend text
 - **TanStack Query:** Manages all server state. Query keys like `['repos', 'tracked']` are shared across pages so navigation triggers instant cache hits rather than re-fetches
-- **shadcn/ui:** Component primitives (Button, Checkbox, Input, Badge, AlertDialog) copied into `src/shared/components/ui/`. Styled with Tailwind CSS 4
+- **shadcn/ui:** Component primitives (Button, Checkbox, Input, Badge, AlertDialog, Chart, Table, Collapsible, Card, Skeleton, Select, Popover, Calendar, Tooltip, Command) copied into `src/shared/components/ui/`. Styled with Tailwind CSS 4
 - **NavBar:** Persistent navigation across all pages with active state indication
 
 ### Backend (`src/server/`)
@@ -67,7 +72,7 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 - `settings.ts` — `GET/POST /api/settings/token`, `GET/PUT /api/settings` — PAT and app settings management
 - `repositories.ts` — 7 endpoints for repo CRUD, GitHub browsing, stop/delete
 - `collection.ts` — `POST /api/collection/start`, `POST /api/collection/stop`, `GET /api/collection/status`, `GET /api/collection/progress` (SSE) — data collection control and progress streaming
-- `analytics.ts` — 6 analytics endpoints: `GET/POST /api/analytics/marker`, `GET /api/analytics/cohorts/commits`, `GET /api/analytics/cohorts/prs`, `GET /api/analytics/rampup`, `GET /api/analytics/rolling`
+- `analytics.ts` — 7 analytics endpoints: `GET/POST /api/analytics/marker`, `GET /api/analytics/cohorts/commits`, `GET /api/analytics/cohorts/prs`, `GET /api/analytics/rampup`, `GET /api/analytics/rolling`, `GET /api/analytics/contributors`
 
 **Services** (`src/server/services/`):
 - `analytics-utils.ts` — Shared analytics helpers: canonical `getCompleteRepoIds()` with integer safety guard (SEC-01), used by all analytics services
@@ -188,7 +193,9 @@ Services:
 
 ## What's Not Built Yet
 
-- **Dashboard UI** (Phase 5) — No charts or trend visualization yet. The analytics API is complete and ready for frontend consumption
+- **UI Polish** (Phase 6) — Comprehensive visual review and polish across all pages
+- **Data Export** (Phase 7) — CSV/JSON export with optional contributor anonymization
+- **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
 
 ## File Map
 
@@ -196,13 +203,33 @@ Services:
 src/
 ├── client/
 │   ├── main.tsx              # Entry point, QueryClientProvider wrapper
-│   ├── App.tsx               # Hash router, NavBar, page switching
+│   ├── App.tsx               # Hash router, NavBar, page switching (default: dashboard)
 │   ├── components/
 │   │   ├── NavBar.tsx        # Persistent top navigation
-│   │   └── TokenForm.tsx     # PAT entry form
+│   │   ├── TokenForm.tsx     # PAT entry form
+│   │   ├── FilterBar.tsx     # Dashboard sticky filter bar (date presets, repo select, tenure mode)
+│   │   ├── ContributorTable.tsx  # Collapsible sortable contributor table (TanStack Table)
+│   │   └── charts/
+│   │       ├── CohortAreaChart.tsx   # Stacked area chart with 3 cohort layers + AI marker
+│   │       ├── RampUpLineChart.tsx   # Line chart per join-period cohort
+│   │       ├── RollingCards.tsx      # Metric cards with change percentages
+│   │       └── NarrativeCard.tsx     # Auto-generated trend insight text
+│   ├── hooks/
+│   │   ├── useDashboardFilters.ts   # Shared filter state for all dashboard queries
+│   │   ├── useCohortCommits.ts      # TanStack Query hook for cohort commit metrics
+│   │   ├── useCohortPrs.ts          # TanStack Query hook for cohort PR metrics
+│   │   ├── useRampUp.ts             # TanStack Query hook for ramp-up curves
+│   │   ├── useRolling.ts            # TanStack Query hook for rolling comparisons
+│   │   ├── useAiMarker.ts           # TanStack Query hook for AI marker date
+│   │   ├── useContributors.ts       # TanStack Query hook for contributor stats
+│   │   └── useCollectionSSE.ts      # SSE connection for collection progress
+│   ├── lib/
+│   │   ├── chartTransforms.ts       # CohortMetricsRow[] → Recharts ChartPoint[]
+│   │   └── narratives.ts            # Trend narrative text generation
 │   └── pages/
-│       ├── LandingPage.tsx   # Status overview, CTAs
-│       ├── ReposPage.tsx     # Repo selection, search, management
+│       ├── DashboardPage.tsx  # Primary view: charts, filters, narratives
+│       ├── LandingPage.tsx   # Setup status overview, "View Dashboard" CTA
+│       ├── ReposPage.tsx     # Repo selection, search, management, collection
 │       └── SettingsPage.tsx  # Token configuration
 ├── server/
 │   ├── index.ts              # Hono app, CORS, route mounting
@@ -228,7 +255,8 @@ src/
 │       ├── analytics-utils.ts      # Shared: getCompleteRepoIds() with SEC-01 guard
 │       ├── analytics-cohorts.ts   # Cohort assignment + metrics queries
 │       ├── analytics-rampup.ts    # New developer ramp-up curves
-│       └── analytics-rolling.ts   # Rolling window MoM/QoQ comparisons
+│       ├── analytics-rolling.ts   # Rolling window MoM/QoQ comparisons
+│       └── analytics-contributors.ts  # Per-author aggregate stats query
 └── shared/
     ├── types.ts              # Shared TypeScript interfaces
     ├── lib/utils.ts          # cn() class merge helper

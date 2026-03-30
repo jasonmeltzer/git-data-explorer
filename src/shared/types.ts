@@ -31,6 +31,7 @@ export interface GitHubRepo {
   ownerLogin: string;  // "owner"
   isPrivate: boolean;
   defaultBranch: string;
+  repoCreatedAt?: string;  // ISO timestamp — GitHub repo creation date
 }
 
 // Response from GET /api/repos/available
@@ -204,4 +205,17 @@ export interface RollingComparisonParams {
   tenureMode?: TenureMode;     // optional cohort filter
   cohort?: CohortLabel;        // optional: filter to a specific cohort
   repoIds?: number[];
+}
+
+// --- Contributor Stats (Phase 5) ---
+
+export interface ContributorStats {
+  authorLogin: string;
+  cohort: CohortLabel;
+  totalCommits: number;
+  totalPrs: number;
+  avgLinesAdded: number;
+  avgLinesDeleted: number;
+  avgFilesChanged: number;
+  firstCommitAt: string;  // ISO timestamp
 }

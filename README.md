@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 4.1 of 5 complete** — Codebase Hardening
+**Phase 5 of 7 complete** — Dashboard UI
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -39,21 +39,26 @@ What works today:
 - Browse all repos your token has access to, grouped by owner
 - Select/deselect repos to track with search, select all/unselect all
 - Stop tracking and delete cached data with confirmation
-- Landing page with status overview and collection progress
 - **Incremental data collection** — reverse-chronological month-window fetching with rate-limit handling, pause/resume, and SSE progress streaming
-- **Configurable collection depth** — choose how many months of history to collect
+- **Configurable collection depth** — slider capped at actual GitHub repo age, choose how many months of history to collect
 - **Bot detection** — automatic bot author identification and exclusion
-- **Cohort assignment engine** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing based on data-point timestamps (not today's date), with both global and per-repo tenure modes
-- **AI adoption marker** — set a date to split all analytics into before/after periods
-- **Ramp-up curve analysis** — weekly contribution trajectories for new developers' first 12 weeks, grouped by join period for cross-cohort comparison
-- **Rolling window comparisons** — month-over-month and quarter-over-quarter with partial-period normalization
-- **Analytics API** — 6 REST endpoints exposing all analytics services with Zod validation
-- **Hardened analytics pipeline** — SQL injection guards on `sql.raw()` interpolation, Zod route validation for date params, Invalid Date protection, integer-only repoIds filtering
-- **Reliable collection engine** — SSE status event handling, race condition guards, depth target sync, null safety on author upsert
-- **Code quality** — shared `getCompleteRepoIds` utility (3 duplicates removed), dead code cleanup, 0 production npm audit vulnerabilities
+- **Dashboard with trend charts** — PR size trends and commit size trends as stacked area charts with colorblind-safe cohort layers (blue/teal/amber)
+- **Multiple size signals** — switch between Count, Lines Added, Lines Deleted, and Files Changed on any chart
+- **AI adoption marker** — dashed purple line on charts showing when AI tools were adopted
+- **New developer ramp-up curves** — line chart comparing contribution trajectories across join periods
+- **Rolling period comparison** — metric cards with change percentages, month-over-month and quarter-over-quarter toggle
+- **Date range filtering** — preset chips (30d, 90d, 6mo, 1yr, All) plus custom date range picker
+- **Repo filtering** — multi-select dropdown filters all dashboard views
+- **Contributor drill-down** — collapsible table with sortable per-author stats, collapsed by default to maintain privacy-first framing
+- **Narrative insights** — auto-generated plain-English trend summaries above each chart section
+- **Cohort analysis** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing with global and per-repo modes
+- **Analytics API** — 7 REST endpoints (cohorts, rampup, rolling, contributors, marker) with Zod validation
+- **Hardened pipeline** — SQL injection guards, Invalid Date protection, integer-only repoIds filtering
+- **204 passing tests** across 17 test files
 
 What's next:
-- **Phase 5:** Dashboard UI with trend charts, cohort visualizations, and drill-down exploration
+- **Phase 6:** Full UI polish pass across all pages
+- **Phase 7:** Data export with contributor anonymization
 
 ## Tech Stack
 
@@ -96,7 +101,8 @@ This starts both the API server (port 3001) and the Vite dev server (port 5173).
 1. Go to **Settings** and enter your GitHub PAT
 2. You'll be redirected to the **Repos** page
 3. Select which repos to track and click **Save Selection**
-4. The landing page will show your tracked repos
+4. Switch to the **Collection** tab, set your depth, and start collection
+5. Once data is collected, the **Dashboard** shows trend charts automatically
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for technical details.
 
