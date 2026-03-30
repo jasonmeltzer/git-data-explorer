@@ -253,13 +253,15 @@ export class CollectionQueue {
       .get();
     const botsExcludedCount = botCountResult?.count ?? 0;
 
-    // Compute max meaningful depth from oldest tracked repo's addedAt date
-    const oldestAddedAt = tracked.reduce((oldest, r) => {
-      return !oldest || r.addedAt < oldest ? r.addedAt : oldest;
+    // Compute max meaningful depth from oldest tracked repo's GitHub creation date
+    const oldestRepoCreatedAt = tracked.reduce((oldest, r) => {
+      const created = r.repoCreatedAt;
+      if (!created) return oldest;
+      return !oldest || created < oldest ? created : oldest;
     }, null as Date | null);
-    const maxDepthMonths = oldestAddedAt
-      ? Math.max(1, differenceInCalendarMonths(startOfMonth(new Date()), startOfMonth(oldestAddedAt)) + 1)
-      : 1;
+    const maxDepthMonths = oldestRepoCreatedAt
+      ? Math.max(1, differenceInCalendarMonths(startOfMonth(new Date()), startOfMonth(oldestRepoCreatedAt)) + 1)
+      : 120;  // fallback if no creation dates stored yet
 
     return {
       isActive: this._isActive,

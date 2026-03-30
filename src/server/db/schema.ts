@@ -16,6 +16,7 @@ export const repositories = sqliteTable('repositories', {
   name: text('name').notNull(),
   isPrivate: integer('is_private', { mode: 'boolean' }).notNull().default(false),
   defaultBranch: text('default_branch').notNull().default('main'),
+  repoCreatedAt: integer('repo_created_at', { mode: 'timestamp' }),  // GitHub repo creation date
   addedAt: integer('added_at', { mode: 'timestamp' }).notNull(),
   removedAt: integer('removed_at', { mode: 'timestamp' }),  // soft delete
 });

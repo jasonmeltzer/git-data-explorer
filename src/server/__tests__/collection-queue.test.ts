@@ -24,6 +24,7 @@ function createTestDb() {
       name TEXT NOT NULL,
       is_private INTEGER NOT NULL DEFAULT 0,
       default_branch TEXT NOT NULL DEFAULT 'main',
+      repo_created_at INTEGER,
       added_at INTEGER NOT NULL,
       removed_at INTEGER
     );
@@ -113,7 +114,7 @@ const {
   resetMidCollectionRepo,
 } = await import('../services/collection-state.js');
 
-function insertTestRepo(id: number, fullName: string, addedAt?: Date): number {
+function insertTestRepo(id: number, fullName: string, repoCreatedAt?: Date): number {
   testDb.insert(schema.repositories).values({
     id,
     githubId: id * 1000,
@@ -122,7 +123,8 @@ function insertTestRepo(id: number, fullName: string, addedAt?: Date): number {
     name: fullName.split('/')[1],
     isPrivate: false,
     defaultBranch: 'main',
-    addedAt: addedAt ?? new Date(),
+    repoCreatedAt: repoCreatedAt ?? null,
+    addedAt: new Date(),
   }).run();
   return id;
 }
@@ -164,14 +166,14 @@ describe('CollectionQueue', () => {
       expect(status.depthMonths).toBe(3);
     });
 
-    it('returns maxDepthMonths=1 for repo added this month', () => {
+    it('returns maxDepthMonths=1 for repo created this month', () => {
       insertTestRepo(1, 'org/new-repo', new Date());
 
       const status = queue.getStatus();
       expect(status.maxDepthMonths).toBe(1);
     });
 
-    it('returns maxDepthMonths based on oldest tracked repo', () => {
+    it('returns maxDepthMonths based on oldest tracked repo creation date', () => {
       const sixMonthsAgo = new Date();
       sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 5);
       insertTestRepo(1, 'org/old-repo', sixMonthsAgo);
@@ -190,13 +192,20 @@ describe('CollectionQueue', () => {
       stopRepo(1);
 
       const status = queue.getStatus();
-      // Old stopped repo should not inflate maxDepthMonths
+      // Old stopped repo should not inflate maxDepthMonths — active repo created this month = 1
       expect(status.maxDepthMonths).toBe(1);
     });
 
-    it('returns maxDepthMonths=1 when no tracked repos exist', () => {
+    it('returns maxDepthMonths=120 when no repo has creation date', () => {
+      insertTestRepo(1, 'org/no-date');
+
       const status = queue.getStatus();
-      expect(status.maxDepthMonths).toBe(1);
+      expect(status.maxDepthMonths).toBe(120);
+    });
+
+    it('returns maxDepthMonths=120 when no tracked repos exist', () => {
+      const status = queue.getStatus();
+      expect(status.maxDepthMonths).toBe(120);
     });
 
     it('returns correct per-repo status derivation', () => {

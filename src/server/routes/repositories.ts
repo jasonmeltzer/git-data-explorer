@@ -35,6 +35,7 @@ repos.get('/api/repos/available', async (c) => {
       ownerLogin: r.owner.login,
       isPrivate: r.private,
       defaultBranch: r.default_branch,
+      repoCreatedAt: r.created_at ?? undefined,
     }));
 
     return c.json({ repos: mappedRepos, authenticatedLogin: login });
@@ -66,6 +67,7 @@ const addReposSchema = z.object({
       ownerLogin: z.string(),
       isPrivate: z.boolean(),
       defaultBranch: z.string().default('main'),
+      repoCreatedAt: z.string().optional(),
     })
   ),
 });

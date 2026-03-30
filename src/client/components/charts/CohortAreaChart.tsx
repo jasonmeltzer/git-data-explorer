@@ -77,11 +77,13 @@ export default function CohortAreaChart({
       role="img"
       aria-label={`Stacked area chart: ${title}`}
     >
-      <ChartContainer config={chartConfig} className="min-h-[240px] w-full">
+      <ChartContainer config={chartConfig} className="h-[350px] w-full">
         <AreaChart accessibilityLayer data={chartData}>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="month"
+            type="number"
+            domain={['dataMin', 'dataMax']}
             tickFormatter={(v: number) => format(new Date(v), 'MMM yyyy')}
             tickLine={false}
             axisLine={false}
@@ -96,11 +98,13 @@ export default function CohortAreaChart({
               stroke="var(--chart-ai-marker)"
               strokeDasharray="4 4"
               strokeOpacity={0.6}
-              label={{
-                value: 'AI tools adopted',
-                position: 'top',
-                fontSize: 11,
-                fill: 'var(--muted-foreground)',
+              label={({ viewBox }) => {
+                const { x: cx } = viewBox as { x: number };
+                return (
+                  <text x={cx + 4} y={16} fontSize={11} fill="hsl(var(--muted-foreground))">
+                    AI tools adopted
+                  </text>
+                );
               }}
             />
           )}
