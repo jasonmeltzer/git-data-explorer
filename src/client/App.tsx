@@ -5,12 +5,13 @@ import ReposPage from './pages/ReposPage.js';
 import DashboardPage from './pages/DashboardPage.js';
 import NavBar from './components/NavBar.js';
 
-type Page = 'dashboard' | 'landing' | 'repos' | 'settings';
+type Page = 'dashboard' | 'landing' | 'repos' | 'collection' | 'settings';
 
 function getPageFromHash(): Page {
   const hash = window.location.hash;
   if (hash === '#/settings') return 'settings';
   if (hash === '#/repos') return 'repos';
+  if (hash === '#/collection') return 'collection';
   if (hash === '#/landing') return 'landing';
   if (hash === '#/dashboard') return 'dashboard';
   return 'dashboard';
@@ -32,6 +33,8 @@ export default function App() {
       window.location.hash = '#/settings';
     } else if (to === 'repos') {
       window.location.hash = '#/repos';
+    } else if (to === 'collection') {
+      window.location.hash = '#/collection';
     } else if (to === 'landing') {
       window.location.hash = '#/landing';
     } else {
@@ -40,7 +43,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <NavBar activePage={page} />
       <main>
         {page === 'dashboard' && (
