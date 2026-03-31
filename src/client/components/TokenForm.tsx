@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Button } from '@shared/components/ui/button';
 
 interface TokenStatus {
   configured: boolean;
@@ -83,7 +84,7 @@ export default function TokenForm({ onTokenSaved }: TokenFormProps) {
   );
 
   if (status === null) {
-    return <p className="text-gray-400">Loading token status...</p>;
+    return <p className="text-muted-foreground">Loading token status...</p>;
   }
 
   // Per D-05: If token is configured and not editing, show masked token + Change button
@@ -92,12 +93,12 @@ export default function TokenForm({ onTokenSaved }: TokenFormProps) {
       <div>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm text-gray-600">Current token:</p>
-            <p className="font-mono text-sm text-gray-800 mt-1">{status.maskedToken}</p>
+            <p className="text-sm text-muted-foreground">Current token:</p>
+            <p className="font-mono text-sm text-foreground mt-1">{status.maskedToken}</p>
           </div>
           <button
             onClick={() => setIsEditing(true)}
-            className="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+            className="rounded-md bg-card px-3 py-1.5 text-sm font-medium text-foreground shadow-sm ring-1 ring-inset ring-border hover:bg-muted"
           >
             Change
           </button>
@@ -117,7 +118,7 @@ export default function TokenForm({ onTokenSaved }: TokenFormProps) {
   // Token entry form (shown on first launch or when editing)
   return (
     <div>
-      <label htmlFor="github-token" className="block text-sm font-medium text-gray-700">
+      <label htmlFor="github-token" className="block text-sm font-medium text-foreground">
         Personal Access Token
       </label>
       <input
@@ -126,7 +127,7 @@ export default function TokenForm({ onTokenSaved }: TokenFormProps) {
         value={token}
         onChange={(e) => setToken(e.target.value)}
         placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+        className="mt-1 block w-full rounded-md border border-border px-3 py-2 text-sm shadow-sm focus:border-ring focus:outline-none focus:ring-1 focus:ring-ring"
         autoComplete="off"
       />
 
@@ -137,17 +138,16 @@ export default function TokenForm({ onTokenSaved }: TokenFormProps) {
       )}
 
       <div className="mt-4 flex items-center gap-3">
-        <button
+        <Button
           onClick={handleSave}
           disabled={saving || !token.trim()}
-          className="rounded-md bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-gray-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {saving ? 'Validating...' : 'Save Token'}
-        </button>
+        </Button>
         {isEditing && (
           <button
             onClick={() => { setIsEditing(false); setToken(''); setError(null); }}
-            className="text-sm text-gray-500 hover:text-gray-700"
+            className="text-sm text-muted-foreground hover:text-foreground"
           >
             Cancel
           </button>
