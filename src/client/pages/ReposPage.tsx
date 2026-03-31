@@ -317,7 +317,7 @@ export default function ReposPage() {
           <p className="text-sm text-muted-foreground mb-4">
             GitHub token not configured. Add your token in Settings to load repos.
           </p>
-          <Button variant="outline" onClick={() => { window.location.hash = '#settings'; }}>
+          <Button variant="outline" onClick={() => { window.location.hash = '#/settings'; }}>
             Go to Settings
           </Button>
         </div>
