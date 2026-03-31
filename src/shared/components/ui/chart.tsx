@@ -304,16 +304,21 @@ function ChartLegendContent({
             <div
               key={index}
               className={cn(
-                "flex items-center gap-1.5 [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground"
+                "flex items-center gap-1.5 text-sm text-foreground [&>svg]:h-3 [&>svg]:w-3 [&>svg]:text-muted-foreground"
               )}
             >
               {itemConfig?.icon && !hideIcon ? (
                 <itemConfig.icon />
               ) : (
                 <div
-                  className="h-2 w-2 shrink-0 rounded-[2px]"
                   style={{
-                    backgroundColor: item.color,
+                    width: '24px',
+                    height: '3px',
+                    minWidth: '24px',
+                    minHeight: '3px',
+                    borderRadius: '2px',
+                    backgroundColor: item.color ?? "currentColor",
+                    flexShrink: 0,
                   }}
                 />
               )}
