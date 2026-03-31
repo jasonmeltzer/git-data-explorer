@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage.js';
 import SettingsPage from './pages/SettingsPage.js';
 import ReposPage from './pages/ReposPage.js';
+import CollectionPage from './pages/CollectionPage.js';
 import DashboardPage from './pages/DashboardPage.js';
 import NavBar from './components/NavBar.js';
 
@@ -51,6 +52,9 @@ export default function App() {
         )}
         {page === 'repos' && (
           <ReposPage />
+        )}
+        {page === 'collection' && (
+          <CollectionPage />
         )}
         {page === 'settings' && (
           <SettingsPage
