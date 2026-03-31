@@ -1,7 +1,7 @@
 import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
 
 import { cn } from "@shared/lib/utils"
-import { CheckIcon } from "lucide-react"
+import { CheckIcon, MinusIcon } from "lucide-react"
 
 const baseStyle: React.CSSProperties = {
   display: 'inline-flex',
@@ -26,8 +26,19 @@ const checkedStyle: React.CSSProperties = {
   color: '#fff',
 }
 
-function Checkbox({ className, style, ...props }: CheckboxPrimitive.Root.Props & { style?: React.CSSProperties }) {
+const indeterminateStyle: React.CSSProperties = {
+  ...baseStyle,
+  backgroundColor: '#2563eb',
+  borderColor: '#2563eb',
+  color: '#fff',
+}
+
+function Checkbox({ className, style, ...props }: CheckboxPrimitive.Root.Props & { style?: React.CSSProperties; 'data-state'?: string }) {
+  const dataState = props['data-state'];
+  const isIndeterminate = dataState === 'indeterminate';
   const checked = props.checked === true;
+
+  const currentStyle = isIndeterminate ? indeterminateStyle : checked ? checkedStyle : baseStyle;
 
   return (
     <CheckboxPrimitive.Root
@@ -37,17 +48,23 @@ function Checkbox({ className, style, ...props }: CheckboxPrimitive.Root.Props &
         className
       )}
       style={{
-        ...(checked ? checkedStyle : baseStyle),
+        ...currentStyle,
         ...style,
       }}
       {...props}
     >
-      <CheckboxPrimitive.Indicator
-        data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
-      >
-        <CheckIcon />
-      </CheckboxPrimitive.Indicator>
+      {isIndeterminate ? (
+        <span className="grid place-content-center text-current [&>svg]:size-3.5">
+          <MinusIcon />
+        </span>
+      ) : (
+        <CheckboxPrimitive.Indicator
+          data-slot="checkbox-indicator"
+          className="grid place-content-center text-current transition-none [&>svg]:size-3.5"
+        >
+          <CheckIcon />
+        </CheckboxPrimitive.Indicator>
+      )}
     </CheckboxPrimitive.Root>
   )
 }

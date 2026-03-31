@@ -64,11 +64,11 @@ export default function TokenForm({ onTokenSaved }: TokenFormProps) {
 
   // Per D-06: Show required scopes guidance near the input
   const scopeGuidance = (
-    <div className="mt-3 rounded-md bg-blue-50 p-3 text-sm text-blue-800">
-      <p className="font-medium">Required PAT scopes:</p>
+    <div className="mt-3 rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
+      <p className="font-medium text-foreground">Required PAT scopes:</p>
       <ul className="mt-1 list-disc list-inside space-y-0.5">
-        <li><code className="bg-blue-100 px-1 rounded">repo</code> -- for private repositories</li>
-        <li><code className="bg-blue-100 px-1 rounded">public_repo</code> -- if tracking only public repos</li>
+        <li><code className="bg-background px-1 rounded border border-border">repo</code> -- for private repositories</li>
+        <li><code className="bg-background px-1 rounded border border-border">public_repo</code> -- if tracking only public repos</li>
       </ul>
       <p className="mt-2">
         <a

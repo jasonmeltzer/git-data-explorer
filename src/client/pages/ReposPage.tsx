@@ -381,7 +381,7 @@ export default function ReposPage() {
 
           {/* Rate-limit warning */}
           {selectedGithubIds.size > 5 && (
-            <div className="mt-4 rounded-md bg-blue-50 p-3 text-sm text-blue-800">
+            <div className="mt-4 rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
               Selecting many repos may take multiple sessions due to GitHub API rate
               limits. We recommend starting with 5 or fewer.
             </div>
