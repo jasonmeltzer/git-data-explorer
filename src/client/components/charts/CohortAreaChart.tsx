@@ -96,8 +96,9 @@ export default function CohortAreaChart({
             <ReferenceLine
               x={aiMarkerEpoch}
               stroke="var(--chart-ai-marker)"
-              strokeDasharray="4 4"
-              strokeOpacity={0.6}
+              strokeDasharray="6 3"
+              strokeWidth={2}
+              strokeOpacity={0.85}
               label={({ viewBox }) => {
                 const { x: cx } = viewBox as { x: number };
                 return (

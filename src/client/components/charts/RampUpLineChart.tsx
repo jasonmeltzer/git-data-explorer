@@ -83,14 +83,14 @@ export default function RampUpLineChart({ data, isFetching }: RampUpLineChartPro
       aria-label="Line chart showing new developer ramp-up curves by join period"
     >
       <ChartContainer config={chartConfig} className="h-[350px] w-full">
-        <LineChart accessibilityLayer data={chartData}>
+        <LineChart accessibilityLayer data={chartData} margin={{ bottom: 30 }}>
           <CartesianGrid vertical={false} />
           <XAxis
             dataKey="weekIndex"
-            label={{ value: 'Weeks since first commit', position: 'insideBottom', offset: -5 }}
             tickLine={false}
             axisLine={false}
             tickMargin={8}
+            label={{ value: 'Weeks since first commit', position: 'insideBottom', offset: -15 }}
           />
           <YAxis
             label={{ value: 'Contributions', angle: -90, position: 'insideLeft', offset: 10 }}
@@ -99,7 +99,7 @@ export default function RampUpLineChart({ data, isFetching }: RampUpLineChartPro
             tickMargin={8}
           />
           <ChartTooltip content={<ChartTooltipContent indicator="dot" />} />
-          <ChartLegend content={<ChartLegendContent />} />
+          <ChartLegend content={<ChartLegendContent />} verticalAlign="top" />
           {joinPeriods.map((period, i) => (
             <Line
               key={period}

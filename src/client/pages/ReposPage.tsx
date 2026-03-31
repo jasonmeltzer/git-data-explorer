@@ -409,7 +409,10 @@ export default function ReposPage() {
                     <p className="text-sm font-semibold text-foreground uppercase tracking-wide mb-2">
                       {displayName}
                     </p>
-                    <div className="flex items-center gap-2 mb-1 py-1">
+                    <div
+                      className="flex items-center gap-2 mb-1 py-1 cursor-pointer"
+                      onClick={() => toggleGroup(ownerLogin)}
+                    >
                       <Checkbox
                         checked={allSelected}
                         data-state={
@@ -420,15 +423,13 @@ export default function ReposPage() {
                             : 'unchecked'
                         }
                         onCheckedChange={() => toggleGroup(ownerLogin)}
-                        id={`select-all-${ownerLogin}`}
                         className="shrink-0 min-w-5"
                       />
-                      <label
-                        htmlFor={`select-all-${ownerLogin}`}
-                        className="text-sm text-muted-foreground cursor-pointer ml-3"
+                      <span
+                        className="text-sm text-muted-foreground ml-3"
                       >
                         {allSelected ? 'Unselect all' : 'Select all'}
-                      </label>
+                      </span>
                       <span className="text-xs text-muted-foreground ml-1">
                         {groupCount} / {repos.length} selected
                       </span>
@@ -441,20 +442,19 @@ export default function ReposPage() {
                       return (
                         <div
                           key={repo.githubId}
-                          className="flex items-center min-h-[44px] py-2 px-1 hover:bg-muted rounded"
+                          className="flex items-center min-h-[44px] py-2 px-1 hover:bg-muted rounded cursor-pointer"
+                          onClick={() => toggleRepo(repo.githubId)}
                         >
                           <Checkbox
                             checked={selectedGithubIds.has(repo.githubId)}
                             onCheckedChange={() => toggleRepo(repo.githubId)}
-                            id={`repo-${repo.githubId}`}
                             className="shrink-0 min-w-5"
                           />
-                          <label
-                            htmlFor={`repo-${repo.githubId}`}
-                            className="text-sm text-foreground ml-3 flex-1 cursor-pointer"
+                          <span
+                            className="text-sm text-foreground ml-3 flex-1"
                           >
                             {repo.name}
-                          </label>
+                          </span>
                           {collectionBadge}
                           {repoCollectionStatus?.lastSyncedAt && (
                             <span className="text-xs text-muted-foreground ml-2 flex items-center gap-1">
