@@ -101,7 +101,7 @@ export default function CohortAreaChart({
               label={({ viewBox }) => {
                 const { x: cx } = viewBox as { x: number };
                 return (
-                  <text x={cx + 4} y={16} fontSize={11} fill="hsl(var(--muted-foreground))">
+                  <text x={cx + 4} y={16} fontSize={11} fill="var(--muted-foreground)">
                     AI tools adopted
                   </text>
                 );

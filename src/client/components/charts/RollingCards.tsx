@@ -30,8 +30,8 @@ function ChangeIndicator({ change, isVolume }: { change: number | null | undefin
   }
   const isPositive = change >= 0;
   const pct = Math.abs(Math.round(change));
-  const positiveClass = isVolume ? 'text-green-600' : 'text-muted-foreground';
-  const negativeClass = isVolume ? 'text-red-600' : 'text-muted-foreground';
+  const positiveClass = isVolume ? 'text-emerald-500' : 'text-muted-foreground';
+  const negativeClass = isVolume ? 'text-red-500' : 'text-muted-foreground';
   const colorClass = isPositive ? positiveClass : negativeClass;
 
   return (
