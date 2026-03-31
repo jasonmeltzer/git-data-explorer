@@ -663,7 +663,7 @@ export default function ReposPage() {
                           }
                           onCheckedChange={() => toggleGroup(ownerLogin)}
                           id={`select-all-${ownerLogin}`}
-                          className="shrink-0 min-w-5"
+                          className="shrink-0 min-w-5 border-2 border-input"
                         />
                         <label
                           htmlFor={`select-all-${ownerLogin}`}
@@ -689,7 +689,7 @@ export default function ReposPage() {
                               checked={selectedGithubIds.has(repo.githubId)}
                               onCheckedChange={() => toggleRepo(repo.githubId)}
                               id={`repo-${repo.githubId}`}
-                              className="shrink-0 min-w-5"
+                              className="shrink-0 min-w-5 border-2 border-input"
                             />
                             <label
                               htmlFor={`repo-${repo.githubId}`}
