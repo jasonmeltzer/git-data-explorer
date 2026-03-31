@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 5 of 7 complete** — Dashboard UI
+**Phase 6 of 7 complete** — UI Polish
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -54,10 +54,12 @@ What works today:
 - **Cohort analysis** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing with global and per-repo modes
 - **Analytics API** — 7 REST endpoints (cohorts, rampup, rolling, contributors, marker) with Zod validation
 - **Hardened pipeline** — SQL injection guards, Invalid Date protection, integer-only repoIds filtering
+- **Dark mode** — full dark mode support with theme toggle and localStorage persistence
+- **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
+- **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
 - **204 passing tests** across 17 test files
 
 What's next:
-- **Phase 6:** Full UI polish pass across all pages
 - **Phase 7:** Data export with contributor anonymization
 
 ## Tech Stack
@@ -101,7 +103,7 @@ This starts both the API server (port 3001) and the Vite dev server (port 5173).
 1. Go to **Settings** and enter your GitHub PAT
 2. You'll be redirected to the **Repos** page
 3. Select which repos to track and click **Save Selection**
-4. Switch to the **Collection** tab, set your depth, and start collection
+4. Go to the **Collection** page, set your depth, and start collection
 5. Once data is collected, the **Dashboard** shows trend charts automatically
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for technical details.

@@ -9,10 +9,10 @@ Git Data Explorer is a local-first full-stack TypeScript application. The fronte
 │  Browser (localhost:5173)                                │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  React 19 SPA (Vite 8)                            │  │
-│  │  ┌───────────┐ ┌─────────┐ ┌──────────┐ ┌──────┐│  │
-│  │  │ Dashboard │ │ Landing │ │  Repos   │ │ Set- ││  │
-│  │  │  (default)│ │  Page   │ │  Page    │ │ tings││  │
-│  │  └───────────┘ └─────────┘ └──────────┘ └──────┘│  │
+│  │  ┌──────────┐ ┌────────┐ ┌──────┐ ┌───────────┐ ┌──────┐│  │
+│  │  │Dashboard │ │Landing │ │Repos │ │Collection │ │Set-  ││  │
+│  │  │(default) │ │ Page   │ │ Page │ │   Page    │ │tings ││  │
+│  │  └──────────┘ └────────┘ └──────┘ └───────────┘ └──────┘│  │
 │  │  Charts: CohortAreaChart, RampUpLineChart        │  │
 │  │  FilterBar, RollingCards, ContributorTable        │  │
 │  │  TanStack Query cache ──── shared query keys      │  │
@@ -52,7 +52,7 @@ Git Data Explorer is a local-first full-stack TypeScript application. The fronte
 
 ### Frontend (`src/client/`)
 
-Single-page React app using hash-based routing (`#/dashboard`, `#/landing`, `#/repos`, `#/settings`). No React Router — a simple `useState` switch in `App.tsx` handles navigation. Default route (`#/`) goes to Dashboard.
+Single-page React app using hash-based routing (`#/dashboard`, `#/landing`, `#/repos`, `#/collection`, `#/settings`). No React Router — a simple `useState` switch in `App.tsx` handles navigation. Default route (`#/`) goes to Dashboard. Full dark mode support via `useTheme` hook with localStorage persistence.
 
 - **Pages:** Each page is a self-contained component that fetches its own data via TanStack Query hooks
 - **Dashboard:** Primary view with FilterBar, 4 chart sections (PR trends, commit trends, ramp-up, rolling comparison), narrative cards, and collapsible contributor table
@@ -61,7 +61,7 @@ Single-page React app using hash-based routing (`#/dashboard`, `#/landing`, `#/r
 - **Data transforms:** `chartTransforms.ts` converts `CohortMetricsRow[]` to Recharts-compatible `ChartPoint[]` with zero-filled missing cohorts. `narratives.ts` generates direction+magnitude trend text
 - **TanStack Query:** Manages all server state. Query keys like `['repos', 'tracked']` are shared across pages so navigation triggers instant cache hits rather than re-fetches
 - **shadcn/ui:** Component primitives (Button, Checkbox, Input, Badge, AlertDialog, Chart, Table, Collapsible, Card, Skeleton, Select, Popover, Calendar, Tooltip, Command) copied into `src/shared/components/ui/`. Styled with Tailwind CSS 4
-- **NavBar:** Persistent navigation across all pages with active state indication
+- **NavBar:** Persistent 4-link navigation (Dashboard, Repos, Collection, Settings) with active state indication and dark mode toggle (Moon/Sun icon)
 
 ### Backend (`src/server/`)
 
@@ -193,7 +193,6 @@ Services:
 
 ## What's Not Built Yet
 
-- **UI Polish** (Phase 6) — Comprehensive visual review and polish across all pages
 - **Data Export** (Phase 7) — CSV/JSON export with optional contributor anonymization
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
 
@@ -215,6 +214,7 @@ src/
 │   │       ├── RollingCards.tsx      # Metric cards with change percentages
 │   │       └── NarrativeCard.tsx     # Auto-generated trend insight text
 │   ├── hooks/
+│   │   ├── useTheme.ts              # Dark mode toggle with localStorage persistence
 │   │   ├── useDashboardFilters.ts   # Shared filter state for all dashboard queries
 │   │   ├── useCohortCommits.ts      # TanStack Query hook for cohort commit metrics
 │   │   ├── useCohortPrs.ts          # TanStack Query hook for cohort PR metrics
@@ -229,8 +229,9 @@ src/
 │   └── pages/
 │       ├── DashboardPage.tsx  # Primary view: charts, filters, narratives
 │       ├── LandingPage.tsx   # Setup status overview, "View Dashboard" CTA
-│       ├── ReposPage.tsx     # Repo selection, search, management, collection
-│       └── SettingsPage.tsx  # Token configuration
+│       ├── ReposPage.tsx     # Repo selection, search, management (status badges)
+│       ├── CollectionPage.tsx # Data collection: depth slider, progress, start/stop
+│       └── SettingsPage.tsx  # Token configuration, bot toggle
 ├── server/
 │   ├── index.ts              # Hono app, CORS, route mounting
 │   ├── db/
