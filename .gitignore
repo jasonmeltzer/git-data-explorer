@@ -8,6 +8,9 @@ data/app.db-shm
 data/test.db
 data/test.db-wal
 data/test.db-shm
+data/seed.db
+data/seed.db-wal
+data/seed.db-shm
 .env
 .env.local
 *.tsbuildinfo

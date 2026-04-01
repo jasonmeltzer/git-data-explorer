@@ -10,7 +10,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "test": "vitest run --reporter=verbose"
+    "test": "vitest run --reporter=verbose",
+    "seed": "tsx scripts/seed.ts",
+    "dev:seed": "DB_PATH=./data/seed.db concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\""
   },
   "keywords": [],
   "author": "",
