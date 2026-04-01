@@ -64,19 +64,31 @@ export function getExecutiveSummary(params: ExecutiveSummaryParams): ExecutiveSu
 
   const markerEpoch = Math.floor(markerDate.getTime() / 1000);
 
-  // rampUpTrend: compare avg ramp-up speed pre/post AI marker
-  // Use time-to-first-meaningful-commit (>=50 lines) as proxy for ramp-up speed
+  // rampUpTrend: compare avg time-to-first-meaningful-commit for authors who
+  // joined before vs after the AI marker. "Meaningful" = first commit with >=50 lines.
+  // For each non-bot author, find MIN(committed_at) where lines_added >= 50,
+  // compute the gap from their first_commit_at, then average by cohort.
   // NOTE: No date range filter — before/after comparison spans all available data
   const rampUpResult = db.get(sql.raw(`
+    WITH author_rampup AS (
+      SELECT
+        a.id AS author_id,
+        a.first_commit_at,
+        MIN(c.committed_at) AS first_big_commit_at
+      FROM authors a
+      INNER JOIN commits c ON c.author_id = a.id
+      WHERE a.is_bot = 0
+        AND a.first_commit_at IS NOT NULL
+        AND c.lines_added >= 50
+        AND c.repo_id IN (${repoIdList})
+      GROUP BY a.id
+    )
     SELECT
-      AVG(CASE WHEN c.committed_at < ${markerEpoch} THEN (c.committed_at - a.first_commit_at) END) AS before_avg,
-      AVG(CASE WHEN c.committed_at >= ${markerEpoch} THEN (c.committed_at - a.first_commit_at) END) AS after_avg
-    FROM commits c
-    INNER JOIN authors a ON a.id = c.author_id
-    WHERE a.is_bot = 0
-      AND a.first_commit_at IS NOT NULL
-      AND c.lines_added >= 50
-      AND c.repo_id IN (${repoIdList})
+      AVG(CASE WHEN first_commit_at < ${markerEpoch}
+        THEN first_big_commit_at - first_commit_at END) AS before_avg,
+      AVG(CASE WHEN first_commit_at >= ${markerEpoch}
+        THEN first_big_commit_at - first_commit_at END) AS after_avg
+    FROM author_rampup
   `)) as { before_avg: number | null; after_avg: number | null } | undefined;
 
   let rampUpTrend: string | null = null;
