@@ -12,6 +12,7 @@ import { ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-
 
 import { useContributors } from '../hooks/useContributors.js';
 import type { ContributorStats, CohortLabel } from '@shared/types.js';
+import { cohortColorMap } from '@shared/cohort-config.js';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@shared/components/ui/collapsible.js';
 import {
   Table,
@@ -30,12 +31,6 @@ interface ContributorTableProps {
   tenureMode: 'global' | 'repo';
   repoIds: number[];
 }
-
-const cohortColorMap: Record<CohortLabel, string> = {
-  '0-3mo': 'var(--chart-cohort-new)',
-  '3-12mo': 'var(--chart-cohort-mid)',
-  '1yr+': 'var(--chart-cohort-senior)',
-};
 
 const columns: ColumnDef<ContributorStats>[] = [
   {

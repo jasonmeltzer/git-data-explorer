@@ -20,7 +20,7 @@ function readSrc(relativePath: string): string {
   return readFileSync(join(ROOT, relativePath), 'utf-8');
 }
 
-describe('cohort configurability (expected to fail until Phase 7.1)', () => {
+describe('cohort configurability', () => {
   it('a shared cohort config file exists', () => {
     // Phase 7.1 should create a single source of truth for cohort definitions
     let exists = false;

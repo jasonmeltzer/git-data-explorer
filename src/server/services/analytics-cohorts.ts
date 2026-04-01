@@ -2,17 +2,16 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { getCompleteRepoIds } from './analytics-utils.js';
 import type { CohortMetricsParams, CohortMetricsRow, CohortLabel, PeriodLabel } from '../../shared/types.js';
-
-// Tenure bucket boundaries in seconds (~91 days, ~365 days)
-const THREE_MONTHS_S = 3 * 30 * 24 * 3600;   // ~91 days in seconds
-const TWELVE_MONTHS_S = 12 * 30 * 24 * 3600;  // ~365 days in seconds
+import { DEFAULT_COHORT_CONFIG, getThresholdSeconds } from '../../shared/cohort-config.js';
 
 /**
  * Build the CASE WHEN SQL for cohort assignment.
  * For global tenure: uses authors.first_commit_at vs commits.committed_at
  * For repo tenure: uses MIN(committed_at) per (author_id, repo_id) subquery
+ * Thresholds and SQL labels are derived from DEFAULT_COHORT_CONFIG.
  */
 function buildCohortCase(tenureMode: 'global' | 'repo', dataPointColumn: string): string {
+  const [t1Seconds, t2Seconds] = getThresholdSeconds(DEFAULT_COHORT_CONFIG);
   const tenureExpr =
     tenureMode === 'global'
       ? `(${dataPointColumn} - a.first_commit_at)`
@@ -20,8 +19,8 @@ function buildCohortCase(tenureMode: 'global' | 'repo', dataPointColumn: string)
 
   return `
     CASE
-      WHEN ${tenureExpr} < ${THREE_MONTHS_S} THEN '0-3mo'
-      WHEN ${tenureExpr} < ${TWELVE_MONTHS_S} THEN '3-12mo'
+      WHEN ${tenureExpr} < ${t1Seconds} THEN '0-3mo'
+      WHEN ${tenureExpr} < ${t2Seconds} THEN '3-12mo'
       ELSE '1yr+'
     END
   `;
@@ -123,10 +122,11 @@ export function getCohortPrMetrics(params: CohortMetricsParams): CohortMetricsRo
       ? `(pr.created_at - a.first_commit_at)`
       : `(pr.created_at - (SELECT MIN(c2.committed_at) FROM commits c2 WHERE c2.author_id = pr.author_id AND c2.repo_id = pr.repo_id))`;
 
+  const [t1Seconds, t2Seconds] = getThresholdSeconds(DEFAULT_COHORT_CONFIG);
   const cohortCase = `
     CASE
-      WHEN ${prTenureExpr} < ${THREE_MONTHS_S} THEN '0-3mo'
-      WHEN ${prTenureExpr} < ${TWELVE_MONTHS_S} THEN '3-12mo'
+      WHEN ${prTenureExpr} < ${t1Seconds} THEN '0-3mo'
+      WHEN ${prTenureExpr} < ${t2Seconds} THEN '3-12mo'
       ELSE '1yr+'
     END
   `;

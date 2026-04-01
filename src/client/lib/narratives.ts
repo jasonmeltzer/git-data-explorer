@@ -1,4 +1,5 @@
 import type { RollingComparisonResult, CohortMetricsRow } from '@shared/types.js';
+import { COHORT_LABELS } from '@shared/cohort-config.js';
 
 export function rollingNarrative(
   result: RollingComparisonResult,
@@ -17,12 +18,6 @@ export function rollingNarrative(
   const label = metricLabels[metricKey] || metricKey;
   return `${label} is ${dir} ${pct}% ${result.granularity}-over-${result.granularity} (${result.prior.label} to ${result.current.label}).`;
 }
-
-const COHORT_LABELS: Record<string, string> = {
-  '0-3mo': 'New (0-3mo)',
-  '3-12mo': 'Growing (3-12mo)',
-  '1yr+': 'Senior (1yr+)',
-};
 
 export function cohortTrendNarrative(
   rows: CohortMetricsRow[],
