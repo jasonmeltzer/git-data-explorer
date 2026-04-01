@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 6 of 7 complete** — UI Polish
+**Phase 7 complete** — Synthetic Test Data
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -58,9 +58,11 @@ What works today:
 - **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
 - **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
 - **204 passing tests** across 17 test files
+- **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access
+- **Seed mode** — `npm run dev:seed` starts the app against seed data
 
 What's next:
-- **Phase 7:** Data export with contributor anonymization
+- **Phase 8:** Data export with contributor anonymization
 
 ## Tech Stack
 
@@ -98,7 +100,16 @@ npm run dev
 
 This starts both the API server (port 3001) and the Vite dev server (port 5173). Open http://localhost:5173 in your browser.
 
-### First Use
+### Try It Without GitHub
+
+```bash
+npm run seed        # Generate realistic fake data
+npm run dev:seed    # Start the app with seed data
+```
+
+Open http://localhost:5173 — all dashboard views populated with synthetic data (3 repos, 31 contributors, AI adoption inflection point).
+
+### First Use (with real data)
 
 1. Go to **Settings** and enter your GitHub PAT
 2. You'll be redirected to the **Repos** page

@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
+import path from 'node:path';
 import { db } from '../db/client.js';
 import { appConfig } from '../db/schema.js';
+
+const DB_PATH = process.env.DB_PATH ?? path.join(process.cwd(), 'data', 'app.db');
 
 const health = new Hono();
 
@@ -11,12 +14,14 @@ health.get('/api/health', (c) => {
     return c.json({
       status: 'ok' as const,
       db: 'connected',
+      isSeedDb: DB_PATH.includes('seed.db'),
       timestamp: new Date().toISOString(),
     });
   } catch (e) {
     return c.json({
       status: 'error' as const,
       db: 'disconnected',
+      isSeedDb: false,
       timestamp: new Date().toISOString(),
     }, 500);
   }

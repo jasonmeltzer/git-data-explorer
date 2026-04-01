@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
+import { commits } from '../db/schema.js';
 import { getCompleteRepoIds } from './analytics-utils.js';
 import type {
   RollingComparisonParams,
@@ -224,7 +225,17 @@ function buildPeriodMetrics(
  * Bot authors and incomplete repos are excluded.
  */
 export function getRollingComparison(params: RollingComparisonParams): RollingComparisonResult {
-  const now = params.referenceDate ?? new Date();
+  // Use the latest commit date as reference when not explicitly provided.
+  // This ensures rolling comparisons target periods that actually have data,
+  // avoiding -100% when UTC date is ahead of local time or data collection.
+  let now = params.referenceDate ?? null;
+  if (!now) {
+    const latest = db
+      .select({ maxAt: sql<number>`MAX(CAST(${commits.committedAt} AS INTEGER))` })
+      .from(commits)
+      .get() as { maxAt: number | null } | undefined;
+    now = latest?.maxAt ? new Date(latest.maxAt * 1000) : new Date();
+  }
 
   const [currentPeriod, priorPeriod] =
     params.granularity === 'month'

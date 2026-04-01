@@ -18,6 +18,12 @@ export function rollingNarrative(
   return `${label} is ${dir} ${pct}% ${result.granularity}-over-${result.granularity} (${result.prior.label} to ${result.current.label}).`;
 }
 
+const COHORT_LABELS: Record<string, string> = {
+  '0-3mo': 'New (0-3mo)',
+  '3-12mo': 'Growing (3-12mo)',
+  '1yr+': 'Senior (1yr+)',
+};
+
 export function cohortTrendNarrative(
   rows: CohortMetricsRow[],
   metric: 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged' | 'totalCount',
@@ -28,11 +34,19 @@ export function cohortTrendNarrative(
   if (months.length < 2) return `${label}: only one period of data available.`;
   const first = months[0];
   const last = months[months.length - 1];
-  const sumForMonth = (m: string) => rows.filter(r => r.periodMonth === m).reduce((s, r) => s + r[metric], 0);
-  const firstVal = sumForMonth(first);
-  const lastVal = sumForMonth(last);
-  if (firstVal === 0) return `${label}: started from zero in ${first}.`;
-  const change = Math.round(((lastVal - firstVal) / firstVal) * 100);
-  const dir = change >= 0 ? 'up' : 'down';
-  return `${label} is ${dir} ${Math.abs(change)}% from ${first} to ${last}.`;
+
+  const cohorts = [...new Set(rows.map(r => r.cohort))];
+  const parts: string[] = [];
+  for (const cohort of ['0-3mo', '3-12mo', '1yr+']) {
+    if (!cohorts.includes(cohort)) continue;
+    const firstVal = rows.find(r => r.periodMonth === first && r.cohort === cohort)?.[metric] ?? 0;
+    const lastVal = rows.find(r => r.periodMonth === last && r.cohort === cohort)?.[metric] ?? 0;
+    if (firstVal === 0) continue;
+    const change = Math.round(((lastVal - firstVal) / firstVal) * 100);
+    const dir = change >= 0 ? 'up' : 'down';
+    parts.push(`${COHORT_LABELS[cohort] ?? cohort} ${dir} ${Math.abs(change)}%`);
+  }
+
+  if (parts.length === 0) return `${label} from ${first} to ${last}.`;
+  return `${label} (${first} to ${last}): ${parts.join(', ')}.`;
 }

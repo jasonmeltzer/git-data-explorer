@@ -87,9 +87,9 @@ export default function RollingCards({
     <div className="space-y-4">
       <div className="flex justify-end">
         <Tabs value={granularity} onValueChange={(v) => onGranularityChange(v as 'month' | 'quarter')}>
-          <TabsList>
-            <TabsTrigger value="month">Month</TabsTrigger>
-            <TabsTrigger value="quarter">Quarter</TabsTrigger>
+          <TabsList className="h-8 gap-1">
+            <TabsTrigger value="month" className="px-3 py-1">Month</TabsTrigger>
+            <TabsTrigger value="quarter" className="px-3 py-1">Quarter</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

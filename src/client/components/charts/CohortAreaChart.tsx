@@ -69,7 +69,28 @@ export default function CohortAreaChart({
     );
   }
 
+  if (chartData.length === 1) {
+    const pt = chartData[0];
+    const total = Math.round(pt.new + pt.mid + pt.senior);
+    const monthLabel = format(new Date(pt.month), 'MMM yyyy');
+    return (
+      <div
+        className="min-h-[240px] w-full flex items-center justify-center"
+        role="img"
+        aria-label={title}
+      >
+        <p className="text-sm text-muted-foreground max-w-md text-center">
+          Only one month of data ({monthLabel}: {total} total). Select a longer date range (90d+) to see trends over time.
+        </p>
+      </div>
+    );
+  }
+
   const aiMarkerEpoch = aiMarkerDate ? new Date(aiMarkerDate).getTime() : null;
+
+  // Provide explicit tick values at each data point's month to avoid
+  // Recharts auto-ticking showing duplicate month labels (e.g. "Feb 2026" x3)
+  const monthTicks = chartData.map((d) => d.month);
 
   return (
     <div
@@ -84,6 +105,7 @@ export default function CohortAreaChart({
             dataKey="month"
             type="number"
             domain={['dataMin', 'dataMax']}
+            ticks={monthTicks}
             tickFormatter={(v: number) => format(new Date(v), 'MMM yyyy')}
             tickLine={false}
             axisLine={false}
