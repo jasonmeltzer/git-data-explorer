@@ -66,22 +66,22 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
     const v1 = parseInt(t1Months, 10);
     const v2 = parseInt(t2Months, 10);
 
-    if (!Number.isInteger(v1) || v1 < 1 || v1 > 11) {
-      setT1Error('Must be a whole number between 1 and 11');
+    if (!Number.isInteger(v1) || v1 < 1) {
+      setT1Error('Must be a positive whole number');
       valid = false;
     } else {
       setT1Error('');
     }
 
-    if (!Number.isInteger(v2) || v2 < 2 || v2 > 60) {
-      setT2Error('Must be a whole number between 2 and 60');
+    if (!Number.isInteger(v2) || v2 < 2) {
+      setT2Error('Must be a whole number of at least 2');
       valid = false;
     } else {
       setT2Error('');
     }
 
     if (valid && v1 >= v2) {
-      setT1Error('Threshold 1 must be less than Threshold 2');
+      setT1Error('Must be less than Threshold 2');
       valid = false;
     }
 
@@ -183,6 +183,8 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
               <p className="text-sm text-muted-foreground">Loading...</p>
             ) : (
               <form onSubmit={handleSaveCohortConfig} className="space-y-4">
+                <p className="text-xs text-muted-foreground">Threshold 1 separates "new" from "growing" contributors. Threshold 2 separates "growing" from "senior". Threshold 1 must be less than Threshold 2.</p>
+
                 {/* Threshold 1 row */}
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -190,7 +192,6 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
                     <Input
                       type="number"
                       min={1}
-                      max={11}
                       value={t1Months}
                       onChange={e => setT1Months(e.target.value)}
                     />
@@ -215,7 +216,6 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
                     <Input
                       type="number"
                       min={2}
-                      max={60}
                       value={t2Months}
                       onChange={e => setT2Months(e.target.value)}
                     />
