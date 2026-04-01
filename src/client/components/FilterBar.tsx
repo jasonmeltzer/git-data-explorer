@@ -6,16 +6,9 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@shared/components/ui/popover';
-import {
-  Command,
-  CommandInput,
-  CommandList,
-  CommandEmpty,
-  CommandGroup,
-  CommandItem,
-} from '@shared/components/ui/command';
 import { Badge } from '@shared/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs';
+import { cn } from '@shared/lib/utils';
 import type { DatePreset } from '../hooks/useDashboardFilters';
 import type { TrackedRepo } from '@shared/types.js';
 import { CalendarIcon, CheckIcon, ChevronDownIcon } from 'lucide-react';
@@ -68,11 +61,30 @@ export default function FilterBar({
     }
   }
 
+  // repoIds=[] means "all repos" to the API. In the UI we show all as checked.
+  const allSelected = repoIds.length === 0;
+  const effectiveSelected = allSelected ? allRepos.map((r) => r.id) : repoIds;
+
   function toggleRepo(id: number) {
-    if (repoIds.includes(id)) {
-      setRepoIds(repoIds.filter((r) => r !== id));
+    if (allSelected) {
+      // First uncheck: switch from "all" to "all except this one"
+      setRepoIds(allRepos.map((r) => r.id).filter((rid) => rid !== id));
+    } else if (effectiveSelected.includes(id)) {
+      const next = repoIds.filter((r) => r !== id);
+      // If nothing left, go back to "all"
+      if (next.length === 0) {
+        setRepoIds([]);
+      } else {
+        setRepoIds(next);
+      }
     } else {
-      setRepoIds([...repoIds, id]);
+      const next = [...repoIds, id];
+      // If all are now selected, go back to "all" (empty array)
+      if (next.length === allRepos.length) {
+        setRepoIds([]);
+      } else {
+        setRepoIds(next);
+      }
     }
   }
 
@@ -80,11 +92,6 @@ export default function FilterBar({
     preset === 'custom' && customRange
       ? { from: customRange.start, to: customRange.end }
       : undefined;
-
-  const repoLabel =
-    repoIds.length === 0
-      ? 'All repos'
-      : `${repoIds.length} repos selected`;
 
   return (
     <div className="h-12 border-b flex items-center gap-3 px-6">
@@ -136,61 +143,67 @@ export default function FilterBar({
         </PopoverContent>
       </Popover>
 
-      {/* Repo multi-select */}
-      <Popover open={repoPickerOpen} onOpenChange={setRepoPickerOpen}>
-        <PopoverTrigger
-          className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
-          aria-label="Select repositories"
-        >
-          {repoIds.length > 0 ? (
-            <>
-              <Badge variant="secondary" className="h-4 text-[10px]">
-                {repoIds.length}
-              </Badge>
-              repos selected
-            </>
-          ) : (
-            'All repos'
-          )}
-          <ChevronDownIcon className="h-3 w-3 opacity-60" />
-        </PopoverTrigger>
-        <PopoverContent className="w-64 p-0" align="start">
-          <Command>
-            <CommandInput placeholder="Search repos..." />
-            <CommandList>
-              <CommandEmpty>No repos found.</CommandEmpty>
-              <CommandGroup>
-                {allRepos.map((repo) => {
-                  const isSelected = repoIds.includes(repo.id);
-                  return (
-                    <CommandItem
-                      key={repo.id}
-                      onSelect={() => toggleRepo(repo.id)}
-                      data-checked={isSelected}
-                    >
-                      <span className="flex-1 truncate">{repo.fullName}</span>
-                      {isSelected && <CheckIcon className="h-4 w-4 ml-2 shrink-0" />}
-                    </CommandItem>
-                  );
-                })}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-          {repoIds.length > 0 && (
-            <div className="border-t p-2">
-              <button
-                onClick={() => setRepoIds([])}
-                className="text-xs text-muted-foreground hover:text-foreground w-full text-left"
-              >
-                Clear selection (show all repos)
-              </button>
+      {/* Data filters — pushed to the right */}
+      <div className="flex items-center gap-3 ml-auto">
+        {/* Repo multi-select */}
+        <Popover open={repoPickerOpen} onOpenChange={setRepoPickerOpen}>
+          <PopoverTrigger
+            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-muted transition-colors"
+            aria-label="Select repositories"
+          >
+            {allSelected ? (
+              'All repos'
+            ) : (
+              <>
+                <Badge variant="secondary" className="h-4 text-[10px]">
+                  {repoIds.length}
+                </Badge>
+                of {allRepos.length} repo{allRepos.length === 1 ? '' : 's'}
+              </>
+            )}
+            <ChevronDownIcon className="h-3 w-3 opacity-60" />
+          </PopoverTrigger>
+          <PopoverContent className="w-72 bg-popover" align="end">
+            <div className="space-y-1">
+              {allRepos.map((repo) => {
+                const isChecked = effectiveSelected.includes(repo.id);
+                return (
+                  <button
+                    key={repo.id}
+                    onClick={() => toggleRepo(repo.id)}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-xs transition-colors',
+                      isChecked
+                        ? 'bg-primary/10 text-foreground'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                    )}
+                  >
+                    <div className={cn(
+                      'h-3.5 w-3.5 rounded border flex items-center justify-center shrink-0',
+                      isChecked ? 'bg-primary border-primary' : 'border-border'
+                    )}>
+                      {isChecked && <CheckIcon className="h-2.5 w-2.5 text-primary-foreground" />}
+                    </div>
+                    <span className="truncate">{repo.fullName}</span>
+                  </button>
+                );
+              })}
             </div>
-          )}
-        </PopoverContent>
-      </Popover>
+            {!allSelected && (
+              <div className="border-t mt-2 pt-2">
+                <button
+                  onClick={() => setRepoIds([])}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  Select all repos
+                </button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
 
-      {/* Tenure mode toggle */}
-      <div className="flex items-center gap-2 ml-auto">
+        {/* Tenure mode toggle */}
+        <div className="flex items-center gap-2">
         <span className="text-xs text-muted-foreground whitespace-nowrap">Cohort mode</span>
         <Tabs
           value={tenureMode}
@@ -205,6 +218,7 @@ export default function FilterBar({
             </TabsTrigger>
           </TabsList>
         </Tabs>
+        </div>
       </div>
     </div>
   );
