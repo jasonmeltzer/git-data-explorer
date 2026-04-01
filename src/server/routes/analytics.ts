@@ -5,6 +5,7 @@ import { getCohortCommitMetrics, getCohortPrMetrics } from '../services/analytic
 import { getRampUpCurves } from '../services/analytics-rampup.js';
 import { getRollingComparison } from '../services/analytics-rolling.js';
 import { getContributorStats } from '../services/analytics-contributors.js';
+import { getCohortConfig, setCohortConfig } from '../services/cohort-config-service.js';
 
 const analytics = new Hono();
 
@@ -47,6 +48,47 @@ analytics.post('/api/analytics/marker', async (c) => {
   } catch (err) {
     console.error('POST /api/analytics/marker error:', err);
     return c.json({ error: 'Failed to set AI marker date' }, 500);
+  }
+});
+
+// ─── Cohort Config endpoints ──────────────────────────────────────────────────
+
+// GET /api/analytics/cohort-config — returns current cohort config
+analytics.get('/api/analytics/cohort-config', (c) => {
+  try {
+    const config = getCohortConfig();
+    return c.json(config);
+  } catch (err) {
+    console.error('GET /api/analytics/cohort-config error:', err);
+    return c.json({ error: 'Failed to get cohort config' }, 500);
+  }
+});
+
+const cohortThresholdSchema = z.object({
+  maxMonths: z.number().nullable(),
+  key: z.string().min(1),
+  label: z.string().min(1),
+  color: z.string().min(1),
+});
+
+const cohortConfigBodySchema = z.object({
+  thresholds: z.tuple([cohortThresholdSchema, cohortThresholdSchema, cohortThresholdSchema]),
+});
+
+// POST /api/analytics/cohort-config — update cohort config
+analytics.post('/api/analytics/cohort-config', async (c) => {
+  try {
+    const body = await c.req.json().catch(() => null);
+    const parsed = cohortConfigBodySchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid request body', details: parsed.error.flatten() }, 400);
+    }
+    setCohortConfig(parsed.data as Parameters<typeof setCohortConfig>[0]);
+    return c.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to set cohort config';
+    console.error('POST /api/analytics/cohort-config error:', err);
+    return c.json({ error: message }, 500);
   }
 });
 
