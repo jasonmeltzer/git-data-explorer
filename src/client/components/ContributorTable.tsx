@@ -12,7 +12,7 @@ import { ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-
 
 import { useContributors } from '../hooks/useContributors.js';
 import type { ContributorStats, CohortLabel } from '@shared/types.js';
-import { cohortColorMap } from '@shared/cohort-config.js';
+import { cohortColorMap, COHORT_LABELS } from '@shared/cohort-config.js';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@shared/components/ui/collapsible.js';
 import {
   Table,
@@ -48,7 +48,7 @@ const columns: ColumnDef<ContributorStats>[] = [
         <Badge
           style={{ backgroundColor: cohortColorMap[cohort], color: '#fff', border: 'none' }}
         >
-          {cohort}
+          {COHORT_LABELS[cohort] ?? cohort}
         </Badge>
       );
     },

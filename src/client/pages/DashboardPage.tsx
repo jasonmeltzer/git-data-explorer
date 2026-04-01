@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
 import { useAiMarker } from '../hooks/useAiMarker.js';
+import { useCohortConfig } from '../hooks/useCohortConfig.js';
 import { useCohortPrs } from '../hooks/useCohortPrs.js';
 import { useCohortCommits } from '../hooks/useCohortCommits.js';
 import { useRampUp } from '../hooks/useRampUp.js';
@@ -58,6 +59,12 @@ export default function DashboardPage() {
   // Fetch AI marker date
   const { data: markerData } = useAiMarker();
   const markerDate = markerData?.date ?? null;
+
+  // Fetch cohort config for dynamic chart labels
+  const { config: cohortConfig } = useCohortConfig();
+  const dynamicChartConfig = cohortConfig
+    ? Object.fromEntries(cohortConfig.thresholds.map(t => [t.key, { label: t.label, color: t.color }]))
+    : undefined;
 
   // Fetch cohort data
   const { data: prData = [], isFetching: prFetching, isError: prError } = useCohortPrs({
@@ -247,6 +254,7 @@ export default function DashboardPage() {
                   title="PR Count by Cohort"
                   aiMarkerDate={markerDate}
                   isFetching={prFetching}
+                  chartConfig={dynamicChartConfig}
                 />
               </div>
             </div>
@@ -288,6 +296,7 @@ export default function DashboardPage() {
                   title="Commit Count by Cohort"
                   aiMarkerDate={markerDate}
                   isFetching={commitFetching}
+                  chartConfig={dynamicChartConfig}
                 />
               </div>
             </div>
