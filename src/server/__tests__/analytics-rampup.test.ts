@@ -487,6 +487,50 @@ describe('getRampUpCurves()', () => {
     });
   });
 
+  describe('established developer exclusion', () => {
+    it('excludes authors whose firstCommitAt predates the data window by years', () => {
+      const repoId = insertRepo('org/repo-established');
+      markRepoComplete(repoId);
+
+      // Established dev: first commit 2 years ago, but has recent commits in the repo
+      const ancientFirstCommit = new Date('2023-01-15T00:00:00Z');
+      const recentCommitDate = new Date('2025-03-01T00:00:00Z');
+      const authorId = insertAuthor('veteran-dev', ancientFirstCommit);
+
+      // These commits are more than 12 weeks after firstCommitAt, so they should NOT appear in ramp-up
+      insertCommit('c-est1', repoId, authorId, recentCommitDate, 50, 20, 5);
+      insertCommit('c-est2', repoId, authorId, daysAfter(recentCommitDate, 7), 40, 15, 4);
+
+      const result = getRampUpCurves({ tenureMode: 'global', joinPeriodGranularity: 'quarter' });
+      // Veteran's commits are 2+ years after firstCommitAt — well beyond 12-week window
+      expect(result).toHaveLength(0);
+    });
+
+    it('includes only commits from a new dev within their first 12 weeks alongside an established dev', () => {
+      const repoId = insertRepo('org/repo-mixed');
+      markRepoComplete(repoId);
+
+      // Established dev: first commit 1 year ago
+      const veteranJoin = new Date('2024-01-01T00:00:00Z');
+      const veteranId = insertAuthor('established-dev', veteranJoin);
+      insertCommit('c-mix1', repoId, veteranId, new Date('2025-03-15T00:00:00Z'), 100, 50, 10);
+
+      // New dev: just started
+      const newJoin = new Date('2025-03-01T00:00:00Z');
+      const newId = insertAuthor('brand-new-dev', newJoin);
+      insertCommit('c-mix2', repoId, newId, newJoin, 10, 5, 1);
+      insertCommit('c-mix3', repoId, newId, daysAfter(newJoin, 14), 20, 10, 2); // week 2
+
+      const result = getRampUpCurves({ tenureMode: 'global', joinPeriodGranularity: 'quarter' });
+
+      // Only the new dev's commits should be in the ramp-up data
+      expect(result.length).toBeGreaterThan(0);
+      expect(result.every(b => b.contributorCount === 1)).toBe(true);
+      // The new dev joined in Q1 2025
+      expect(result.every(b => b.joinPeriod === '2025-Q1')).toBe(true);
+    });
+  });
+
   describe('edge cases', () => {
     it('returns empty array when no qualifying authors', () => {
       const repoId = insertRepo('org/repo-n');

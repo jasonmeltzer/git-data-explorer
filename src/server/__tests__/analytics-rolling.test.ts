@@ -425,6 +425,65 @@ describe('getRollingComparison - month granularity', () => {
     // Only repo2 (complete) commit should be counted
     expect(result.current.commitCount).toBe(1);
   });
+
+  it('uses latest commit date as reference when referenceDate not provided', () => {
+    const repoId = insertRepo(1, 'org/repo1');
+    markRepoComplete(repoId);
+    const authorId = insertAuthor(1, 'dev1');
+
+    // Commits in Feb and Mar 2026 — nothing in April
+    insertCommit(repoId, authorId, new Date('2026-02-15'), 30, 10, 2);
+    insertCommit(repoId, authorId, new Date('2026-03-10'), 40, 20, 3);
+    insertCommit(repoId, authorId, new Date('2026-03-20'), 50, 25, 4);
+
+    // No referenceDate — should use latest commit (Mar 20) as reference
+    const result = getRollingComparison({ granularity: 'month' });
+
+    // Current period should be Mar 2026 (where the latest commit is), not April
+    expect(result.current.label).toBe('Mar 2026');
+    expect(result.prior.label).toBe('Feb 2026');
+    expect(result.current.commitCount).toBe(2); // 2 commits in March
+    expect(result.prior.commitCount).toBe(1);   // 1 commit in February
+  });
+
+  it('does not show -100% when UTC date is in a new month but data has not caught up', () => {
+    const repoId = insertRepo(1, 'org/repo1');
+    markRepoComplete(repoId);
+    const authorId = insertAuthor(1, 'dev1');
+
+    // Data only through end of March
+    insertCommit(repoId, authorId, new Date('2026-02-10'), 30, 10, 2);
+    insertCommit(repoId, authorId, new Date('2026-03-25'), 40, 20, 3);
+
+    // No referenceDate — falls back to latest commit date
+    const result = getRollingComparison({ granularity: 'month' });
+
+    // Should compare Mar vs Feb, not empty-April vs Mar
+    expect(result.current.commitCount).toBeGreaterThan(0);
+    expect(result.changes.commitFrequency).not.toBe(-100);
+  });
+
+  it('quarter boundary: uses latest commit for reference, not new Date()', () => {
+    const repoId = insertRepo(1, 'org/repo1');
+    markRepoComplete(repoId);
+    const authorId = insertAuthor(1, 'dev1');
+
+    // Data through end of Q1 2026
+    for (let i = 0; i < 5; i++) {
+      insertCommit(repoId, authorId, new Date('2026-03-15'), 30, 10, 2);
+    }
+    for (let i = 0; i < 3; i++) {
+      insertCommit(repoId, authorId, new Date('2025-12-15'), 20, 10, 2);
+    }
+
+    const result = getRollingComparison({ granularity: 'quarter' });
+
+    // Should compare Q1 2026 vs Q4 2025 (latest data is in Q1)
+    expect(result.current.label).toBe('Q1 2026');
+    expect(result.prior.label).toBe('Q4 2025');
+    expect(result.current.commitCount).toBe(5);
+    expect(result.prior.commitCount).toBe(3);
+  });
 });
 
 describe('getRollingComparison - quarter granularity', () => {
