@@ -109,69 +109,52 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
   return (
     <section>
       <SectionHeader title="Before/After AI Adoption" scope="filtered" />
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Before AI Adoption</CardTitle>
-            <p className="text-xs text-muted-foreground">Period before {aiMarkerDate}</p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-0">
-              <div className="flex justify-between text-xs text-muted-foreground pb-2 border-b">
-                <span>Metric</span>
-                <div className="flex gap-3">
-                  <span className="w-16 text-right">Before</span>
-                  <span className="w-16 text-right">After</span>
-                  <span className="w-16 text-right">Change</span>
-                </div>
+      <Card className="mt-4">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Impact of AI Adoption</CardTitle>
+          <p className="text-xs text-muted-foreground">AI marker date: {aiMarkerDate}</p>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-0">
+            <div className="flex justify-between text-xs text-muted-foreground pb-2 border-b">
+              <span>Metric</span>
+              <div className="flex gap-3">
+                <span className="w-16 text-right">Before</span>
+                <span className="w-16 text-right">After</span>
+                <span className="w-16 text-right">Change</span>
               </div>
-              <MetricRow
-                label="Avg Commit Size"
-                beforeValue={formatNum(data.before.avgCommitSize)}
-                afterValue={formatNum(data.after.avgCommitSize)}
-                deltaStr={commitSizeDelta.str}
-                deltaPositive={commitSizeDelta.positive}
-              />
-              <MetricRow
-                label="PR Frequency"
-                beforeValue={formatNum(data.before.prFrequency)}
-                afterValue={formatNum(data.after.prFrequency)}
-                deltaStr={prFreqDelta.str}
-                deltaPositive={prFreqDelta.positive}
-              />
-              <MetricRow
-                label="Ramp-Up Speed"
-                beforeValue={formatNum(data.before.rampUpSpeed)}
-                afterValue={formatNum(data.after.rampUpSpeed)}
-                deltaStr={rampUpDelta.str}
-                deltaPositive={rampUpDelta.positive}
-              />
-              <MetricRow
-                label="Active Contributors"
-                beforeValue={formatNum(data.before.activeContributors)}
-                afterValue={formatNum(data.after.activeContributors)}
-                deltaStr={contributorsDelta.str}
-                deltaPositive={contributorsDelta.positive}
-              />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">After AI Adoption</CardTitle>
-            <p className="text-xs text-muted-foreground">Period after {aiMarkerDate}</p>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              The comparison table on the left shows both before and after values side by side with the percentage change for each metric.
-            </p>
-            <p className="mt-3 text-sm text-muted-foreground">
-              AI marker date: <span className="font-medium text-foreground">{aiMarkerDate}</span>
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+            <MetricRow
+              label="Avg Commit Size"
+              beforeValue={formatNum(data.before.avgCommitSize)}
+              afterValue={formatNum(data.after.avgCommitSize)}
+              deltaStr={commitSizeDelta.str}
+              deltaPositive={commitSizeDelta.positive}
+            />
+            <MetricRow
+              label="PR Frequency"
+              beforeValue={formatNum(data.before.prFrequency)}
+              afterValue={formatNum(data.after.prFrequency)}
+              deltaStr={prFreqDelta.str}
+              deltaPositive={prFreqDelta.positive}
+            />
+            <MetricRow
+              label="Ramp-Up Speed"
+              beforeValue={formatNum(data.before.rampUpSpeed)}
+              afterValue={formatNum(data.after.rampUpSpeed)}
+              deltaStr={rampUpDelta.str}
+              deltaPositive={rampUpDelta.positive}
+            />
+            <MetricRow
+              label="Active Contributors"
+              beforeValue={formatNum(data.before.activeContributors)}
+              afterValue={formatNum(data.after.activeContributors)}
+              deltaStr={contributorsDelta.str}
+              deltaPositive={contributorsDelta.positive}
+            />
+          </div>
+        </CardContent>
+      </Card>
       <div className="mt-4">
         <HelpPanel>
           The AI marker date is the date your team began using an AI coding tool (e.g. GitHub Copilot, Cursor, Claude). All metrics in this section are split at that date to show how contribution patterns changed. You can set or change the AI marker date on the Settings page. The comparison is most meaningful when you have at least 3 months of data on each side of the marker.
