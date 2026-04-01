@@ -162,6 +162,7 @@ interface ContributorPersona {
   type: 'senior' | 'regular' | 'new-pre-ai' | 'new-post-ai' | 'part-time' | 'bot';
   repos: number[];         // indices into REPOS array
   joinWeekOffset: number;  // weeks from DATA_START when they first commit
+  leaveWeekOffset?: number; // weeks from DATA_START when they stop committing (undefined = never)
   commitsPerWeek: number;
   sizeMu: number;
   sizeSigma: number;
@@ -176,23 +177,23 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'sjohansson', name: 'Sofia Johansson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
   { login: 'lwilson', name: 'Liam Wilson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
 
-  // --- 10 Regulars ---
+  // --- 10 Regulars (some leave mid-way for realistic churn) ---
   { login: 'tgarcia', name: 'Tomás García', type: 'regular', repos: [0, 1], joinWeekOffset: 0, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'npatel', name: 'Neha Patel', type: 'regular', repos: [0, 1], joinWeekOffset: 2, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'eoconnor', name: 'Ethan O\'Connor', type: 'regular', repos: [0, 1], joinWeekOffset: 1, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  { login: 'eoconnor', name: 'Ethan O\'Connor', type: 'regular', repos: [0, 1], joinWeekOffset: 1, leaveWeekOffset: 30, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'ykim', name: 'Yuna Kim', type: 'regular', repos: [0, 1], joinWeekOffset: 3, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'btremblay', name: 'Baptiste Tremblay', type: 'regular', repos: [0, 1], joinWeekOffset: 2, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  { login: 'btremblay', name: 'Baptiste Tremblay', type: 'regular', repos: [0, 1], joinWeekOffset: 2, leaveWeekOffset: 36, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'fmartinez', name: 'Fernanda Martínez', type: 'regular', repos: [0], joinWeekOffset: 0, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'rlee', name: 'Ryan Lee', type: 'regular', repos: [0], joinWeekOffset: 4, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  { login: 'rlee', name: 'Ryan Lee', type: 'regular', repos: [0], joinWeekOffset: 4, leaveWeekOffset: 40, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'kmoser', name: 'Katrin Moser', type: 'regular', repos: [0], joinWeekOffset: 1, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'dpark', name: 'Daniel Park', type: 'regular', repos: [1, 2], joinWeekOffset: 0, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'amüller', name: 'Anna Müller', type: 'regular', repos: [1, 2], joinWeekOffset: 3, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
 
-  // --- 5 Pre-AI new devs (join months 2-5 = weeks 4-20) ---
+  // --- 5 Pre-AI new devs (join months 2-5 = weeks 4-20, some churn out) ---
   { login: 'rookie-alice', name: 'Alice Thornton', type: 'new-pre-ai', repos: [0], joinWeekOffset: 4, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'rookie-bob', name: 'Bob Nakamura', type: 'new-pre-ai', repos: [0], joinWeekOffset: 8, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  { login: 'rookie-bob', name: 'Bob Nakamura', type: 'new-pre-ai', repos: [0], joinWeekOffset: 8, leaveWeekOffset: 28, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'rookie-charlie', name: 'Charlie Osei', type: 'new-pre-ai', repos: [1], joinWeekOffset: 12, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'rookie-diana', name: 'Diana Ferreira', type: 'new-pre-ai', repos: [0], joinWeekOffset: 16, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  { login: 'rookie-diana', name: 'Diana Ferreira', type: 'new-pre-ai', repos: [0], joinWeekOffset: 16, leaveWeekOffset: 32, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'rookie-eli', name: 'Eli Rosenberg', type: 'new-pre-ai', repos: [2], joinWeekOffset: 20, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
 
   // --- 5 Post-AI new devs (join months 8-11 = weeks 30-44) ---
@@ -315,7 +316,10 @@ function generateCommitsForPersonaRepo(
   if (joinMs >= DATA_END_MS) return records;
 
   const activeStart = new Date(Math.max(joinMs, DATA_START_MS));
-  const activeEnd = DATA_END;
+  const leaveMs = persona.leaveWeekOffset != null
+    ? DATA_START_MS + persona.leaveWeekOffset * MS_PER_WEEK
+    : DATA_END_MS;
+  const activeEndMs = Math.min(leaveMs, DATA_END_MS);
 
   // Adjust commit rate by repo share weighting
   const personaRepoShares = persona.repos.map(r => REPOS[r].commitShare);
@@ -327,8 +331,8 @@ function generateCommitsForPersonaRepo(
   // Iterate week by week
   let weekStart = activeStart.getTime();
 
-  while (weekStart < DATA_END_MS) {
-    const weekEnd = Math.min(weekStart + MS_PER_WEEK, DATA_END_MS);
+  while (weekStart < activeEndMs) {
+    const weekEnd = Math.min(weekStart + MS_PER_WEEK, activeEndMs);
     const weekStartDate = new Date(weekStart);
     const weekEndDate = new Date(weekEnd);
 
@@ -399,9 +403,9 @@ function generateCommitsForPersonaRepo(
       const commitsThisWeek = Math.round(targetCommitsThisWeek * (0.5 + Math.random()));
 
       for (let c = 0; c < commitsThisWeek; c++) {
-        if (weekStart >= DATA_END_MS) break;
+        if (weekStart >= activeEndMs) break;
         const commitDate = weightedRandomDate(weekStartDate, weekEndDate);
-        if (commitDate.getTime() >= DATA_END_MS) continue;
+        if (commitDate.getTime() >= activeEndMs) continue;
 
         const linesAdded = logNormal(currentMu, persona.sizeSigma);
         const linesDeleted = Math.max(0, Math.round(linesAdded * (0.1 + Math.random() * 0.5)));
@@ -474,11 +478,14 @@ function generatePRs(commitsByAuthorRepo: Map<string, CommitRecord[]>): PRRecord
 
       if (batch.length === 0) continue;
 
-      const createdAt = batch[0].committedAt;
+      // PRs are typically opened after commits accumulate — use last commit date
       const lastCommitDate = batch[batch.length - 1].committedAt;
+      const createdAt = lastCommitDate;
 
-      // PR mergedAt = lastCommit + 1-5 days
-      const closeDaysMs = (1 + Math.floor(Math.random() * 5)) * MS_PER_DAY;
+      // PR mergedAt = lastCommit + realistic review turnaround (log-normal distribution)
+      // Mostly 4-48 hours with a long tail up to ~7 days (Pitfall D-17)
+      const turnaroundHours = Math.max(1, Math.round(Math.exp(2.5 + 1.2 * (Math.random() * 2 - 1))));
+      const closeDaysMs = turnaroundHours * 60 * 60 * 1000;
       const closeDate = new Date(lastCommitDate.getTime() + closeDaysMs);
 
       // State distribution: 75% merged, 15% closed, 10% open

@@ -17,6 +17,8 @@ import {
 import { Skeleton } from '@shared/components/ui/skeleton';
 import { cohortRowsToChartData } from '../../lib/chartTransforms';
 import type { CohortMetricsRow } from '@shared/types.js';
+import { cohortChartConfig as defaultChartConfig } from '@shared/cohort-config.js';
+import type { ChartConfig } from '@shared/components/ui/chart';
 
 type Metric = 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged' | 'totalCount';
 
@@ -26,13 +28,8 @@ interface CohortAreaChartProps {
   title: string;
   aiMarkerDate: string | null;
   isFetching: boolean;
+  chartConfig?: ChartConfig;
 }
-
-const chartConfig = {
-  senior: { label: 'Senior (1yr+)', color: 'var(--chart-cohort-senior)' },
-  mid: { label: 'Growing (3-12mo)', color: 'var(--chart-cohort-mid)' },
-  new: { label: 'New (0-3mo)', color: 'var(--chart-cohort-new)' },
-};
 
 export default function CohortAreaChart({
   data,
@@ -40,7 +37,9 @@ export default function CohortAreaChart({
   title,
   aiMarkerDate,
   isFetching,
+  chartConfig: chartConfigProp,
 }: CohortAreaChartProps) {
+  const chartConfig = chartConfigProp ?? defaultChartConfig;
   const chartData = cohortRowsToChartData(data, metric);
 
   if (isFetching && data.length === 0) {

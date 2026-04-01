@@ -111,11 +111,11 @@
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
+    --chart-1: oklch(0.87 0.12 220);
+    --chart-2: oklch(0.72 0.15 180);
+    --chart-3: oklch(0.65 0.12 60);
+    --chart-4: oklch(0.60 0.15 330);
+    --chart-5: oklch(0.55 0.12 140);
     --chart-cohort-new:    oklch(0.72 0.18 258);
     --chart-cohort-mid:    oklch(0.82 0.15 145);
     --chart-cohort-senior: oklch(0.79 0.16 50);

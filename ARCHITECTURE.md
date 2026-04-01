@@ -55,8 +55,8 @@ Git Data Explorer is a local-first full-stack TypeScript application. The fronte
 Single-page React app using hash-based routing (`#/dashboard`, `#/landing`, `#/repos`, `#/collection`, `#/settings`). No React Router — a simple `useState` switch in `App.tsx` handles navigation. Default route (`#/`) goes to Dashboard. Full dark mode support via `useTheme` hook with localStorage persistence.
 
 - **Pages:** Each page is a self-contained component that fetches its own data via TanStack Query hooks
-- **Dashboard:** Primary view with FilterBar, 4 chart sections (PR trends, commit trends, ramp-up, rolling comparison), narrative cards, and collapsible contributor table
-- **Hooks:** `useDashboardFilters` provides shared filter state (date range, repo selection, tenure mode) consumed by all chart sections. 6 analytics query hooks (`useCohortPrs`, `useCohortCommits`, `useRampUp`, `useRolling`, `useAiMarker`, `useContributors`) wrap TanStack Query with typed API calls
+- **Dashboard:** Primary view with FilterBar, 8 chart sections (Executive Summary, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table), stat callout boxes, help panels, filter scope badges, and collapsible contributor table
+- **Hooks:** `useDashboardFilters` provides shared filter state (date range, repo selection, tenure mode) consumed by all chart sections. 11 analytics query hooks (`useCohortPrs`, `useCohortCommits`, `useRampUp`, `useRolling`, `useAiMarker`, `useContributors`, `useExecutiveSummary`, `useBeforeAfter`, `usePrTurnaround`, `useBotRatio`, `useCohortConfig`) wrap TanStack Query with typed API calls
 - **Charts:** Built on Recharts via shadcn chart primitives. `CohortAreaChart` renders stacked areas with 3 cohort layers. `RampUpLineChart` renders per-join-period lines. `RollingCards` shows metric cards with change percentages
 - **Data transforms:** `chartTransforms.ts` converts `CohortMetricsRow[]` to Recharts-compatible `ChartPoint[]` with zero-filled missing cohorts. `narratives.ts` generates direction+magnitude trend text
 - **TanStack Query:** Manages all server state. Query keys like `['repos', 'tracked']` are shared across pages so navigation triggers instant cache hits rather than re-fetches
@@ -72,7 +72,7 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 - `settings.ts` — `GET/POST /api/settings/token`, `GET/PUT /api/settings` — PAT and app settings management
 - `repositories.ts` — 7 endpoints for repo CRUD, GitHub browsing, stop/delete
 - `collection.ts` — `POST /api/collection/start`, `POST /api/collection/stop`, `GET /api/collection/status`, `GET /api/collection/progress` (SSE) — data collection control and progress streaming
-- `analytics.ts` — 7 analytics endpoints: `GET/POST /api/analytics/marker`, `GET /api/analytics/cohorts/commits`, `GET /api/analytics/cohorts/prs`, `GET /api/analytics/rampup`, `GET /api/analytics/rolling`, `GET /api/analytics/contributors`
+- `analytics.ts` — 12 analytics endpoints: `GET/POST /api/analytics/marker`, `GET /api/analytics/cohorts/commits`, `GET /api/analytics/cohorts/prs`, `GET /api/analytics/rampup`, `GET /api/analytics/rolling`, `GET /api/analytics/contributors`, `GET /api/analytics/pr-turnaround`, `GET /api/analytics/bot-ratio`, `GET /api/analytics/summary`, `GET /api/analytics/before-after`, `GET/POST /api/analytics/cohort-config`
 
 **Services** (`src/server/services/`):
 - `analytics-utils.ts` — Shared analytics helpers: canonical `getCompleteRepoIds()` with integer safety guard (SEC-01), used by all analytics services
@@ -87,11 +87,18 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 - `analytics-cohorts.ts` — Cohort assignment engine: dynamic tenure bucketing (0-3mo, 3-12mo, 1yr+) with CASE WHEN epoch arithmetic, global and per-repo tenure modes, AI marker before/after split, bot exclusion
 - `analytics-rampup.ts` — New developer ramp-up curves: weekly contribution trajectories (weeks 0-11) grouped by join period (quarter/half/year) for cross-cohort comparison
 - `analytics-rolling.ts` — Rolling window comparisons: month-over-month and quarter-over-quarter with partial-period normalization to daily averages
+- `analytics-pr-turnaround.ts` — Monthly median hours to merge for PRs with trend direction computation
+- `analytics-bot-ratio.ts` — Monthly bot vs human commit ratio with trend direction computation
+- `analytics-summary.ts` — Executive summary KPI tiles with before/after delta badges
+- `analytics-before-after.ts` — Side-by-side before/after AI marker comparison for PR and commit metrics
+- `cohort-config-service.ts` — Cohort boundary config get/set from `app_config`, uses shared `CohortConfig` types
+- `first-commit-fetcher.ts` — GitHub API 2-call strategy to find an author's true earliest commit date across all repos (Link header page detection + oldest-page fetch)
 
 ### Shared (`src/shared/`)
 
 Code imported by both frontend and backend:
 - `types.ts` — TypeScript interfaces for API request/response shapes (GitHubRepo, TrackedRepo, CollectionRepoStatus, CohortMetricsRow, CohortMetricsParams, RampUpBucket, RampUpParams, RollingComparisonResult, etc.)
+- `cohort-config.ts` — Single source of truth for cohort boundary definitions: `CohortThreshold`, `CohortConfig`, `DEFAULT_COHORT_CONFIG` (3mo/12mo thresholds), `getThresholdSeconds()` for SQL CASE WHEN generation. Free of server-only or client-only imports.
 - `components/ui/` — shadcn/ui primitives (used only by frontend, but placed in shared for the `@shared/*` path alias)
 - `lib/utils.ts` — `cn()` helper for Tailwind class merging
 
@@ -181,6 +188,25 @@ Services:
                     │  Splits queries into    │
                     │  before/after periods   │
                     └─────────────────────────┘
+
+Phase 07.1 additions:
+┌──────────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│ analytics-pr-turnaround  │  │ analytics-bot-ratio  │  │ analytics-summary    │
+│                          │  │                      │  │                      │
+│ Monthly median hours     │  │ Monthly bot % of     │  │ Executive KPI tiles: │
+│ to merge (AVG approx)    │  │ total commits (CASE  │  │ total devs, avg PR   │
+│ Trend: improving/        │  │ WHEN avoids WHERE    │  │ size, commit count,  │
+│ worsening/stable         │  │ filter on is_bot)    │  │ before/after deltas  │
+└──────────────────────────┘  └──────────────────────┘  └──────────────────────┘
+
+┌──────────────────────────┐  ┌──────────────────────┐  ┌──────────────────────┐
+│ analytics-before-after   │  │ cohort-config-service│  │ first-commit-fetcher │
+│                          │  │                      │  │                      │
+│ Side-by-side PR+commit   │  │ GET/POST cohort      │  │ 2-API-call strategy: │
+│ metric comparison        │  │ thresholds+labels    │  │ Link header page     │
+│ keyed to AI marker date  │  │ from app_config      │  │ count, then fetch    │
+│                          │  │ Shared CohortConfig  │  │ oldest page          │
+└──────────────────────────┘  └──────────────────────┘  └──────────────────────┘
 ```
 
 **Key design decisions:**
@@ -207,7 +233,7 @@ A standalone TypeScript script (`npm run seed`) that generates a synthetic `data
 ## What's Not Built Yet
 
 - **Data Export** (Phase 8) — CSV/JSON export with optional contributor anonymization
-- **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
+- **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet (planned for a future phase)
 
 ## File Map
 
@@ -221,6 +247,15 @@ src/
 │   │   ├── TokenForm.tsx     # PAT entry form
 │   │   ├── FilterBar.tsx     # Dashboard sticky filter bar (date presets, repo select, tenure mode)
 │   │   ├── ContributorTable.tsx  # Collapsible sortable contributor table (TanStack Table)
+│   │   ├── StatCalloutBox.tsx    # Single KPI callout box with delta badge (min 44px touch height)
+│   │   ├── StatCalloutRow.tsx    # Horizontal row of 2–4 StatCalloutBox components
+│   │   ├── HelpPanel.tsx         # Expandable "What does this mean?" panel (chevron toggle)
+│   │   ├── FilterScopeBadge.tsx  # "Filtered" / "All Data" badge with hover tooltip
+│   │   ├── SectionHeader.tsx     # Section title + FilterScopeBadge row
+│   │   ├── ExecutiveSummary.tsx  # Split layout: filtered metrics + AI Impact all-data metrics
+│   │   ├── BeforeAfterComparison.tsx # Before/after/delta comparison table with units
+│   │   ├── PrTurnaroundChart.tsx # Monthly median hours to merge line chart
+│   │   ├── BotRatioChart.tsx     # Monthly bot vs human ratio line chart
 │   │   └── charts/
 │   │       ├── CohortAreaChart.tsx   # Stacked area chart with 3 cohort layers + AI marker
 │   │       ├── RampUpLineChart.tsx   # Line chart per join-period cohort
@@ -235,6 +270,11 @@ src/
 │   │   ├── useRolling.ts            # TanStack Query hook for rolling comparisons
 │   │   ├── useAiMarker.ts           # TanStack Query hook for AI marker date
 │   │   ├── useContributors.ts       # TanStack Query hook for contributor stats
+│   │   ├── useExecutiveSummary.ts   # TanStack Query hook for executive summary KPIs
+│   │   ├── useBeforeAfter.ts        # TanStack Query hook for before/after comparison
+│   │   ├── usePrTurnaround.ts       # TanStack Query hook for PR turnaround monthly data
+│   │   ├── useBotRatio.ts           # TanStack Query hook for bot ratio monthly data
+│   │   ├── useCohortConfig.ts       # TanStack Query hook for reading/writing cohort config
 │   │   └── useCollectionSSE.ts      # SSE connection for collection progress
 │   ├── lib/
 │   │   ├── chartTransforms.ts       # CohortMetricsRow[] → Recharts ChartPoint[]
@@ -270,9 +310,16 @@ src/
 │       ├── analytics-cohorts.ts   # Cohort assignment + metrics queries
 │       ├── analytics-rampup.ts    # New developer ramp-up curves
 │       ├── analytics-rolling.ts   # Rolling window MoM/QoQ comparisons
-│       └── analytics-contributors.ts  # Per-author aggregate stats query
+│       ├── analytics-contributors.ts  # Per-author aggregate stats query
+│       ├── analytics-pr-turnaround.ts # Monthly median hours to merge
+│       ├── analytics-bot-ratio.ts     # Monthly bot vs human commit ratio
+│       ├── analytics-summary.ts       # Executive summary KPI tiles
+│       ├── analytics-before-after.ts  # Before/after AI marker comparison
+│       ├── cohort-config-service.ts   # Cohort boundary config get/set from app_config
+│       └── first-commit-fetcher.ts    # GitHub API true first-commit date finder
 └── shared/
     ├── types.ts              # Shared TypeScript interfaces
+    ├── cohort-config.ts      # CohortConfig, CohortThreshold, DEFAULT_COHORT_CONFIG, getThresholdSeconds()
     ├── lib/utils.ts          # cn() class merge helper
     └── components/ui/        # shadcn/ui primitives
 scripts/

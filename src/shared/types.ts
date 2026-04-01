@@ -118,7 +118,7 @@ export interface AppSettings {
 // --- Analytics Types (Phase 4) ---
 
 export type TenureMode = 'global' | 'repo';
-export type CohortLabel = '0-3mo' | '3-12mo' | '1yr+';
+export type CohortLabel = string; // Derived from cohort-config — see src/shared/cohort-config.ts
 export type PeriodLabel = 'before' | 'after' | 'all';
 
 export interface CohortMetricsRow {

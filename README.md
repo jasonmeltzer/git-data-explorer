@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 7 complete** — Synthetic Test Data
+**Phase 7.1 complete** — Accurate Author Tenure via GitHub API
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -52,16 +52,27 @@ What works today:
 - **Contributor drill-down** — collapsible table with sortable per-author stats, collapsed by default to maintain privacy-first framing
 - **Narrative insights** — auto-generated per-cohort trend breakdowns above each chart section
 - **Cohort analysis** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing with global and per-repo modes
-- **Analytics API** — 7 REST endpoints (cohorts, rampup, rolling, contributors, marker) with Zod validation
+- **Analytics API** — 12 REST endpoints (cohorts, rampup, rolling, contributors, marker, pr-turnaround, bot-ratio, executive summary, before/after, cohort-config) with Zod validation
 - **Hardened pipeline** — SQL injection guards, Invalid Date protection, integer-only repoIds filtering
 - **Dark mode** — full dark mode support with theme toggle and localStorage persistence
 - **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
 - **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
-- **209 passing tests** across 18 test files
+- **238 passing tests** across 21 test files
 - **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access
 - **Seed mode** — `npm run dev:seed` starts the app against seed data with a dashboard banner indicating synthetic data
+- **Accurate author tenure** — GitHub API first-commit fetcher resolves true first commit dates for authors who predate the collection window (2-API-call strategy)
+- **8-section dashboard** — Executive Summary KPI tiles, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
+- **Executive Summary** — split layout: filtered metrics (commits, contributors) on top, AI Impact metrics (ramp-up trend, adoption delta) spanning all data below
+- **Before/After Comparison** — single card with before/after/delta table showing avg commit size (lines), PRs/week/contributor, new dev ramp-up (weeks), active contributors
+- **PR Turnaround chart** — monthly median hours to merge with trend direction
+- **Bot Ratio chart** — monthly bot vs human commit percentage with trend direction
+- **Stat callout boxes** — above each chart section with computed insights and delta badges
+- **Help panels** — expandable "What does this mean?" explanations on every chart section
+- **Filter scope badges** — "Filtered" / "All Data" badges with hover tooltips on each section header
+- **Customizable cohort boundaries** — Settings page Cohort Boundaries card lets users adjust thresholds and labels; persists across page reloads with Reset to Defaults support
 
 What's next:
+- **Phase 7.2:** Dashboard interpretability (chart explanations, graph/table toggle, contributor before/after AI deltas)
 - **Phase 8:** Data export with contributor anonymization
 
 ## Tech Stack
