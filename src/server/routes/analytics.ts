@@ -19,7 +19,7 @@ const analytics = new Hono();
 analytics.get('/api/analytics/marker', (c) => {
   try {
     const date = getAiMarkerDate();
-    return c.json({ date: date ? date.toISOString() : null });
+    return c.json({ date: date ? date.toISOString().split('T')[0] : null });
   } catch (err) {
     console.error('GET /api/analytics/marker error:', err);
     return c.json({ error: 'Failed to get AI marker date' }, 500);

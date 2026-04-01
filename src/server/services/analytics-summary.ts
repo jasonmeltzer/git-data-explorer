@@ -90,6 +90,8 @@ export function getExecutiveSummary(params: ExecutiveSummaryParams): ExecutiveSu
     const pctChange = ((afterAvg - beforeAvg) / beforeAvg) * 100;
     const direction = pctChange < 0 ? '+' : '-';
     rampUpTrend = `${direction}${Math.abs(Math.round(pctChange))}% faster`;
+  } else {
+    rampUpTrend = 'Not enough data';
   }
 
   // aiAdoptionDelta: compare avg PR size before vs after marker
@@ -109,6 +111,8 @@ export function getExecutiveSummary(params: ExecutiveSummaryParams): ExecutiveSu
     const pctChange = ((afterLines - beforeLines) / beforeLines) * 100;
     const sign = pctChange >= 0 ? '+' : '-';
     aiAdoptionDelta = `${sign}${Math.abs(Math.round(pctChange))}% avg PR size`;
+  } else {
+    aiAdoptionDelta = 'Not enough data';
   }
 
   return { totalCommits, activeContributors, rampUpTrend, aiAdoptionDelta };

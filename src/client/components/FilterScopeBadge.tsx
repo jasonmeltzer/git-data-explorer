@@ -8,7 +8,7 @@ export function FilterScopeBadge({ scope }: FilterScopeBadgeProps) {
   if (scope === 'filtered') {
     return (
       <Badge className="bg-secondary text-secondary-foreground font-semibold text-xs">
-        date &middot; repos
+        Filtered
       </Badge>
     );
   }
