@@ -3,6 +3,7 @@ import { startOfMonth, subMonths, differenceInCalendarMonths } from 'date-fns';
 import { db } from '../db/client.js';
 import { authors } from '../db/schema.js';
 import { CollectionEngine, RateLimitError, createCollectionOctokit } from './collection-engine.js';
+import { updateAuthorsFirstCommitDates } from './first-commit-fetcher.js';
 import { getTrackedRepos } from './repo-management.js';
 import {
   getCollectionState,
@@ -385,6 +386,15 @@ export class CollectionQueue {
           depthBoundary,
           fetchAll: this._fetchAll,
         });
+
+        // Fetch true first-commit dates from GitHub API (D-18)
+        // Non-blocking — if it fails, collection is still marked complete
+        try {
+          await updateAuthorsFirstCommitDates(repo.id, repo.ownerLogin, repo.name);
+        } catch (err) {
+          console.warn(`First-commit date fetch failed for ${repo.ownerLogin}/${repo.name}:`, err);
+          // Non-blocking — collection still succeeded, tenure data just uses local min
+        }
       } catch (err) {
         if (err instanceof RateLimitError) {
           // Rate limit hit — engine has scheduled auto-resume
