@@ -2,7 +2,7 @@
  * Synthetic seed data generator for Git Data Explorer.
  *
  * Creates data/seed.db with 3 repos, ~30 contributors (including 3 bots),
- * 5000-10000 commits, and 500-1000 PRs spanning 13 months (2025-01 to 2026-01).
+ * 5000-10000 commits, and 500-1000 PRs spanning 13 months ending ~2 weeks ago.
  *
  * Run with: npx tsx scripts/seed.ts
  * Or:       npm run seed
@@ -123,10 +123,16 @@ function weightedRandomDate(windowStart: Date, windowEnd: Date): Date {
 // Timeline constants
 // ---------------------------------------------------------------------------
 
-const DATA_START = new Date('2025-01-01T00:00:00Z');
-const DATA_END = new Date('2026-01-31T23:59:59Z');
-const AI_MARKER = new Date('2025-07-01T00:00:00Z');
-const AI_RAMP_END = new Date('2025-09-01T00:00:00Z');
+// Timeline is relative to "now" so default dashboard views (90d, 6mo) always have data.
+// Data spans 13 months ending yesterday (UTC). AI marker at 6 months into the window.
+const NOW = new Date();
+const DATA_END = new Date(Date.UTC(NOW.getUTCFullYear(), NOW.getUTCMonth(), NOW.getUTCDate() - 1, 23, 59, 59));
+const DATA_START = new Date(DATA_END.getTime() - 13 * 30 * 24 * 60 * 60 * 1000); // ~13 months before end
+DATA_START.setUTCDate(1); DATA_START.setUTCHours(0, 0, 0, 0); // snap to 1st of month
+const AI_MARKER = new Date(DATA_START.getTime() + 6 * 30 * 24 * 60 * 60 * 1000); // ~6 months in
+AI_MARKER.setUTCDate(1); AI_MARKER.setUTCHours(0, 0, 0, 0); // snap to 1st of month
+const AI_RAMP_END = new Date(AI_MARKER.getTime() + 2 * 30 * 24 * 60 * 60 * 1000); // +2 months
+AI_RAMP_END.setUTCDate(1); AI_RAMP_END.setUTCHours(0, 0, 0, 0);
 
 const DATA_START_MS = DATA_START.getTime();
 const DATA_END_MS = DATA_END.getTime();
@@ -614,7 +620,17 @@ for (const persona of PERSONAS) {
 }
 
 for (const [login, persona] of uniqueAuthors.entries()) {
-  const firstCommit = firstCommitByAuthor.get(login) ?? DATA_START;
+  let firstCommit: Date;
+  if (persona.type === 'new-pre-ai' || persona.type === 'new-post-ai') {
+    // New devs: use their actual first commit in the data window
+    firstCommit = firstCommitByAuthor.get(login) ?? DATA_START;
+  } else {
+    // Established devs (seniors, regulars, part-timers, bots): set firstCommitAt
+    // well before DATA_START so they don't appear as "new developers" in ramp-up analysis.
+    // Random date 1-3 years before DATA_START.
+    const yearsBeforeMs = (1 + Math.random() * 2) * 365 * 24 * 60 * 60 * 1000;
+    firstCommit = new Date(DATA_START.getTime() - yearsBeforeMs);
+  }
   db.insert(schema.authors).values({
     githubLogin: login,
     name: persona.name,
@@ -733,8 +749,8 @@ console.log(`  Repos: ${REPOS.length}`);
 console.log(`  Contributors: ${contributorCount} (${botCount} bots)`);
 console.log(`  Commits: ${allCommits.length}`);
 console.log(`  PRs: ${allPRs.length}`);
-console.log(`  Date range: 2025-01-01 to 2026-01-31`);
-console.log(`  AI marker: 2025-07-01`);
+console.log(`  Date range: ${DATA_START.toISOString().slice(0, 10)} to ${DATA_END.toISOString().slice(0, 10)}`);
+console.log(`  AI marker: ${AI_MARKER.toISOString().slice(0, 10)}`);
 console.log(`  Database: ./data/seed.db`);
 console.log('');
 console.log('Run "npm run dev:seed" to start the app with seed data.');
