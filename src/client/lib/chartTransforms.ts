@@ -21,8 +21,9 @@ export function cohortRowsToChartData(
       byMonth.set(row.periodMonth, point);
     }
     const point = byMonth.get(row.periodMonth)!;
-    const key = cohortSqlLabelToKey[row.cohort];
-    if (key) {
+    // cohort is already a key ('new', 'mid', 'senior') from the API
+    const key = cohortSqlLabelToKey[row.cohort] ?? row.cohort;
+    if (COHORT_KEYS.includes(key)) {
       point[key] = row[metric];
     }
   }

@@ -32,33 +32,32 @@ export const DEFAULT_COHORT_CONFIG: CohortConfig = {
 export const COHORT_KEYS: string[] = DEFAULT_COHORT_CONFIG.thresholds.map(t => t.key);
 
 /**
- * Maps SQL output labels to display labels.
- * e.g. '0-3mo' -> 'New (0-3mo)', '3-12mo' -> 'Growing (3-12mo)', '1yr+' -> 'Senior (1yr+)'
+ * Maps cohort keys to display labels.
+ * e.g. 'new' -> 'New (0-3mo)', 'mid' -> 'Growing (3-12mo)', 'senior' -> 'Senior (1yr+)'
  */
-export const COHORT_LABELS: Record<string, string> = {
-  '0-3mo':  'New (0-3mo)',
-  '3-12mo': 'Growing (3-12mo)',
-  '1yr+':   'Senior (1yr+)',
-};
+export const COHORT_LABELS: Record<string, string> = Object.fromEntries(
+  DEFAULT_COHORT_CONFIG.thresholds.map(t => [t.key, t.label])
+);
 
 /**
- * Maps SQL output labels to CSS color variables.
- * e.g. '0-3mo' -> 'var(--chart-cohort-new)'
+ * Maps cohort keys to CSS color variables.
+ * e.g. 'new' -> 'var(--chart-cohort-new)'
  */
-export const cohortColorMap: Record<string, string> = {
-  '0-3mo':  'var(--chart-cohort-new)',
-  '3-12mo': 'var(--chart-cohort-mid)',
-  '1yr+':   'var(--chart-cohort-senior)',
-};
+export const cohortColorMap: Record<string, string> = Object.fromEntries(
+  DEFAULT_COHORT_CONFIG.thresholds.map(t => [t.key, t.color])
+);
 
 /**
- * Maps SQL output labels to cohort keys.
- * e.g. '0-3mo' -> 'new', '3-12mo' -> 'mid', '1yr+' -> 'senior'
+ * Maps legacy SQL labels to cohort keys (backwards compatibility).
+ * e.g. '0-3mo' -> 'new'. Also maps keys to themselves.
  */
 export const cohortSqlLabelToKey: Record<string, string> = {
   '0-3mo':  'new',
   '3-12mo': 'mid',
   '1yr+':   'senior',
+  'new':    'new',
+  'mid':    'mid',
+  'senior': 'senior',
 };
 
 /**
