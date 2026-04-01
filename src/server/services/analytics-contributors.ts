@@ -2,10 +2,8 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { getCompleteRepoIds } from './analytics-utils.js';
 import type { TenureMode, CohortLabel, ContributorStats } from '../../shared/types.js';
-
-// Tenure bucket boundaries in seconds (~91 days, ~365 days)
-const THREE_MONTHS_S = 3 * 30 * 24 * 3600;   // ~91 days in seconds
-const TWELVE_MONTHS_S = 12 * 30 * 24 * 3600;  // ~365 days in seconds
+import { getThresholdSeconds } from '../../shared/cohort-config.js';
+import { getCohortConfig } from './cohort-config-service.js';
 
 export interface ContributorStatsParams {
   startDate: Date;
@@ -47,11 +45,14 @@ export function getContributorStats(params: ContributorStatsParams): Contributor
       ? `(CAST(a.first_commit_at AS INTEGER))`
       : `(SELECT MIN(CAST(c2.committed_at AS INTEGER)) FROM commits c2 WHERE c2.author_id = a.id AND c2.repo_id IN (${repoIdList}))`;
 
+  const config = getCohortConfig();
+  const [t1Seconds, t2Seconds] = getThresholdSeconds(config);
+  const [t0, t1Thresh, t2Thresh] = config.thresholds;
   const cohortCase = `
     CASE
-      WHEN (${startEpoch} - ${tenureExpr}) < ${THREE_MONTHS_S} THEN '0-3mo'
-      WHEN (${startEpoch} - ${tenureExpr}) < ${TWELVE_MONTHS_S} THEN '3-12mo'
-      ELSE '1yr+'
+      WHEN (${startEpoch} - ${tenureExpr}) < ${t1Seconds} THEN '${t0.key}'
+      WHEN (${startEpoch} - ${tenureExpr}) < ${t2Seconds} THEN '${t1Thresh.key}'
+      ELSE '${t2Thresh.key}'
     END
   `;
 

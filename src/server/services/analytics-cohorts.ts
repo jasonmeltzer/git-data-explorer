@@ -2,16 +2,19 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { getCompleteRepoIds } from './analytics-utils.js';
 import type { CohortMetricsParams, CohortMetricsRow, CohortLabel, PeriodLabel } from '../../shared/types.js';
-import { DEFAULT_COHORT_CONFIG, getThresholdSeconds } from '../../shared/cohort-config.js';
+import { getThresholdSeconds } from '../../shared/cohort-config.js';
+import { getCohortConfig } from './cohort-config-service.js';
 
 /**
  * Build the CASE WHEN SQL for cohort assignment.
  * For global tenure: uses authors.first_commit_at vs commits.committed_at
  * For repo tenure: uses MIN(committed_at) per (author_id, repo_id) subquery
- * Thresholds and SQL labels are derived from DEFAULT_COHORT_CONFIG.
+ * Thresholds and SQL labels are read from the persisted cohort config (DB).
  */
 function buildCohortCase(tenureMode: 'global' | 'repo', dataPointColumn: string): string {
-  const [t1Seconds, t2Seconds] = getThresholdSeconds(DEFAULT_COHORT_CONFIG);
+  const config = getCohortConfig();
+  const [t1Seconds, t2Seconds] = getThresholdSeconds(config);
+  const [t0, t1Thresh, t2Thresh] = config.thresholds;
   const tenureExpr =
     tenureMode === 'global'
       ? `(${dataPointColumn} - a.first_commit_at)`
@@ -19,9 +22,9 @@ function buildCohortCase(tenureMode: 'global' | 'repo', dataPointColumn: string)
 
   return `
     CASE
-      WHEN ${tenureExpr} < ${t1Seconds} THEN '0-3mo'
-      WHEN ${tenureExpr} < ${t2Seconds} THEN '3-12mo'
-      ELSE '1yr+'
+      WHEN ${tenureExpr} < ${t1Seconds} THEN '${t0.key}'
+      WHEN ${tenureExpr} < ${t2Seconds} THEN '${t1Thresh.key}'
+      ELSE '${t2Thresh.key}'
     END
   `;
 }
@@ -122,12 +125,14 @@ export function getCohortPrMetrics(params: CohortMetricsParams): CohortMetricsRo
       ? `(pr.created_at - a.first_commit_at)`
       : `(pr.created_at - (SELECT MIN(c2.committed_at) FROM commits c2 WHERE c2.author_id = pr.author_id AND c2.repo_id = pr.repo_id))`;
 
-  const [t1Seconds, t2Seconds] = getThresholdSeconds(DEFAULT_COHORT_CONFIG);
+  const config = getCohortConfig();
+  const [t1Seconds, t2Seconds] = getThresholdSeconds(config);
+  const [t0, t1Thresh, t2Thresh] = config.thresholds;
   const cohortCase = `
     CASE
-      WHEN ${prTenureExpr} < ${t1Seconds} THEN '0-3mo'
-      WHEN ${prTenureExpr} < ${t2Seconds} THEN '3-12mo'
-      ELSE '1yr+'
+      WHEN ${prTenureExpr} < ${t1Seconds} THEN '${t0.key}'
+      WHEN ${prTenureExpr} < ${t2Seconds} THEN '${t1Thresh.key}'
+      ELSE '${t2Thresh.key}'
     END
   `;
 

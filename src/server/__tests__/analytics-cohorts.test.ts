@@ -264,7 +264,7 @@ describe('getCohortCommitMetrics', () => {
     });
 
     expect(results.length).toBeGreaterThan(0);
-    const row = results.find(r => r.cohort === '0-3mo');
+    const row = results.find(r => r.cohort === 'new');
     expect(row).toBeDefined();
     expect(row!.totalCount).toBe(1);
   });
@@ -282,7 +282,7 @@ describe('getCohortCommitMetrics', () => {
     });
 
     expect(results.length).toBeGreaterThan(0);
-    const row = results.find(r => r.cohort === '3-12mo');
+    const row = results.find(r => r.cohort === 'mid');
     expect(row).toBeDefined();
     expect(row!.totalCount).toBe(1);
   });
@@ -300,7 +300,7 @@ describe('getCohortCommitMetrics', () => {
     });
 
     expect(results.length).toBeGreaterThan(0);
-    const row = results.find(r => r.cohort === '1yr+');
+    const row = results.find(r => r.cohort === 'senior');
     expect(row).toBeDefined();
     expect(row!.totalCount).toBe(1);
   });
@@ -320,8 +320,8 @@ describe('getCohortCommitMetrics', () => {
       tenureMode: 'global',
     });
 
-    const early = results.find(r => r.cohort === '0-3mo');
-    const later = results.find(r => r.cohort === '3-12mo');
+    const early = results.find(r => r.cohort === 'new');
+    const later = results.find(r => r.cohort === 'mid');
     expect(early).toBeDefined();
     expect(later).toBeDefined();
   });
@@ -375,10 +375,10 @@ describe('getCohortCommitMetrics', () => {
 
     // With global tenure, the 2025-03-01 commit would be 1yr+ (13mo after 2024-01-01)
     // With repo tenure, it should be 0-3mo (2mo after 2025-01-01)
-    const row = results.find(r => r.cohort === '0-3mo');
+    const row = results.find(r => r.cohort === 'new');
     expect(row).toBeDefined();
     // Should not have 1yr+ row from per-repo computation for these commits
-    const wrongRow = results.find(r => r.cohort === '1yr+' && r.periodMonth === '2025-03');
+    const wrongRow = results.find(r => r.cohort === 'senior' && r.periodMonth === '2025-03');
     expect(wrongRow).toBeUndefined();
   });
 
@@ -515,7 +515,7 @@ describe('getCohortPrMetrics', () => {
     });
 
     expect(results.length).toBeGreaterThan(0);
-    const row = results.find(r => r.cohort === '0-3mo');
+    const row = results.find(r => r.cohort === 'new');
     expect(row).toBeDefined();
     expect(row!.totalCount).toBe(1);
     expect(row!.avgLinesAdded).toBeCloseTo(50, 0);
