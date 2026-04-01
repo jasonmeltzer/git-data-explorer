@@ -62,16 +62,17 @@ What works today:
 - **Seed mode** — `npm run dev:seed` starts the app against seed data with a dashboard banner indicating synthetic data
 - **Accurate author tenure** — GitHub API first-commit fetcher resolves true first commit dates for authors who predate the collection window (2-API-call strategy)
 - **8-section dashboard** — Executive Summary KPI tiles, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
-- **Executive Summary** — 4 KPI tiles with delta badges comparing before/after AI adoption periods
-- **Before/After Comparison** — side-by-side cards comparing PR and commit metrics before and after AI marker date
+- **Executive Summary** — split layout: filtered metrics (commits, contributors) on top, AI Impact metrics (ramp-up trend, adoption delta) spanning all data below
+- **Before/After Comparison** — single card with before/after/delta table showing avg commit size (lines), PRs/week/contributor, new dev ramp-up (weeks), active contributors
 - **PR Turnaround chart** — monthly median hours to merge with trend direction
 - **Bot Ratio chart** — monthly bot vs human commit percentage with trend direction
 - **Stat callout boxes** — above each chart section with computed insights and delta badges
 - **Help panels** — expandable "What does this mean?" explanations on every chart section
-- **Filter scope badges** — "All repos" / "2 repos" indicators on each section header
+- **Filter scope badges** — "Filtered" / "All Data" badges with hover tooltips on each section header
 - **Customizable cohort boundaries** — Settings page Cohort Boundaries card lets users adjust thresholds and labels; persists across page reloads with Reset to Defaults support
 
 What's next:
+- **Phase 7.2:** Dashboard interpretability (chart explanations, graph/table toggle, contributor before/after AI deltas)
 - **Phase 8:** Data export with contributor anonymization
 
 ## Tech Stack

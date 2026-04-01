@@ -250,10 +250,10 @@ src/
 │   │   ├── StatCalloutBox.tsx    # Single KPI callout box with delta badge (min 44px touch height)
 │   │   ├── StatCalloutRow.tsx    # Horizontal row of 2–4 StatCalloutBox components
 │   │   ├── HelpPanel.tsx         # Expandable "What does this mean?" panel (chevron toggle)
-│   │   ├── FilterScopeBadge.tsx  # "All repos" / "N repos" badge for section headers
+│   │   ├── FilterScopeBadge.tsx  # "Filtered" / "All Data" badge with hover tooltip
 │   │   ├── SectionHeader.tsx     # Section title + FilterScopeBadge row
-│   │   ├── ExecutiveSummary.tsx  # 4 KPI tiles with before/after delta badges
-│   │   ├── BeforeAfterComparison.tsx # Side-by-side before/after cards with comparison table
+│   │   ├── ExecutiveSummary.tsx  # Split layout: filtered metrics + AI Impact all-data metrics
+│   │   ├── BeforeAfterComparison.tsx # Before/after/delta comparison table with units
 │   │   ├── PrTurnaroundChart.tsx # Monthly median hours to merge line chart
 │   │   ├── BotRatioChart.tsx     # Monthly bot vs human ratio line chart
 │   │   └── charts/
