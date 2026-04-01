@@ -71,7 +71,7 @@ export default function CohortAreaChart({
 
   if (chartData.length === 1) {
     const pt = chartData[0];
-    const total = pt.new + pt.mid + pt.senior;
+    const total = Math.round(pt.new + pt.mid + pt.senior);
     const monthLabel = format(new Date(pt.month), 'MMM yyyy');
     return (
       <div
