@@ -191,9 +191,22 @@ Services:
 - **Partial period normalization** — rolling window comparisons normalize to daily averages so a 10-day current month is fairly compared to a full prior month.
 - **SQL injection prevention** — all `sql.raw()` interpolation sites validate IDs are positive integers before interpolation (SEC-01). Route-level Zod schemas validate date string inputs (BUG-06).
 
+## Seed Data (`scripts/seed.ts`)
+
+A standalone TypeScript script (`npm run seed`) that generates a synthetic `data/seed.db` with realistic fake GitHub data for demo/testing:
+
+- **3 repos** (acme-corp/platform 70%, mobile-app 20%, data-pipeline 10%)
+- **31 contributors**: 5 seniors, 10 regulars, 5 pre-AI new devs, 5 post-AI new devs, 3 part-timers, 3 bots
+- **~9000 commits, ~650 PRs** spanning 13 months (Jan 2025 – Jan 2026)
+- **Log-normal size distributions** (Box-Muller transform) with persona-tuned parameters
+- **Weekday-weighted timestamps** with holiday blackout window
+- **AI adoption inflection** at July 2025 with 2-month gradual ramp — post-AI new devs ramp 2x faster (3 weeks vs 6 weeks)
+- **Idempotent** — wipes and recreates seed.db on each run
+- **`npm run dev:seed`** starts the app against seed.db via `DB_PATH` env var
+
 ## What's Not Built Yet
 
-- **Data Export** (Phase 7) — CSV/JSON export with optional contributor anonymization
+- **Data Export** (Phase 8) — CSV/JSON export with optional contributor anonymization
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
 
 ## File Map
@@ -262,4 +275,6 @@ src/
     ├── types.ts              # Shared TypeScript interfaces
     ├── lib/utils.ts          # cn() class merge helper
     └── components/ui/        # shadcn/ui primitives
+scripts/
+└── seed.ts                   # Synthetic data generator (npm run seed)
 ```
