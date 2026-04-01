@@ -33,10 +33,6 @@ export function getExecutiveSummary(params: ExecutiveSummaryParams): ExecutiveSu
     endEpoch != null ? `AND c.committed_at <= ${endEpoch}` : '',
   ].join(' ');
 
-  const prDateFilter = [
-    startEpoch != null ? `AND pr.created_at >= ${startEpoch}` : '',
-    endEpoch != null ? `AND pr.created_at <= ${endEpoch}` : '',
-  ].join(' ');
 
   // Total commits
   const commitResult = db.get(sql.raw(`
@@ -70,6 +66,7 @@ export function getExecutiveSummary(params: ExecutiveSummaryParams): ExecutiveSu
 
   // rampUpTrend: compare avg ramp-up speed pre/post AI marker
   // Use time-to-first-meaningful-commit (>=50 lines) as proxy for ramp-up speed
+  // NOTE: No date range filter — before/after comparison spans all available data
   const rampUpResult = db.get(sql.raw(`
     SELECT
       AVG(CASE WHEN c.committed_at < ${markerEpoch} THEN (c.committed_at - a.first_commit_at) END) AS before_avg,
@@ -80,7 +77,6 @@ export function getExecutiveSummary(params: ExecutiveSummaryParams): ExecutiveSu
       AND a.first_commit_at IS NOT NULL
       AND c.lines_added >= 50
       AND c.repo_id IN (${repoIdList})
-      ${commitDateFilter}
   `)) as { before_avg: number | null; after_avg: number | null } | undefined;
 
   let rampUpTrend: string | null = null;
@@ -95,13 +91,13 @@ export function getExecutiveSummary(params: ExecutiveSummaryParams): ExecutiveSu
   }
 
   // aiAdoptionDelta: compare avg PR size before vs after marker
+  // NOTE: No date range filter — before/after comparison spans all available data
   const prSizeResult = db.get(sql.raw(`
     SELECT
       AVG(CASE WHEN pr.created_at < ${markerEpoch} THEN pr.lines_added END) AS before_avg_lines,
       AVG(CASE WHEN pr.created_at >= ${markerEpoch} THEN pr.lines_added END) AS after_avg_lines
     FROM pull_requests pr
     WHERE pr.repo_id IN (${repoIdList})
-      ${prDateFilter}
   `)) as { before_avg_lines: number | null; after_avg_lines: number | null } | undefined;
 
   let aiAdoptionDelta: string | null = null;
