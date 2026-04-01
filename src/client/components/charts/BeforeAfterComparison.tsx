@@ -105,8 +105,12 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
 
   const commitSizeDelta = pctDelta(data.before.avgCommitSize, data.after.avgCommitSize);
   const prFreqDelta = pctDelta(data.before.prFrequency, data.after.prFrequency);
-  const rampUpDelta = pctDelta(data.before.rampUpSpeed, data.after.rampUpSpeed);
+  const rampUpDelta = data.before.rampUpSpeed != null && data.after.rampUpSpeed != null
+    ? pctDelta(data.before.rampUpSpeed, data.after.rampUpSpeed)
+    : { str: 'N/A', positive: true };
   const contributorsDelta = pctDelta(data.before.activeContributors, data.after.activeContributors);
+
+  const formatRampUp = (v: number | null) => v == null ? '—' : formatNum(v);
 
   return (
     <section>
@@ -127,23 +131,23 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
               </div>
             </div>
             <MetricRow
-              label="Avg Commit Size"
+              label="Avg Commit Size (lines)"
               beforeValue={formatNum(data.before.avgCommitSize)}
               afterValue={formatNum(data.after.avgCommitSize)}
               deltaStr={commitSizeDelta.str}
               deltaPositive={commitSizeDelta.positive}
             />
             <MetricRow
-              label="PR Frequency"
+              label="PRs / week / contributor"
               beforeValue={formatNum(data.before.prFrequency)}
               afterValue={formatNum(data.after.prFrequency)}
               deltaStr={prFreqDelta.str}
               deltaPositive={prFreqDelta.positive}
             />
             <MetricRow
-              label="Ramp-Up Speed"
-              beforeValue={formatNum(data.before.rampUpSpeed)}
-              afterValue={formatNum(data.after.rampUpSpeed)}
+              label="New dev ramp-up (weeks)"
+              beforeValue={formatRampUp(data.before.rampUpSpeed)}
+              afterValue={formatRampUp(data.after.rampUpSpeed)}
               deltaStr={rampUpDelta.str}
               deltaPositive={rampUpDelta.positive}
             />

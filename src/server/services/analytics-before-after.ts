@@ -105,10 +105,22 @@ export function getBeforeAfterComparison(params: BeforeAfterParams): BeforeAfter
     ? (prFreqResult?.after_pr_count ?? 0) / afterWeeks / afterContribs
     : 0;
 
-  // ── Ramp-up speed: weeks from first commit to first PR >= 50 lines ────────
+  // ── Ramp-up speed: median weeks from first commit to first PR >= 50 lines ──
+  //
+  // Only includes "new developers" — authors whose first commit is within the
+  // data window (first_commit_at >= earliest commit in DB). Long-tenured devs
+  // whose first_commit_at predates the data would show artificially high ramp-up
+  // times due to data sparsity, not actual slow ramp-up.
 
-  // For each non-bot author, find the time from their first commit to their first
-  // sizeable PR, split by when their first commit occurred (before/after marker)
+  const earliestCommit = db.get(sql.raw(`
+    SELECT MIN(c.committed_at) AS earliest
+    FROM commits c WHERE c.repo_id IN (${repoIdList})
+  `)) as { earliest: number | null } | undefined;
+
+  // Use earliest commit + 4 weeks as cutoff — authors who joined before that
+  // likely have first_commit_at from before our collection window
+  const newDevCutoff = (earliestCommit?.earliest ?? 0) + 4 * 7 * 86400;
+
   const rampUpRows = db.all(sql.raw(`
     SELECT
       a.id AS author_id,
@@ -118,6 +130,7 @@ export function getBeforeAfterComparison(params: BeforeAfterParams): BeforeAfter
     INNER JOIN pull_requests pr ON pr.author_id = a.id
     WHERE a.is_bot = 0
       AND a.first_commit_at IS NOT NULL
+      AND a.first_commit_at >= ${newDevCutoff}
       AND pr.lines_added >= 50
       AND pr.repo_id IN (${repoIdList})
     GROUP BY a.id, a.first_commit_at
