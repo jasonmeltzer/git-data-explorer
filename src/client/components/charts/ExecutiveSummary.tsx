@@ -54,7 +54,7 @@ export function ExecutiveSummary({ startDate, endDate, repoIds }: ExecutiveSumma
       )}
 
       {/* Row 2: AI comparison metrics (span all available data) */}
-      <div className="mt-4 flex items-center gap-2">
+      <div className="mt-4 flex items-center justify-between">
         <span className="text-sm font-medium text-muted-foreground">AI Impact</span>
         <FilterScopeBadge scope="independent" />
       </div>

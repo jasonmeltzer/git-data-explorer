@@ -20,7 +20,7 @@ export function FilterScopeBadge({ scope }: FilterScopeBadgeProps) {
         <TooltipTrigger asChild>
           <Badge className={badgeClass}>{label}</Badge>
         </TooltipTrigger>
-        <TooltipContent>{description}</TooltipContent>
+        <TooltipContent side="bottom">{description}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
