@@ -41,13 +41,13 @@ function formatNum(n: number): string {
   return Math.round(n).toLocaleString();
 }
 
-function pctDelta(before: number, after: number): { str: string; positive: boolean } {
+function pctDelta(before: number, after: number, lowerIsBetter = false): { str: string; positive: boolean } {
   if (before === 0) return { str: 'N/A', positive: true };
   const pct = ((after - before) / before) * 100;
   const rounded = Math.round(pct);
   return {
     str: rounded >= 0 ? `+${rounded}%` : `${rounded}%`,
-    positive: pct >= 0,
+    positive: lowerIsBetter ? pct <= 0 : pct >= 0,
   };
 }
 
@@ -106,7 +106,7 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
   const commitSizeDelta = pctDelta(data.before.avgCommitSize, data.after.avgCommitSize);
   const prFreqDelta = pctDelta(data.before.prFrequency, data.after.prFrequency);
   const rampUpDelta = data.before.rampUpSpeed != null && data.after.rampUpSpeed != null
-    ? pctDelta(data.before.rampUpSpeed, data.after.rampUpSpeed)
+    ? pctDelta(data.before.rampUpSpeed, data.after.rampUpSpeed, true)
     : { str: 'N/A', positive: true };
   const contributorsDelta = pctDelta(data.before.activeContributors, data.after.activeContributors);
 
