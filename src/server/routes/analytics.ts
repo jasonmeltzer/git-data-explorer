@@ -6,6 +6,10 @@ import { getRampUpCurves } from '../services/analytics-rampup.js';
 import { getRollingComparison } from '../services/analytics-rolling.js';
 import { getContributorStats } from '../services/analytics-contributors.js';
 import { getCohortConfig, setCohortConfig } from '../services/cohort-config-service.js';
+import { getPrTurnaroundTrend } from '../services/analytics-pr-turnaround.js';
+import { getBotRatioTrend } from '../services/analytics-bot-ratio.js';
+import { getExecutiveSummary } from '../services/analytics-summary.js';
+import { getBeforeAfterComparison } from '../services/analytics-before-after.js';
 
 const analytics = new Hono();
 
@@ -245,6 +249,97 @@ analytics.get('/api/analytics/contributors', (c) => {
   } catch (err) {
     console.error('GET /api/analytics/contributors error:', err);
     return c.json({ error: 'Failed to fetch contributor stats' }, 500);
+  }
+});
+
+// ─── PR turnaround endpoint ───────────────────────────────────────────────────
+
+const trendQuerySchema = z.object({
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+  repoIds: z.string().optional(),
+});
+
+// GET /api/analytics/pr-turnaround — monthly avg hours to merge for merged PRs
+analytics.get('/api/analytics/pr-turnaround', (c) => {
+  try {
+    const parsed = trendQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const results = getPrTurnaroundTrend({ startDate, endDate, repoIds: repoIdsParsed });
+    return c.json(results);
+  } catch (err) {
+    console.error('GET /api/analytics/pr-turnaround error:', err);
+    return c.json({ error: 'Failed to fetch PR turnaround trend' }, 500);
+  }
+});
+
+// ─── Bot ratio endpoint ───────────────────────────────────────────────────────
+
+// GET /api/analytics/bot-ratio — monthly bot vs human commit counts
+analytics.get('/api/analytics/bot-ratio', (c) => {
+  try {
+    const parsed = trendQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const results = getBotRatioTrend({ startDate, endDate, repoIds: repoIdsParsed });
+    return c.json(results);
+  } catch (err) {
+    console.error('GET /api/analytics/bot-ratio error:', err);
+    return c.json({ error: 'Failed to fetch bot ratio trend' }, 500);
+  }
+});
+
+// ─── Executive summary endpoint ───────────────────────────────────────────────
+
+// GET /api/analytics/summary — aggregate KPIs for executive overview
+analytics.get('/api/analytics/summary', (c) => {
+  try {
+    const parsed = trendQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const result = getExecutiveSummary({ startDate, endDate, repoIds: repoIdsParsed });
+    return c.json(result);
+  } catch (err) {
+    console.error('GET /api/analytics/summary error:', err);
+    return c.json({ error: 'Failed to fetch executive summary' }, 500);
+  }
+});
+
+// ─── Before/after comparison endpoint ────────────────────────────────────────
+
+// GET /api/analytics/before-after — metrics split at AI marker date
+analytics.get('/api/analytics/before-after', (c) => {
+  try {
+    const schema = z.object({ repoIds: z.string().optional() });
+    const parsed = schema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const result = getBeforeAfterComparison({ repoIds: repoIdsParsed });
+    return c.json(result);
+  } catch (err) {
+    console.error('GET /api/analytics/before-after error:', err);
+    return c.json({ error: 'Failed to fetch before/after comparison' }, 500);
   }
 });
 

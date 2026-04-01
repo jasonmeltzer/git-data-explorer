@@ -474,11 +474,14 @@ function generatePRs(commitsByAuthorRepo: Map<string, CommitRecord[]>): PRRecord
 
       if (batch.length === 0) continue;
 
-      const createdAt = batch[0].committedAt;
+      // PRs are typically opened after commits accumulate — use last commit date
       const lastCommitDate = batch[batch.length - 1].committedAt;
+      const createdAt = lastCommitDate;
 
-      // PR mergedAt = lastCommit + 1-5 days
-      const closeDaysMs = (1 + Math.floor(Math.random() * 5)) * MS_PER_DAY;
+      // PR mergedAt = lastCommit + realistic review turnaround (log-normal distribution)
+      // Mostly 4-48 hours with a long tail up to ~7 days (Pitfall D-17)
+      const turnaroundHours = Math.max(1, Math.round(Math.exp(2.5 + 1.2 * (Math.random() * 2 - 1))));
+      const closeDaysMs = turnaroundHours * 60 * 60 * 1000;
       const closeDate = new Date(lastCommitDate.getTime() + closeDaysMs);
 
       // State distribution: 75% merged, 15% closed, 10% open
