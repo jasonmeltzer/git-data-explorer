@@ -87,7 +87,7 @@ export default function FilterBar({
       : `${repoIds.length} repos selected`;
 
   return (
-    <div className="sticky top-12 z-40 h-12 bg-background/95 backdrop-blur border-b flex items-center gap-3 px-6">
+    <div className="h-12 border-b flex items-center gap-3 px-6">
       {/* Date preset chips */}
       <div className="flex items-center gap-1">
         {DATE_PRESETS.map(({ label, value }) => (

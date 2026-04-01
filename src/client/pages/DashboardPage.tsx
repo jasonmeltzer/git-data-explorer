@@ -26,6 +26,13 @@ const METRIC_OPTIONS: { label: string; value: MetricOption }[] = [
   { label: 'Files Changed', value: 'avgFilesChanged' },
 ];
 
+const METRIC_NARRATIVE_LABELS: Record<MetricOption, { pr: string; commit: string }> = {
+  totalCount: { pr: 'PR volume', commit: 'Commit volume' },
+  avgLinesAdded: { pr: 'Avg lines added per PR', commit: 'Avg lines added per commit' },
+  avgLinesDeleted: { pr: 'Avg lines deleted per PR', commit: 'Avg lines deleted per commit' },
+  avgFilesChanged: { pr: 'Avg files changed per PR', commit: 'Avg files changed per commit' },
+};
+
 export default function DashboardPage() {
   const {
     preset, setPreset,
@@ -57,7 +64,7 @@ export default function DashboardPage() {
     granularity: rollingGranularity, repoIds,
   });
 
-  // Check token + repos existence
+  // Check token + repos existence + seed mode
   const { data: trackedData, isLoading: reposLoading } = useQuery<{ repos: TrackedRepo[] }>({
     queryKey: ['repos', 'tracked'],
     queryFn: () => fetch('/api/repos').then((r) => r.json()),
@@ -66,8 +73,14 @@ export default function DashboardPage() {
     queryKey: ['settings', 'token'],
     queryFn: () => fetch('/api/settings/token').then((r) => r.json()),
   });
+  const { data: healthData } = useQuery<{ isSeedDb: boolean }>({
+    queryKey: ['health'],
+    queryFn: () => fetch('/api/health').then((r) => r.json()),
+    staleTime: Infinity,
+  });
 
   const trackedRepos = trackedData?.repos ?? [];
+  const isSeedDb = healthData?.isSeedDb ?? false;
   const hasToken = tokenData?.configured ?? true; // assume configured until we know
   const anyFetching = prFetching || commitFetching || rampUpFetching || rollingFetching;
   const anyError = prError || commitError || rampUpError || rollingError;
@@ -145,6 +158,20 @@ export default function DashboardPage() {
         tenureMode={tenureMode} setTenureMode={setTenureMode}
       />
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-12">
+        {/* Seed data banner */}
+        {isSeedDb && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+            Viewing synthetic seed data — charts show simulated contribution patterns, not real GitHub data.
+          </div>
+        )}
+
+        {/* Repo context */}
+        {trackedRepos.length > 0 && (
+          <div className="text-xs text-muted-foreground">
+            Analyzing: {trackedRepos.map((r) => r.fullName).join(', ')}
+          </div>
+        )}
+
         {/* Screen reader loading announcement */}
         <div aria-live="polite" className="sr-only">
           {anyFetching ? 'Loading dashboard data...' : ''}
@@ -166,9 +193,9 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">PR Size Trends</h2>
             <Tabs value={prMetric} onValueChange={(v) => setPrMetric(v as MetricOption)}>
-              <TabsList className="h-7">
+              <TabsList className="h-8 gap-1">
                 {METRIC_OPTIONS.map(({ label, value }) => (
-                  <TabsTrigger key={value} value={value} className="text-xs px-2 py-0.5">
+                  <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
                     {label}
                   </TabsTrigger>
                 ))}
@@ -176,7 +203,7 @@ export default function DashboardPage() {
             </Tabs>
           </div>
           <NarrativeCard
-            text={cohortTrendNarrative(prData, prMetric, 'PR volume')}
+            text={cohortTrendNarrative(prData, prMetric, METRIC_NARRATIVE_LABELS[prMetric].pr)}
             isFetching={prFetching && prData.length === 0}
           />
           <CohortAreaChart
@@ -193,9 +220,9 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold">Commit Size Trends</h2>
             <Tabs value={commitMetric} onValueChange={(v) => setCommitMetric(v as MetricOption)}>
-              <TabsList className="h-7">
+              <TabsList className="h-8 gap-1">
                 {METRIC_OPTIONS.map(({ label, value }) => (
-                  <TabsTrigger key={value} value={value} className="text-xs px-2 py-0.5">
+                  <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
                     {label}
                   </TabsTrigger>
                 ))}
@@ -203,7 +230,7 @@ export default function DashboardPage() {
             </Tabs>
           </div>
           <NarrativeCard
-            text={cohortTrendNarrative(commitData, commitMetric, 'Commit volume')}
+            text={cohortTrendNarrative(commitData, commitMetric, METRIC_NARRATIVE_LABELS[commitMetric].commit)}
             isFetching={commitFetching && commitData.length === 0}
           />
           <CohortAreaChart
