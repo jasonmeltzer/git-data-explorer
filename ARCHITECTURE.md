@@ -197,7 +197,7 @@ A standalone TypeScript script (`npm run seed`) that generates a synthetic `data
 
 - **3 repos** (acme-corp/platform 70%, mobile-app 20%, data-pipeline 10%)
 - **31 contributors**: 5 seniors, 10 regulars, 5 pre-AI new devs, 5 post-AI new devs, 3 part-timers, 3 bots
-- **~9000 commits, ~650 PRs** spanning 13 months (Jan 2025 – Jan 2026)
+- **~9000 commits, ~650 PRs** spanning 13 months (dynamic — ends yesterday, adjusts on each run)
 - **Log-normal size distributions** (Box-Muller transform) with persona-tuned parameters
 - **Weekday-weighted timestamps** with holiday blackout window
 - **AI adoption inflection** at July 2025 with 2-month gradual ramp — post-AI new devs ramp 2x faster (3 weeks vs 6 weeks)

@@ -47,19 +47,19 @@ What works today:
 - **AI adoption marker** — dashed purple line on charts showing when AI tools were adopted
 - **New developer ramp-up curves** — line chart comparing contribution trajectories across join periods
 - **Rolling period comparison** — metric cards with change percentages, month-over-month and quarter-over-quarter toggle
-- **Date range filtering** — preset chips (30d, 90d, 6mo, 1yr, All) plus custom date range picker
+- **Date range filtering** — preset chips (90d, 6mo, 1yr, All) plus custom date range picker
 - **Repo filtering** — multi-select dropdown filters all dashboard views
 - **Contributor drill-down** — collapsible table with sortable per-author stats, collapsed by default to maintain privacy-first framing
-- **Narrative insights** — auto-generated plain-English trend summaries above each chart section
+- **Narrative insights** — auto-generated per-cohort trend breakdowns above each chart section
 - **Cohort analysis** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing with global and per-repo modes
 - **Analytics API** — 7 REST endpoints (cohorts, rampup, rolling, contributors, marker) with Zod validation
 - **Hardened pipeline** — SQL injection guards, Invalid Date protection, integer-only repoIds filtering
 - **Dark mode** — full dark mode support with theme toggle and localStorage persistence
 - **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
 - **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
-- **204 passing tests** across 17 test files
+- **209 passing tests** across 18 test files
 - **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access
-- **Seed mode** — `npm run dev:seed` starts the app against seed data
+- **Seed mode** — `npm run dev:seed` starts the app against seed data with a dashboard banner indicating synthetic data
 
 What's next:
 - **Phase 8:** Data export with contributor anonymization
