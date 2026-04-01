@@ -21,16 +21,16 @@ interface RampUpLineChartProps {
   isFetching: boolean;
 }
 
-// Cohort line colors cycling through palette with lightness variation
+// Distinct hues for up to 8 join-period lines — no two adjacent colors are close
 const LINE_COLORS = [
-  'var(--chart-cohort-new)',
-  'var(--chart-cohort-mid)',
-  'var(--chart-cohort-senior)',
-  'var(--chart-ai-marker)',
-  'oklch(0.60 0.18 258)',
-  'oklch(0.70 0.15 145)',
-  'oklch(0.65 0.16 50)',
-  'oklch(0.50 0.12 300)',
+  'var(--chart-cohort-new)',      // blue (hue 258)
+  'var(--chart-cohort-mid)',      // teal-green (hue 145)
+  'var(--chart-cohort-senior)',   // amber (hue 50)
+  'var(--chart-ai-marker)',       // purple (hue 300)
+  'oklch(0.65 0.18 20)',          // coral-red
+  'oklch(0.70 0.15 195)',         // cyan
+  'oklch(0.60 0.16 100)',         // olive-green
+  'oklch(0.68 0.18 340)',         // magenta-pink
 ];
 
 export default function RampUpLineChart({ data, isFetching }: RampUpLineChartProps) {
