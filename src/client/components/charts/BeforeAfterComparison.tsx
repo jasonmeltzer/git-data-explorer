@@ -36,6 +36,8 @@ function MetricRow({ label, beforeValue, afterValue, deltaStr, deltaPositive }: 
 }
 
 function formatNum(n: number): string {
+  if (n !== 0 && Math.abs(n) < 1) return n.toFixed(2);
+  if (Math.abs(n) < 100) return n.toFixed(1);
   return Math.round(n).toLocaleString();
 }
 
