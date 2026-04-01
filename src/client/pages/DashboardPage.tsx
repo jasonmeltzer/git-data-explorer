@@ -257,6 +257,9 @@ export default function DashboardPage() {
                   chartConfig={dynamicChartConfig}
                 />
               </div>
+              <HelpPanel>
+                Each colored band represents a tenure cohort. The stacked area shows how PR activity is distributed across new, growing, and senior contributors over time. A growing "new" band after AI adoption suggests faster onboarding. Use the metric toggle above to switch between count, lines added, lines deleted, and files changed.
+              </HelpPanel>
             </div>
 
             {/* Commit Size Trends subsection */}
