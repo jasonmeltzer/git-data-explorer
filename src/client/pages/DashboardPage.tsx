@@ -258,7 +258,30 @@ export default function DashboardPage() {
                 />
               </div>
               <HelpPanel>
-                Each colored band represents a tenure cohort. The stacked area shows how PR activity is distributed across new, growing, and senior contributors over time. A growing "new" band after AI adoption suggests faster onboarding. Use the metric toggle above to switch between count, lines added, lines deleted, and files changed.
+                <p>
+                  This chart shows how the average size of pull requests has changed over time,
+                  grouped by how long contributors had been active when they opened each PR.
+                  The x-axis is time (by month), and the y-axis shows the selected metric —
+                  PR count, average lines added, lines deleted, or files changed.
+                </p>
+                <p className="mt-2">
+                  Each cohort line (new devs, mid-tenure, senior) tells a different story.
+                  If you see the new-dev line rising steeply after your AI adoption date, that
+                  suggests newer contributors are taking on larger or more frequent PRs — a
+                  common signal of AI-assisted productivity. If all cohort lines move together,
+                  the trend is likely org-wide rather than experience-dependent.
+                </p>
+                <p className="mt-2">
+                  Look for divergence between cohorts after your AI marker: if new devs close
+                  the gap with senior contributors, consider investigating whether your AI
+                  tooling is accelerating onboarding. If senior PR sizes are shrinking, they
+                  may be decomposing work into smaller, more reviewable units.
+                </p>
+                <p className="mt-2">
+                  You can switch the metric with the "Count / Lines Added / Lines Deleted /
+                  Files Changed" tabs above the chart. To adjust cohort boundaries, go to{' '}
+                  <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
+                </p>
               </HelpPanel>
             </div>
 
@@ -305,7 +328,31 @@ export default function DashboardPage() {
             </div>
 
             <HelpPanel>
-              Contributors are grouped by how long they'd been active in the repo at the time of each commit. 'New' means within the first tenure threshold months of their first commit; 'Growing' is between the first and second thresholds; 'Senior' is beyond the second threshold. Global mode uses each author's earliest commit across all tracked repos. Per-repo mode measures tenure independently within each repo.
+              <p>
+                This chart shows how the average size of individual commits has changed over
+                time, broken down by contributor tenure cohort. The y-axis reflects the
+                selected metric — commit count, average lines added, lines deleted, or files
+                changed per commit.
+              </p>
+              <p className="mt-2">
+                Commit size is a different signal from PR size: smaller commits often reflect
+                more iterative development practices, while larger commits may indicate batch
+                work or infrequent saves. AI coding assistants tend to produce larger
+                individual changes, so an increase in average lines per commit after your
+                AI adoption date — especially in the new-dev cohort — can be an early
+                adoption signal.
+              </p>
+              <p className="mt-2">
+                If the new-dev cohort line rises faster than senior contributors after your
+                AI date, newer team members may be generating more code per commit, which
+                is worth pairing with the Ramp-Up chart to confirm whether this reflects
+                productivity or noise. Use the metric toggle above the chart to explore
+                which signals are most visible in your data.
+              </p>
+              <p className="mt-2">
+                To adjust cohort date boundaries, go to{' '}
+                <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
+              </p>
             </HelpPanel>
           </div>
         </section>
@@ -333,7 +380,31 @@ export default function DashboardPage() {
               />
             </div>
             <HelpPanel>
-              The ramp-up chart shows how quickly contributors reach meaningful contribution sizes after their first commit. Each line represents a group of contributors by the period they joined. Faster ramp-up in more recent periods may reflect AI tool adoption accelerating onboarding.
+              <p>
+                This chart shows how quickly new contributors reached meaningful contribution
+                sizes after joining, grouped by the quarter they made their first commit.
+                The x-axis is weeks from first commit, and the y-axis is the average number
+                of lines changed per commit in that week.
+              </p>
+              <p className="mt-2">
+                Each line represents a cohort of developers who joined in the same quarter.
+                Steeper early rises mean contributors ramped up faster — producing
+                larger changes sooner. A flat early period followed by a sharp rise suggests
+                an onboarding ramp that took several weeks before developers felt confident.
+              </p>
+              <p className="mt-2">
+                If cohorts who joined after your AI adoption date show steeper early ramps
+                than earlier cohorts, that is a concrete signal that AI tooling is compressing
+                the time-to-productivity for new contributors. For example: if your 2025-Q1
+                cohort reached 100 lines/week in week 3 while your 2024-Q3 cohort took 6
+                weeks, that is a meaningful shift worth noting.
+              </p>
+              <p className="mt-2">
+                The ramp-up window is fixed at 12 weeks. Cohort assignment uses each
+                contributor's first commit date in each repo. To adjust cohort boundaries
+                (e.g., what counts as "new"), go to{' '}
+                <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
+              </p>
             </HelpPanel>
           </div>
         </section>
@@ -389,6 +460,36 @@ export default function DashboardPage() {
             tenureMode={tenureMode}
             repoIds={repoIds}
           />
+          <HelpPanel>
+            <p>
+              This table shows contribution totals for each unique contributor detected in
+              your selected repos and date range, grouped by their tenure cohort at the
+              time of contribution. Cohorts are assigned based on how long each contributor
+              had been active when they made each commit or PR.
+            </p>
+            <p className="mt-2">
+              The Pre-AI and Post-AI columns compare activity from before and after the
+              AI adoption date configured in Settings. If no AI adoption date is set, these
+              columns will be empty — go to{' '}
+              <a href="#/settings" className="underline hover:text-foreground">Settings</a>{' '}
+              to configure it.
+            </p>
+            <p className="mt-2">
+              Sort any column to explore the data: sort by "Change" on commits to find
+              contributors whose output shifted most after AI adoption. Because cohorts
+              group contributors by experience level rather than naming individuals, this
+              view is best used for understanding team-wide patterns rather than evaluating
+              specific people.
+            </p>
+            <p className="mt-2">
+              This view shows how contribution patterns shifted across your team — not individual performance scores. No default sort is applied to change columns;
+              the default sort is total commits, which reflects overall activity level.
+            </p>
+            <p className="mt-2">
+              To adjust cohort boundaries, go to{' '}
+              <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
+            </p>
+          </HelpPanel>
         </section>
       </div>
     </>

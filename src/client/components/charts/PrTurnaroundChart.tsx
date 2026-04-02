@@ -119,7 +119,23 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
       )}
 
       <HelpPanel>
-        Time-to-merge measures the average hours between a PR being opened and being merged. Trends here reflect review velocity and PR complexity. Smaller PRs from AI-assisted development often merge faster.
+        <p>
+          This chart shows how the average time from PR creation to merge has changed
+          over time. Each data point is the average hours-to-merge for PRs opened in
+          that month. Lower values mean PRs are being merged more quickly.
+        </p>
+        <p className="mt-2">
+          Faster turnaround can reflect smaller PRs (easier to review), better review
+          culture, or AI-assisted code review tooling. If you see a step-change
+          downward after your AI adoption date, that is worth investigating as a
+          productivity signal. If turnaround time is increasing, it may indicate that
+          PR sizes are growing faster than review capacity can keep up.
+        </p>
+        <p className="mt-2">
+          This metric uses the median review time per month to reduce distortion from
+          very large or very old PRs. Repos without complete PR data will affect the
+          accuracy of this chart — check the Collection tab for completeness status.
+        </p>
       </HelpPanel>
     </section>
   );

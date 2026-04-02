@@ -117,7 +117,24 @@ export function BotRatioChart({ startDate, endDate, repoIds }: BotRatioChartProp
       )}
 
       <HelpPanel>
-        Rising bot commits (Dependabot, Renovate, GitHub Actions) reflect growing automation infrastructure, not declining human productivity. Bot activity is normal in healthy repos.
+        <p>
+          This chart shows the percentage of total commits attributed to bots
+          (Dependabot, Renovate, GitHub Actions, and similar accounts) versus human
+          contributors over time. A rising bot ratio may reflect increasing adoption
+          of automated dependency management or CI/CD pipelines — not a problem, but
+          context that helps you read the human-contributor charts accurately.
+        </p>
+        <p className="mt-2">
+          Bot commits are excluded from all cohort and ramp-up analysis. If your bot
+          ratio spikes unexpectedly, check whether a new automation was introduced
+          around that time. A consistently high bot ratio (over 30%) may indicate your
+          collection window captures a lot of infrastructure repos — consider filtering
+          to application repos for cleaner contributor analysis.
+        </p>
+        <p className="mt-2">
+          This view counts commit events, not code volume. A bot that opens many small
+          dependency bumps will appear more dominant than its actual code contribution.
+        </p>
       </HelpPanel>
     </section>
   );

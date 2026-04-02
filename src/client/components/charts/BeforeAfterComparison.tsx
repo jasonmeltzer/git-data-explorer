@@ -149,7 +149,33 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
       </Card>
       <div className="mt-4">
         <HelpPanel>
-          The AI marker date is the date your team began using an AI coding tool (e.g. GitHub Copilot, Cursor, Claude). All metrics in this section are split at that date to show how contribution patterns changed. You can set or change the AI marker date on the Settings page. The comparison is most meaningful when you have at least 3 months of data on each side of the marker.
+          <p>
+            This view compares contribution patterns from before and after the AI adoption
+            date you set in Settings. The left column shows averages from before the date;
+            the right column shows averages from after it. The change column shows the
+            absolute and percentage shift.
+          </p>
+          <p className="mt-2">
+            Green values mean the metric increased; red means it decreased. For metrics
+            where a decrease is a positive signal — such as PR turnaround time or ramp-up
+            weeks — the color polarity is inverted so that improvement always shows green.
+          </p>
+          <p className="mt-2">
+            If you have not set an AI adoption date, this view will not show comparisons.
+            Go to{' '}
+            <a href="#/settings" className="underline hover:text-foreground">Settings &gt; AI Adoption Date</a>{' '}
+            to configure it.
+          </p>
+          <p className="mt-2">
+            Use this view to make a concrete case for the impact of AI tooling:
+            "After AI adoption, new developers were opening PRs twice as large within
+            their first month" is the kind of finding this view is designed to surface.
+            Consider pairing this with the Cohort Trends chart to see whether the shift
+            is concentrated in newer contributors or org-wide.
+          </p>
+          <p className="mt-2">
+            This view shows how contribution patterns shifted across your team — not individual performance scores.
+          </p>
         </HelpPanel>
       </div>
     </section>
