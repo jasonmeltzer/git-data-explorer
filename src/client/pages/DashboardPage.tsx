@@ -1,5 +1,14 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
 import { useAiMarker } from '../hooks/useAiMarker.js';
 import { useCohortConfig } from '../hooks/useCohortConfig.js';
@@ -9,6 +18,7 @@ import { useRampUp } from '../hooks/useRampUp.js';
 import { useRolling } from '../hooks/useRolling.js';
 import { cohortTrendNarrative, rollingNarrative } from '../lib/narratives.js';
 import { computeCohortInsights, computeRampUpInsights, computeRollingInsights } from '../lib/insights.js';
+import { formatNum } from '../lib/deltaFormat.js';
 import FilterBar from '../components/FilterBar.js';
 import CohortAreaChart from '../components/charts/CohortAreaChart.js';
 import RampUpLineChart from '../components/charts/RampUpLineChart.js';
@@ -25,9 +35,269 @@ import { StatCalloutRow } from '../components/charts/StatCalloutRow.js';
 import { StatCalloutBox } from '../components/charts/StatCalloutBox.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
-import type { TrackedRepo } from '@shared/types.js';
+import { Skeleton } from '@shared/components/ui/skeleton.js';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@shared/components/ui/table.js';
+import type { TrackedRepo, CohortMetricsRow, RampUpBucket } from '@shared/types.js';
 
 type MetricOption = 'totalCount' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
+
+// Helper to render a sortable table header button
+function SortableHeader({
+  header,
+  isRightAligned,
+}: {
+  header: { column: { getCanSort: () => boolean; getIsSorted: () => false | 'asc' | 'desc'; columnDef: { header: unknown }; getToggleSortingHandler: () => ((e: unknown) => void) | undefined }; getContext: () => unknown };
+  isRightAligned: boolean;
+}) {
+  const sorted = header.column.getIsSorted();
+  if (!header.column.getCanSort()) {
+    return <>{flexRender(header.column.columnDef.header, header.getContext())}</>;
+  }
+  return (
+    <button
+      className="flex items-center gap-1 hover:text-foreground transition-colors"
+      style={isRightAligned ? { marginLeft: 'auto' } : undefined}
+      onClick={header.column.getToggleSortingHandler()}
+    >
+      {flexRender(header.column.columnDef.header, header.getContext())}
+      {sorted === 'asc' ? (
+        <ArrowUp className="h-3 w-3" />
+      ) : sorted === 'desc' ? (
+        <ArrowDown className="h-3 w-3" />
+      ) : (
+        <ArrowUpDown className="h-3 w-3 opacity-50" />
+      )}
+    </button>
+  );
+}
+
+// Inline CohortDataTable: pivots CohortMetricsRow[] by periodMonth, one column per cohort
+function CohortDataTable({
+  data,
+  metric,
+  isFetching,
+  chartConfig,
+}: {
+  data: CohortMetricsRow[];
+  metric: MetricOption;
+  isFetching: boolean;
+  chartConfig: Record<string, { label: string; color: string }> | undefined;
+}) {
+  const [sorting, setSorting] = useState<SortingState>([]);
+
+  const cohortKeys = useMemo(() => [...new Set(data.map((r) => r.cohort))], [data]);
+
+  const pivoted = useMemo(() => {
+    const byMonth = new Map<string, Record<string, unknown>>();
+    for (const row of data) {
+      if (!byMonth.has(row.periodMonth)) {
+        byMonth.set(row.periodMonth, { periodMonth: row.periodMonth });
+      }
+      (byMonth.get(row.periodMonth) as Record<string, unknown>)[row.cohort] = row[metric];
+    }
+    return [...byMonth.values()].sort((a, b) =>
+      String(a.periodMonth).localeCompare(String(b.periodMonth)),
+    );
+  }, [data, metric]);
+
+  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(
+    () => [
+      { accessorKey: 'periodMonth', header: 'Period', enableSorting: true },
+      ...cohortKeys.map((key) => ({
+        accessorKey: key,
+        header: chartConfig?.[key]?.label ?? key,
+        enableSorting: true,
+        meta: { align: 'right' as const },
+        cell: ({ getValue }: { getValue: () => unknown }) => {
+          const val = getValue() as number | undefined;
+          return (
+            <span className="tabular-nums">
+              {val != null ? formatNum(val) : '—'}
+            </span>
+          );
+        },
+      })),
+    ],
+    [cohortKeys, chartConfig],
+  );
+
+  const table = useReactTable({
+    data: pivoted,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting },
+    onSortingChange: setSorting,
+  });
+
+  if (isFetching && data.length === 0) return <Skeleton className="h-[300px] w-full" />;
+
+  if (data.length === 0) {
+    return (
+      <div className="min-h-[120px] flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">No data for selected filters.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto mt-2">
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => {
+                const isRightAligned =
+                  (header.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                return (
+                  <TableHead key={header.id} className={isRightAligned ? 'text-right' : ''}>
+                    <SortableHeader header={header} isRightAligned={isRightAligned} />
+                  </TableHead>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => {
+                const isRightAligned =
+                  (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                return (
+                  <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+// Inline RampUpDataTable: pivots RampUpBucket[] by weekIndex, one column per joinPeriod
+function RampUpDataTable({
+  data,
+  isFetching,
+}: {
+  data: RampUpBucket[];
+  isFetching: boolean;
+}) {
+  const [sorting, setSorting] = useState<SortingState>([]);
+
+  const joinPeriods = useMemo(
+    () => [...new Set(data.map((r) => r.joinPeriod))].sort(),
+    [data],
+  );
+
+  const pivoted = useMemo(() => {
+    const byWeek = new Map<number, Record<string, unknown>>();
+    for (const row of data) {
+      if (!byWeek.has(row.weekIndex)) {
+        byWeek.set(row.weekIndex, { weekIndex: row.weekIndex });
+      }
+      (byWeek.get(row.weekIndex) as Record<string, unknown>)[row.joinPeriod] = row.avgLinesChanged;
+    }
+    return [...byWeek.values()].sort(
+      (a, b) => (a.weekIndex as number) - (b.weekIndex as number),
+    );
+  }, [data]);
+
+  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(
+    () => [
+      {
+        accessorKey: 'weekIndex',
+        header: 'Week #',
+        enableSorting: true,
+        meta: { align: 'right' as const },
+        cell: ({ getValue }: { getValue: () => unknown }) => (
+          <span className="tabular-nums">{String(getValue())}</span>
+        ),
+      },
+      ...joinPeriods.map((jp) => ({
+        accessorKey: jp,
+        header: jp,
+        enableSorting: true,
+        meta: { align: 'right' as const },
+        cell: ({ getValue }: { getValue: () => unknown }) => {
+          const val = getValue() as number | undefined;
+          return (
+            <span className="tabular-nums">
+              {val != null ? formatNum(val) : '—'}
+            </span>
+          );
+        },
+      })),
+    ],
+    [joinPeriods],
+  );
+
+  const table = useReactTable({
+    data: pivoted,
+    columns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting },
+    onSortingChange: setSorting,
+  });
+
+  if (isFetching && data.length === 0) return <Skeleton className="h-[300px] w-full" />;
+
+  if (data.length === 0) {
+    return (
+      <div className="min-h-[120px] flex items-center justify-center">
+        <p className="text-sm text-muted-foreground">No ramp-up data for selected filters.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto mt-2">
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((headerGroup) => (
+            <TableRow key={headerGroup.id}>
+              {headerGroup.headers.map((header) => {
+                const isRightAligned =
+                  (header.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                return (
+                  <TableHead key={header.id} className={isRightAligned ? 'text-right' : ''}>
+                    <SortableHeader header={header} isRightAligned={isRightAligned} />
+                  </TableHead>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow key={row.id}>
+              {row.getVisibleCells().map((cell) => {
+                const isRightAligned =
+                  (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                return (
+                  <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </TableCell>
+                );
+              })}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
 
 const METRIC_OPTIONS: { label: string; value: MetricOption }[] = [
   { label: 'Count', value: 'totalCount' },
@@ -55,6 +325,9 @@ export default function DashboardPage() {
 
   const [prMetric, setPrMetric] = useState<MetricOption>('totalCount');
   const [commitMetric, setCommitMetric] = useState<MetricOption>('totalCount');
+  const [cohortPrView, setCohortPrView] = useState<'chart' | 'table'>('chart');
+  const [cohortCommitView, setCohortCommitView] = useState<'chart' | 'table'>('chart');
+  const [rampUpView, setRampUpView] = useState<'chart' | 'table'>('chart');
 
   // Fetch AI marker date
   const { data: markerData } = useAiMarker();
@@ -221,15 +494,23 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-medium">PR Size Trends</h3>
-                <Tabs value={prMetric} onValueChange={(v) => setPrMetric(v as MetricOption)}>
-                  <TabsList className="h-8 gap-1">
-                    {METRIC_OPTIONS.map(({ label, value }) => (
-                      <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
-                        {label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
+                <div className="flex items-center gap-2">
+                  <Tabs value={prMetric} onValueChange={(v) => setPrMetric(v as MetricOption)}>
+                    <TabsList className="h-8 gap-1">
+                      {METRIC_OPTIONS.map(({ label, value }) => (
+                        <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                  <Tabs value={cohortPrView} onValueChange={(v) => setCohortPrView(v as 'chart' | 'table')}>
+                    <TabsList className="h-8 gap-1">
+                      <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
+                      <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
               </div>
               <StatCalloutRow>
                 {prInsights.map((insight) => (
@@ -244,18 +525,29 @@ export default function DashboardPage() {
                 ))}
               </StatCalloutRow>
               <div className="mt-4">
-                <NarrativeCard
-                  text={cohortTrendNarrative(prData, prMetric, METRIC_NARRATIVE_LABELS[prMetric].pr)}
-                  isFetching={prFetching && prData.length === 0}
-                />
-                <CohortAreaChart
-                  data={prData}
-                  metric={prMetric}
-                  title="PR Count by Cohort"
-                  aiMarkerDate={markerDate}
-                  isFetching={prFetching}
-                  chartConfig={dynamicChartConfig}
-                />
+                {cohortPrView === 'chart' ? (
+                  <>
+                    <NarrativeCard
+                      text={cohortTrendNarrative(prData, prMetric, METRIC_NARRATIVE_LABELS[prMetric].pr)}
+                      isFetching={prFetching && prData.length === 0}
+                    />
+                    <CohortAreaChart
+                      data={prData}
+                      metric={prMetric}
+                      title="PR Count by Cohort"
+                      aiMarkerDate={markerDate}
+                      isFetching={prFetching}
+                      chartConfig={dynamicChartConfig}
+                    />
+                  </>
+                ) : (
+                  <CohortDataTable
+                    data={prData}
+                    metric={prMetric}
+                    isFetching={prFetching}
+                    chartConfig={dynamicChartConfig}
+                  />
+                )}
               </div>
               <HelpPanel>
                 <p>
@@ -289,15 +581,23 @@ export default function DashboardPage() {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-base font-medium">Commit Size Trends</h3>
-                <Tabs value={commitMetric} onValueChange={(v) => setCommitMetric(v as MetricOption)}>
-                  <TabsList className="h-8 gap-1">
-                    {METRIC_OPTIONS.map(({ label, value }) => (
-                      <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
-                        {label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
+                <div className="flex items-center gap-2">
+                  <Tabs value={commitMetric} onValueChange={(v) => setCommitMetric(v as MetricOption)}>
+                    <TabsList className="h-8 gap-1">
+                      {METRIC_OPTIONS.map(({ label, value }) => (
+                        <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                  <Tabs value={cohortCommitView} onValueChange={(v) => setCohortCommitView(v as 'chart' | 'table')}>
+                    <TabsList className="h-8 gap-1">
+                      <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
+                      <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
               </div>
               <StatCalloutRow>
                 {commitInsights.map((insight) => (
@@ -312,18 +612,29 @@ export default function DashboardPage() {
                 ))}
               </StatCalloutRow>
               <div className="mt-4">
-                <NarrativeCard
-                  text={cohortTrendNarrative(commitData, commitMetric, METRIC_NARRATIVE_LABELS[commitMetric].commit)}
-                  isFetching={commitFetching && commitData.length === 0}
-                />
-                <CohortAreaChart
-                  data={commitData}
-                  metric={commitMetric}
-                  title="Commit Count by Cohort"
-                  aiMarkerDate={markerDate}
-                  isFetching={commitFetching}
-                  chartConfig={dynamicChartConfig}
-                />
+                {cohortCommitView === 'chart' ? (
+                  <>
+                    <NarrativeCard
+                      text={cohortTrendNarrative(commitData, commitMetric, METRIC_NARRATIVE_LABELS[commitMetric].commit)}
+                      isFetching={commitFetching && commitData.length === 0}
+                    />
+                    <CohortAreaChart
+                      data={commitData}
+                      metric={commitMetric}
+                      title="Commit Count by Cohort"
+                      aiMarkerDate={markerDate}
+                      isFetching={commitFetching}
+                      chartConfig={dynamicChartConfig}
+                    />
+                  </>
+                ) : (
+                  <CohortDataTable
+                    data={commitData}
+                    metric={commitMetric}
+                    isFetching={commitFetching}
+                    chartConfig={dynamicChartConfig}
+                  />
+                )}
               </div>
             </div>
 
@@ -359,7 +670,15 @@ export default function DashboardPage() {
 
         {/* Section 3: Ramp-Up Curves (D-11) */}
         <section>
-          <SectionHeader title="Ramp-Up Curves" scope="independent" />
+          <div className="flex items-center justify-between">
+            <SectionHeader title="Ramp-Up Curves" scope="independent" />
+            <Tabs value={rampUpView} onValueChange={(v) => setRampUpView(v as 'chart' | 'table')}>
+              <TabsList className="h-8 gap-1">
+                <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
+                <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
           <div className="mt-4">
             <StatCalloutRow>
               {rampUpInsights.map((insight) => (
@@ -374,10 +693,17 @@ export default function DashboardPage() {
               ))}
             </StatCalloutRow>
             <div className="mt-4">
-              <RampUpLineChart
-                data={rampUpData}
-                isFetching={rampUpFetching}
-              />
+              {rampUpView === 'chart' ? (
+                <RampUpLineChart
+                  data={rampUpData}
+                  isFetching={rampUpFetching}
+                />
+              ) : (
+                <RampUpDataTable
+                  data={rampUpData}
+                  isFetching={rampUpFetching}
+                />
+              )}
             </div>
             <HelpPanel>
               <p>
