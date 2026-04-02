@@ -7,7 +7,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableProperties } from 'lucide-react';
 import {
   Card,
   CardHeader,
@@ -177,14 +177,14 @@ export default function RollingCards({
       <div className="flex justify-end gap-2">
         <Tabs value={granularity} onValueChange={(v) => onGranularityChange(v as 'month' | 'quarter')}>
           <TabsList className="h-8 gap-1">
-            <TabsTrigger value="month" className="px-3 py-1">Month</TabsTrigger>
-            <TabsTrigger value="quarter" className="px-3 py-1">Quarter</TabsTrigger>
+            <TabsTrigger value="month" className="px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">Month</TabsTrigger>
+            <TabsTrigger value="quarter" className="px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">Quarter</TabsTrigger>
           </TabsList>
         </Tabs>
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
-          <TabsList className="h-8 gap-1">
-            <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
-            <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+          <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+            <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+            <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

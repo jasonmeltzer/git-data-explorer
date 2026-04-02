@@ -9,7 +9,7 @@ import {
   type SortingState,
   type Header,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableProperties } from 'lucide-react';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
 import { useAiMarker } from '../hooks/useAiMarker.js';
 import { useCohortConfig } from '../hooks/useCohortConfig.js';
@@ -458,7 +458,7 @@ export default function DashboardPage() {
         {/* Seed data banner */}
         {isSeedDb && (
           <div className="rounded-md border border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
-            Viewing synthetic seed data — charts show simulated contribution patterns, not real GitHub data.
+            Viewing synthetic seed data. Charts show simulated contribution patterns, not real GitHub data.
           </div>
         )}
 
@@ -500,16 +500,16 @@ export default function DashboardPage() {
                   <Tabs value={prMetric} onValueChange={(v) => setPrMetric(v as MetricOption)}>
                     <TabsList className="h-8 gap-1">
                       {METRIC_OPTIONS.map(({ label, value }) => (
-                        <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
+                        <TabsTrigger key={value} value={value} className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">
                           {label}
                         </TabsTrigger>
                       ))}
                     </TabsList>
                   </Tabs>
                   <Tabs value={cohortPrView} onValueChange={(v) => setCohortPrView(v as 'chart' | 'table')}>
-                    <TabsList className="h-8 gap-1">
-                      <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
-                      <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+                    <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+                      <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+                      <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
                     </TabsList>
                   </Tabs>
                 </div>
@@ -553,15 +553,15 @@ export default function DashboardPage() {
               </div>
               <HelpPanel>
                 <p>
-                  This chart shows how the average size of pull requests has changed over time,
+                  This section shows how the average size of pull requests has changed over time,
                   grouped by how long contributors had been active when they opened each PR.
-                  The x-axis is time (by month), and the y-axis shows the selected metric —
+                  The x-axis is time (by month), and the y-axis shows the selected metric:
                   PR count, average lines added, lines deleted, or files changed.
                 </p>
                 <p className="mt-2">
                   Each cohort line (new devs, mid-tenure, senior) tells a different story.
                   If you see the new-dev line rising steeply after your AI adoption date, that
-                  suggests newer contributors are taking on larger or more frequent PRs — a
+                  suggests newer contributors are taking on larger or more frequent PRs, a
                   common signal of AI-assisted productivity. If all cohort lines move together,
                   the trend is likely org-wide rather than experience-dependent.
                 </p>
@@ -573,7 +573,7 @@ export default function DashboardPage() {
                 </p>
                 <p className="mt-2">
                   You can switch the metric with the "Count / Lines Added / Lines Deleted /
-                  Files Changed" tabs above the chart. To adjust cohort boundaries, go to{' '}
+                  Files Changed" tabs above. To adjust cohort boundaries, go to{' '}
                   <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
                 </p>
               </HelpPanel>
@@ -587,16 +587,16 @@ export default function DashboardPage() {
                   <Tabs value={commitMetric} onValueChange={(v) => setCommitMetric(v as MetricOption)}>
                     <TabsList className="h-8 gap-1">
                       {METRIC_OPTIONS.map(({ label, value }) => (
-                        <TabsTrigger key={value} value={value} className="text-xs px-3 py-1">
+                        <TabsTrigger key={value} value={value} className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">
                           {label}
                         </TabsTrigger>
                       ))}
                     </TabsList>
                   </Tabs>
                   <Tabs value={cohortCommitView} onValueChange={(v) => setCohortCommitView(v as 'chart' | 'table')}>
-                    <TabsList className="h-8 gap-1">
-                      <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
-                      <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+                    <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+                      <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+                      <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
                     </TabsList>
                   </Tabs>
                 </div>
@@ -642,9 +642,9 @@ export default function DashboardPage() {
 
             <HelpPanel>
               <p>
-                This chart shows how the average size of individual commits has changed over
+                This section shows how the average size of individual commits has changed over
                 time, broken down by contributor tenure cohort. The y-axis reflects the
-                selected metric — commit count, average lines added, lines deleted, or files
+                selected metric: commit count, average lines added, lines deleted, or files
                 changed per commit.
               </p>
               <p className="mt-2">
@@ -652,14 +652,14 @@ export default function DashboardPage() {
                 more iterative development practices, while larger commits may indicate batch
                 work or infrequent saves. AI coding assistants tend to produce larger
                 individual changes, so an increase in average lines per commit after your
-                AI adoption date — especially in the new-dev cohort — can be an early
+                AI adoption date, especially in the new-dev cohort, can be an early
                 adoption signal.
               </p>
               <p className="mt-2">
                 If the new-dev cohort line rises faster than senior contributors after your
                 AI date, newer team members may be generating more code per commit, which
                 is worth pairing with the Ramp-Up chart to confirm whether this reflects
-                productivity or noise. Use the metric toggle above the chart to explore
+                productivity or noise. Use the metric toggle above to explore
                 which signals are most visible in your data.
               </p>
               <p className="mt-2">
@@ -675,9 +675,9 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <SectionHeader title="Ramp-Up Curves" scope="independent" />
             <Tabs value={rampUpView} onValueChange={(v) => setRampUpView(v as 'chart' | 'table')}>
-              <TabsList className="h-8 gap-1">
-                <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
-                <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+              <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+                <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+                <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -709,14 +709,14 @@ export default function DashboardPage() {
             </div>
             <HelpPanel>
               <p>
-                This chart shows how quickly new contributors reached meaningful contribution
+                This section shows how quickly new contributors reached meaningful contribution
                 sizes after joining, grouped by the quarter they made their first commit.
                 The x-axis is weeks from first commit, and the y-axis is the average number
                 of lines changed per commit in that week.
               </p>
               <p className="mt-2">
                 Each line represents a cohort of developers who joined in the same quarter.
-                Steeper early rises mean contributors ramped up faster — producing
+                Steeper early rises mean contributors ramped up faster, producing
                 larger changes sooner. A flat early period followed by a sharp rise suggests
                 an onboarding ramp that took several weeks before developers felt confident.
               </p>
@@ -799,7 +799,7 @@ export default function DashboardPage() {
             <p className="mt-2">
               The Pre-AI and Post-AI columns compare activity from before and after the
               AI adoption date configured in Settings. If no AI adoption date is set, these
-              columns will be empty — go to{' '}
+              columns will be empty. Go to{' '}
               <a href="#/settings" className="underline hover:text-foreground">Settings</a>{' '}
               to configure it.
             </p>
@@ -811,7 +811,7 @@ export default function DashboardPage() {
               specific people.
             </p>
             <p className="mt-2">
-              This view shows how contribution patterns shifted across your team — not individual performance scores. No default sort is applied to change columns;
+              This view shows how contribution patterns shifted across your team, not individual performance scores. No default sort is applied to change columns;
               the default sort is total commits, which reflects overall activity level.
             </p>
             <p className="mt-2">

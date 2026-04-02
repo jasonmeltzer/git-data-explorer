@@ -7,7 +7,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableProperties } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -104,9 +104,9 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
       <div className="flex items-center justify-between">
         <SectionHeader title="PR Review Turnaround" scope="filtered" />
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
-          <TabsList className="h-8 gap-1">
-            <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
-            <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+          <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+            <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+            <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -251,7 +251,7 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
 
       <HelpPanel>
         <p>
-          This chart shows how the average time from PR creation to merge has changed
+          This section shows how the average time from PR creation to merge has changed
           over time. Each data point is the average hours-to-merge for PRs opened in
           that month. Lower values mean PRs are being merged more quickly.
         </p>
@@ -265,7 +265,7 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
         <p className="mt-2">
           This metric uses the median review time per month to reduce distortion from
           very large or very old PRs. Repos without complete PR data will affect the
-          accuracy of this chart — check the Collection tab for completeness status.
+          accuracy of this section. Check the Collection tab for completeness status.
         </p>
       </HelpPanel>
     </section>

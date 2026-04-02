@@ -121,9 +121,10 @@ export interface ContributorBeforeAfterParams {
 export function getContributorBeforeAfterStats(params: ContributorBeforeAfterParams): ContributorBeforeAfterStats[] {
   const { startDate, endDate, aiMarkerDate, tenureMode, repoIds } = params;
 
-  // Pre-AI period: startDate to day before marker
+  // Pre-AI period: all data up to day before marker (ignores dashboard startDate
+  // so that pre-AI stats are complete even when the dashboard filter is narrow)
   const preEnd = new Date(aiMarkerDate.getTime() - 1);
-  const preStats = getContributorStats({ startDate, endDate: preEnd, tenureMode, repoIds });
+  const preStats = getContributorStats({ startDate: new Date(0), endDate: preEnd, tenureMode, repoIds });
 
   // Post-AI period: marker to endDate
   const postStats = getContributorStats({ startDate: aiMarkerDate, endDate, tenureMode, repoIds });

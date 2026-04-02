@@ -339,9 +339,10 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds, aiMa
             )}
           </div>
           {!aiMarkerDate && (
-            <p className="text-xs text-muted-foreground mt-2">
-              <a href="#/settings" className="text-primary hover:underline">Set AI adoption date in Settings</a> to see before/after comparison columns.
-            </p>
+            <div className="mt-3 rounded-md border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+              Want to see how contribution patterns changed after AI adoption?{' '}
+              <a href="#/settings" className="font-medium text-primary hover:underline">Set an AI adoption date in Settings</a> to add before/after comparison columns to this table.
+            </div>
           )}
         </CollapsibleContent>
       </Collapsible>

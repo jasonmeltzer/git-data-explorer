@@ -7,7 +7,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableProperties } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -109,9 +109,9 @@ export function BotRatioChart({ startDate, endDate, repoIds }: BotRatioChartProp
       <div className="flex items-center justify-between">
         <SectionHeader title="Bot vs Human Contributions" scope="filtered" />
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
-          <TabsList className="h-8 gap-1">
-            <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
-            <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+          <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+            <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+            <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -254,17 +254,17 @@ export function BotRatioChart({ startDate, endDate, repoIds }: BotRatioChartProp
 
       <HelpPanel>
         <p>
-          This chart shows the percentage of total commits attributed to bots
+          This section shows the percentage of total commits attributed to bots
           (Dependabot, Renovate, GitHub Actions, and similar accounts) versus human
           contributors over time. A rising bot ratio may reflect increasing adoption
-          of automated dependency management or CI/CD pipelines — not a problem, but
-          context that helps you read the human-contributor charts accurately.
+          of automated dependency management or CI/CD pipelines. This is not a problem, but
+          context that helps you read the human-contributor data accurately.
         </p>
         <p className="mt-2">
           Bot commits are excluded from all cohort and ramp-up analysis. If your bot
           ratio spikes unexpectedly, check whether a new automation was introduced
           around that time. A consistently high bot ratio (over 30%) may indicate your
-          collection window captures a lot of infrastructure repos — consider filtering
+          collection window captures a lot of infrastructure repos. Consider filtering
           to application repos for cleaner contributor analysis.
         </p>
         <p className="mt-2">

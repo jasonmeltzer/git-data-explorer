@@ -11,7 +11,13 @@ import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs';
 import { cn } from '@shared/lib/utils';
 import type { DatePreset } from '../hooks/useDashboardFilters';
 import type { TrackedRepo } from '@shared/types.js';
-import { CalendarIcon, CheckIcon, ChevronDownIcon } from 'lucide-react';
+import { CalendarIcon, CheckIcon, ChevronDownIcon, HelpCircle } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from '@shared/components/ui/tooltip';
 import type { DateRange } from 'react-day-picker';
 
 const DATE_PRESETS: { label: string; value: DatePreset }[] = [
@@ -204,16 +210,29 @@ export default function FilterBar({
 
         {/* Tenure mode toggle */}
         <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground whitespace-nowrap">Cohort mode</span>
+        <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
+          Cohort mode
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+              </TooltipTrigger>
+              <TooltipContent side="bottom" className="block max-w-sm text-left leading-relaxed bg-popover text-popover-foreground border shadow-md">
+                <p><strong>Global:</strong> Tenure is measured from each contributor's first commit across all repos. A senior contributor is senior everywhere.</p>
+                <p className="mt-1"><strong>Per-repo:</strong> Tenure resets per repo. A veteran in one repo can be "new" in another they just started contributing to.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </span>
         <Tabs
           value={tenureMode}
           onValueChange={(v) => setTenureMode(v as 'global' | 'repo')}
         >
           <TabsList className="h-7">
-            <TabsTrigger value="global" className="text-xs px-2 py-0.5">
+            <TabsTrigger value="global" className="text-xs px-2 py-0.5 data-active:bg-primary data-active:text-primary-foreground">
               Global
             </TabsTrigger>
-            <TabsTrigger value="repo" className="text-xs px-2 py-0.5">
+            <TabsTrigger value="repo" className="text-xs px-2 py-0.5 data-active:bg-primary data-active:text-primary-foreground">
               Per-repo
             </TabsTrigger>
           </TabsList>

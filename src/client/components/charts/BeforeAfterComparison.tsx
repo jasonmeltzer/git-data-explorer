@@ -7,7 +7,7 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableProperties } from 'lucide-react';
 import { useBeforeAfter } from '../../hooks/useBeforeAfter.js';
 import { SectionHeader } from '../SectionHeader.js';
 import { HelpPanel } from '../HelpPanel.js';
@@ -185,9 +185,9 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
       <div className="flex items-center justify-between">
         <SectionHeader title="Before/After AI Adoption" scope="filtered" />
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
-          <TabsList className="h-8 gap-1">
-            <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
-            <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+          <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+            <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+            <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -302,8 +302,8 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
           </p>
           <p className="mt-2">
             Green values mean the metric increased; red means it decreased. For metrics
-            where a decrease is a positive signal — such as PR turnaround time or ramp-up
-            weeks — the color polarity is inverted so that improvement always shows green.
+            where a decrease is a positive signal (such as PR turnaround time or ramp-up
+            weeks), the color polarity is inverted so that improvement always shows green.
           </p>
           <p className="mt-2">
             If you have not set an AI adoption date, this view will not show comparisons.
@@ -319,7 +319,7 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
             is concentrated in newer contributors or org-wide.
           </p>
           <p className="mt-2">
-            This view shows how contribution patterns shifted across your team — not individual performance scores.
+            This view shows how contribution patterns shifted across your team, not individual performance scores.
           </p>
         </HelpPanel>
       </div>
