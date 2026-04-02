@@ -7,6 +7,7 @@ import {
   flexRender,
   type ColumnDef,
   type SortingState,
+  type Header,
 } from '@tanstack/react-table';
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
@@ -53,7 +54,8 @@ function SortableHeader({
   header,
   isRightAligned,
 }: {
-  header: { column: { getCanSort: () => boolean; getIsSorted: () => false | 'asc' | 'desc'; columnDef: { header: unknown }; getToggleSortingHandler: () => ((e: unknown) => void) | undefined }; getContext: () => unknown };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  header: Header<any, any>;
   isRightAligned: boolean;
 }) {
   const sorted = header.column.getIsSorted();
