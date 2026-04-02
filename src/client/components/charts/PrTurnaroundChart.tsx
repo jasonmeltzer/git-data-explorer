@@ -1,3 +1,13 @@
+import { useState } from 'react';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableProperties } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -11,8 +21,18 @@ import {
   ChartTooltipContent,
 } from '@shared/components/ui/chart.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-import { usePrTurnaround } from '../../hooks/usePrTurnaround.js';
+import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@shared/components/ui/table.js';
+import { usePrTurnaround, type PrTurnaroundRow } from '../../hooks/usePrTurnaround.js';
 import { computePrTurnaroundInsights } from '../../lib/insights.js';
+import { formatNum } from '../../lib/deltaFormat.js';
 import { SectionHeader } from '../SectionHeader.js';
 import { HelpPanel } from '../HelpPanel.js';
 import { StatCalloutRow } from './StatCalloutRow.js';
@@ -32,8 +52,44 @@ const chartConfig = {
   },
 };
 
+const prTurnaroundColumns: ColumnDef<PrTurnaroundRow>[] = [
+  { accessorKey: 'periodMonth', header: 'Month', enableSorting: true },
+  {
+    accessorKey: 'avgHoursToMerge',
+    header: 'Avg Hours to Merge',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => {
+      const hours = getValue<number>();
+      return (
+        <span className="tabular-nums">
+          {hours < 24 ? `${Math.round(hours)}h` : `${(hours / 24).toFixed(1)}d`}
+        </span>
+      );
+    },
+  },
+  {
+    accessorKey: 'prCount',
+    header: 'PR Count',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => <span className="tabular-nums">{formatNum(getValue<number>())}</span>,
+  },
+];
+
 export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundChartProps) {
+  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [sorting, setSorting] = useState<SortingState>([]);
   const { data = [], isFetching } = usePrTurnaround({ startDate, endDate, repoIds });
+
+  const tableInstance = useReactTable({
+    data,
+    columns: prTurnaroundColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting },
+    onSortingChange: setSorting,
+  });
 
   const insights = computePrTurnaroundInsights(data);
 
@@ -45,7 +101,15 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
 
   return (
     <section>
-      <SectionHeader title="PR Review Turnaround" scope="filtered" />
+      <div className="flex items-center justify-between">
+        <SectionHeader title="PR Review Turnaround" scope="filtered" />
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
+          <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+            <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+            <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
       <div className="mt-4">
         <StatCalloutRow>
           {insights.map((insight) => (
@@ -62,64 +126,147 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
       </div>
 
       <div className="mt-4">
-        {isFetching && data.length === 0 ? (
-          <div className="min-h-[240px] w-full flex flex-col justify-end gap-2 p-4">
-            <Skeleton className="h-[60%] w-full" />
-            <Skeleton className="h-[80%] w-full" />
-            <Skeleton className="h-[50%] w-full" />
-          </div>
-        ) : data.length === 0 ? (
-          <div className="min-h-[240px] w-full flex items-center justify-center">
-            <p className="text-sm text-muted-foreground">
-              Not enough merged PRs in this range to calculate a reliable median.
-            </p>
-          </div>
-        ) : (
-          <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <LineChart accessibilityLayer data={data}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="periodMonth"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                tickFormatter={(v: number) => v < 24 ? `${v}h` : `${(v / 24).toFixed(1)}d`}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value) => {
-                      const hours = Number(value);
-                      return hours < 24 ? `${Math.round(hours)}h` : `${(hours / 24).toFixed(1)}d`;
-                    }}
+        {viewMode === 'chart' ? (
+          <>
+            {isFetching && data.length === 0 ? (
+              <div className="min-h-[240px] w-full flex flex-col justify-end gap-2 p-4">
+                <Skeleton className="h-[60%] w-full" />
+                <Skeleton className="h-[80%] w-full" />
+                <Skeleton className="h-[50%] w-full" />
+              </div>
+            ) : data.length === 0 ? (
+              <div className="min-h-[240px] w-full flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">
+                  Not enough merged PRs in this range to calculate a reliable median.
+                </p>
+              </div>
+            ) : (
+              <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <LineChart accessibilityLayer data={data}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="periodMonth"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 12 }}
                   />
-                }
-              />
-              <Line
-                type="monotone"
-                dataKey="avgHoursToMerge"
-                stroke="var(--chart-1)"
-                strokeWidth={2}
-                dot={{ r: 4, fill: 'var(--chart-1)' }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ChartContainer>
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(v: number) => v < 24 ? `${v}h` : `${(v / 24).toFixed(1)}d`}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => {
+                          const hours = Number(value);
+                          return hours < 24 ? `${Math.round(hours)}h` : `${(hours / 24).toFixed(1)}d`;
+                        }}
+                      />
+                    }
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="avgHoursToMerge"
+                    stroke="var(--chart-1)"
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: 'var(--chart-1)' }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ChartContainer>
+            )}
+          </>
+        ) : (
+          <>
+            {isFetching && data.length === 0 ? (
+              <Skeleton className="h-[300px] w-full" />
+            ) : data.length === 0 ? (
+              <div className="min-h-[120px] flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">No data for selected filters.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    {tableInstance.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => {
+                          const isRightAligned =
+                            (header.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                          const sorted = header.column.getIsSorted();
+                          return (
+                            <TableHead key={header.id} className={isRightAligned ? 'text-right' : ''}>
+                              {header.column.getCanSort() ? (
+                                <button
+                                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                                  style={isRightAligned ? { marginLeft: 'auto' } : undefined}
+                                  onClick={header.column.getToggleSortingHandler()}
+                                >
+                                  {flexRender(header.column.columnDef.header, header.getContext())}
+                                  {sorted === 'asc' ? (
+                                    <ArrowUp className="h-3 w-3" />
+                                  ) : sorted === 'desc' ? (
+                                    <ArrowDown className="h-3 w-3" />
+                                  ) : (
+                                    <ArrowUpDown className="h-3 w-3 opacity-50" />
+                                  )}
+                                </button>
+                              ) : (
+                                flexRender(header.column.columnDef.header, header.getContext())
+                              )}
+                            </TableHead>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {tableInstance.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => {
+                          const isRightAligned =
+                            (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                          return (
+                            <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {narrativeText && (
+      {viewMode === 'chart' && narrativeText && (
         <NarrativeCard text={narrativeText} isFetching={isFetching && data.length === 0} />
       )}
 
       <HelpPanel>
-        Time-to-merge measures the average hours between a PR being opened and being merged. Trends here reflect review velocity and PR complexity. Smaller PRs from AI-assisted development often merge faster.
+        <p>
+          This section shows how the average time from PR creation to merge has changed
+          over time. Each data point is the average hours-to-merge for PRs opened in
+          that month. Lower values mean PRs are being merged more quickly.
+        </p>
+        <p className="mt-2">
+          Faster turnaround can reflect smaller PRs (easier to review), better review
+          culture, or AI-assisted code review tooling. If you see a step-change
+          downward after your AI adoption date, that is worth investigating as a
+          productivity signal. If turnaround time is increasing, it may indicate that
+          PR sizes are growing faster than review capacity can keep up.
+        </p>
+        <p className="mt-2">
+          This metric uses the median review time per month to reduce distortion from
+          very large or very old PRs. Repos without complete PR data will affect the
+          accuracy of this section. Check the Collection tab for completeness status.
+        </p>
       </HelpPanel>
     </section>
   );

@@ -7,6 +7,7 @@
  */
 
 import type { CohortMetricsRow, RollingComparisonResult, RampUpBucket } from '@shared/types.js';
+import { COHORT_LABELS } from '@shared/cohort-config.js';
 
 export interface StatInsight {
   label: string;
@@ -96,7 +97,7 @@ export function computeCohortInsights(
     const v = row[metric] as number;
     if (v > peakValue) {
       peakValue = v;
-      peakCohort = row.cohort;
+      peakCohort = COHORT_LABELS[row.cohort] ?? row.cohort;
     }
   }
 

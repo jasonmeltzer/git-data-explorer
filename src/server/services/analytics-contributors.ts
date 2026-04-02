@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { getCompleteRepoIds } from './analytics-utils.js';
-import type { TenureMode, CohortLabel, ContributorStats } from '../../shared/types.js';
+import type { TenureMode, CohortLabel, ContributorStats, ContributorBeforeAfterStats } from '../../shared/types.js';
 import { getThresholdSeconds } from '../../shared/cohort-config.js';
 import { getCohortConfig } from './cohort-config-service.js';
 
@@ -103,4 +103,49 @@ export function getContributorStats(params: ContributorStatsParams): Contributor
     avgFilesChanged: row.avg_files_changed,
     firstCommitAt: new Date(row.first_commit_at_epoch * 1000).toISOString(),
   }));
+}
+
+export interface ContributorBeforeAfterParams {
+  startDate: Date;
+  endDate: Date;
+  aiMarkerDate: Date;
+  tenureMode: TenureMode;
+  repoIds?: number[];
+}
+
+/**
+ * Get per-author stats split at the AI marker date.
+ * Runs getContributorStats twice (pre/post) and joins by authorLogin.
+ * Contributors present in only one period get null for the missing side.
+ */
+export function getContributorBeforeAfterStats(params: ContributorBeforeAfterParams): ContributorBeforeAfterStats[] {
+  const { startDate, endDate, aiMarkerDate, tenureMode, repoIds } = params;
+
+  // Pre-AI period: all data up to day before marker (ignores dashboard startDate
+  // so that pre-AI stats are complete even when the dashboard filter is narrow)
+  const preEnd = new Date(aiMarkerDate.getTime() - 1);
+  const preStats = getContributorStats({ startDate: new Date(0), endDate: preEnd, tenureMode, repoIds });
+
+  // Post-AI period: marker to endDate
+  const postStats = getContributorStats({ startDate: aiMarkerDate, endDate, tenureMode, repoIds });
+
+  // Build lookup maps
+  const preMap = new Map(preStats.map(s => [s.authorLogin, s]));
+  const postMap = new Map(postStats.map(s => [s.authorLogin, s]));
+
+  // Union of all logins
+  const allLogins = new Set([...preMap.keys(), ...postMap.keys()]);
+
+  return Array.from(allLogins).map(login => {
+    const pre = preMap.get(login) ?? null;
+    const post = postMap.get(login) ?? null;
+    const either = pre ?? post!;
+    return {
+      authorLogin: login,
+      cohort: either.cohort,
+      firstCommitAt: either.firstCommitAt,
+      pre,
+      post,
+    };
+  });
 }

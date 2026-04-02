@@ -4,7 +4,7 @@ import { getAiMarkerDate, setAiMarkerDate } from '../services/analytics-config.j
 import { getCohortCommitMetrics, getCohortPrMetrics } from '../services/analytics-cohorts.js';
 import { getRampUpCurves } from '../services/analytics-rampup.js';
 import { getRollingComparison } from '../services/analytics-rolling.js';
-import { getContributorStats } from '../services/analytics-contributors.js';
+import { getContributorStats, getContributorBeforeAfterStats } from '../services/analytics-contributors.js';
 import { getCohortConfig, setCohortConfig } from '../services/cohort-config-service.js';
 import { getPrTurnaroundTrend } from '../services/analytics-pr-turnaround.js';
 import { getBotRatioTrend } from '../services/analytics-bot-ratio.js';
@@ -226,6 +226,37 @@ analytics.get('/api/analytics/rolling', (c) => {
 });
 
 // ─── Contributors endpoint ────────────────────────────────────────────────────
+
+// GET /api/analytics/contributors/before-after — per-author pre/post AI marker stats
+analytics.get('/api/analytics/contributors/before-after', (c) => {
+  try {
+    const schema = cohortQuerySchema.extend({
+      aiMarkerDate: z.string().refine(v => !isNaN(new Date(v).getTime()), {
+        message: 'aiMarkerDate must be a valid date string',
+      }),
+    });
+    const parsed = schema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, tenureMode, repoIds, aiMarkerDate } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const results = getContributorBeforeAfterStats({
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      aiMarkerDate: new Date(aiMarkerDate),
+      tenureMode,
+      repoIds: repoIdsParsed,
+    });
+
+    return c.json(results);
+  } catch (err) {
+    console.error('GET /api/analytics/contributors/before-after error:', err);
+    return c.json({ error: 'Failed to fetch contributor before/after stats' }, 500);
+  }
+});
 
 // GET /api/analytics/contributors — per-author aggregate stats
 analytics.get('/api/analytics/contributors', (c) => {

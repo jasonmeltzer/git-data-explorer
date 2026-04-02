@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -11,7 +11,9 @@ import { format } from 'date-fns';
 import { ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 
 import { useContributors } from '../hooks/useContributors.js';
-import type { ContributorStats, CohortLabel } from '@shared/types.js';
+import { useContributorBeforeAfter } from '../hooks/useContributorBeforeAfter.js';
+import { pctDelta, formatNum } from '../lib/deltaFormat.js';
+import type { ContributorStats, CohortLabel, ContributorBeforeAfterStats } from '@shared/types.js';
 import { cohortColorMap, COHORT_LABELS } from '@shared/cohort-config.js';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@shared/components/ui/collapsible.js';
 import {
@@ -30,9 +32,10 @@ interface ContributorTableProps {
   endDate: string;
   tenureMode: 'global' | 'repo';
   repoIds: number[];
+  aiMarkerDate: string | null;
 }
 
-const columns: ColumnDef<ContributorStats>[] = [
+const baseColumns: ColumnDef<ContributorStats>[] = [
   {
     accessorKey: 'authorLogin',
     header: 'Author',
@@ -109,7 +112,94 @@ const columns: ColumnDef<ContributorStats>[] = [
   },
 ];
 
-export function ContributorTable({ startDate, endDate, tenureMode, repoIds }: ContributorTableProps) {
+type NumericKey = 'totalCommits' | 'totalPrs' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
+
+function makeDeltaColumns(
+  metricKey: NumericKey,
+  preHeader: string,
+  postHeader: string,
+  beforeAfterMap: Map<string, ContributorBeforeAfterStats>,
+): ColumnDef<ContributorStats>[] {
+  return [
+    {
+      id: `pre_${metricKey}`,
+      header: preHeader,
+      enableSorting: true,
+      meta: { align: 'right' },
+      accessorFn: (row) => beforeAfterMap.get(row.authorLogin)?.pre?.[metricKey] ?? null,
+      sortingFn: (rowA, rowB, columnId) => {
+        const a = rowA.getValue<number | null>(columnId);
+        const b = rowB.getValue<number | null>(columnId);
+        if (a === null && b === null) return 0;
+        if (a === null) return 1;
+        if (b === null) return -1;
+        return a - b;
+      },
+      cell: ({ getValue }) => {
+        const v = getValue<number | null>();
+        if (v === null) return <span className="text-muted-foreground">—</span>;
+        return <span className="tabular-nums">{formatNum(v)}</span>;
+      },
+    },
+    {
+      id: `post_${metricKey}`,
+      header: postHeader,
+      enableSorting: true,
+      meta: { align: 'right' },
+      accessorFn: (row) => beforeAfterMap.get(row.authorLogin)?.post?.[metricKey] ?? null,
+      sortingFn: (rowA, rowB, columnId) => {
+        const a = rowA.getValue<number | null>(columnId);
+        const b = rowB.getValue<number | null>(columnId);
+        if (a === null && b === null) return 0;
+        if (a === null) return 1;
+        if (b === null) return -1;
+        return a - b;
+      },
+      cell: ({ getValue }) => {
+        const v = getValue<number | null>();
+        if (v === null) return <span className="text-muted-foreground">—</span>;
+        return <span className="tabular-nums">{formatNum(v)}</span>;
+      },
+    },
+    {
+      id: `change_${metricKey}`,
+      header: 'Change',
+      enableSorting: true,
+      meta: { align: 'right' },
+      accessorFn: (row) => {
+        const ba = beforeAfterMap.get(row.authorLogin);
+        const pre = ba?.pre?.[metricKey];
+        const post = ba?.post?.[metricKey];
+        if (pre == null || post == null) return null;
+        if (pre === 0) return null;
+        return ((post - pre) / pre) * 100;
+      },
+      sortingFn: (rowA, rowB, columnId) => {
+        const a = rowA.getValue<number | null>(columnId);
+        const b = rowB.getValue<number | null>(columnId);
+        if (a === null && b === null) return 0;
+        if (a === null) return 1;
+        if (b === null) return -1;
+        return a - b;
+      },
+      cell: ({ row }) => {
+        const ba = beforeAfterMap.get(row.original.authorLogin);
+        const pre = ba?.pre?.[metricKey];
+        const post = ba?.post?.[metricKey];
+        if (pre == null && post == null) return <span className="text-muted-foreground">—</span>;
+        if (pre == null || post == null) return <span className="text-muted-foreground">N/A</span>;
+        const { str, positive } = pctDelta(pre, post);
+        return (
+          <span className={`tabular-nums ${positive ? 'text-emerald-500' : 'text-red-500'}`}>
+            {Math.round(pre)} → {Math.round(post)} ({str})
+          </span>
+        );
+      },
+    },
+  ];
+}
+
+export function ContributorTable({ startDate, endDate, tenureMode, repoIds, aiMarkerDate }: ContributorTableProps) {
   const [open, setOpen] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'totalCommits', desc: true }]);
 
@@ -120,9 +210,37 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds }: Co
     repoIds,
   });
 
+  const { data: beforeAfterData } = useContributorBeforeAfter({
+    startDate,
+    endDate,
+    tenureMode,
+    repoIds,
+    aiMarkerDate,
+  });
+
+  const beforeAfterMap = useMemo(() => {
+    if (!beforeAfterData) return new Map<string, ContributorBeforeAfterStats>();
+    return new Map(beforeAfterData.map(d => [d.authorLogin, d]));
+  }, [beforeAfterData]);
+
+  const allColumns = useMemo<ColumnDef<ContributorStats>[]>(() => {
+    const base = [...baseColumns];
+
+    if (!aiMarkerDate) return base;
+
+    return [
+      ...base,
+      ...makeDeltaColumns('totalCommits', 'Pre-AI Commits', 'Post-AI Commits', beforeAfterMap),
+      ...makeDeltaColumns('totalPrs', 'Pre-AI PRs', 'Post-AI PRs', beforeAfterMap),
+      ...makeDeltaColumns('avgLinesAdded', 'Pre-AI Lines+', 'Post-AI Lines+', beforeAfterMap),
+      ...makeDeltaColumns('avgLinesDeleted', 'Pre-AI Lines\u2212', 'Post-AI Lines\u2212', beforeAfterMap),
+      ...makeDeltaColumns('avgFilesChanged', 'Pre-AI Files', 'Post-AI Files', beforeAfterMap),
+    ];
+  }, [aiMarkerDate, beforeAfterMap]);
+
   const table = useReactTable({
     data: contributors ?? [],
-    columns,
+    columns: allColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     state: { sorting },
@@ -131,7 +249,8 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds }: Co
 
   return (
     <div>
-      <h2 className="text-xl font-semibold mb-3">Contribution Patterns by Author</h2>
+      <h2 className="text-xl font-semibold mb-1">Contribution Patterns by Author</h2>
+      <p className="text-sm text-muted-foreground mt-1 mb-3">How contribution patterns shifted after AI adoption</p>
       <Collapsible open={open} onOpenChange={setOpen}>
         <CollapsibleTrigger
           className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
@@ -219,6 +338,12 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds }: Co
               </Table>
             )}
           </div>
+          {!aiMarkerDate && (
+            <div className="mt-3 rounded-md border border-border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">
+              Want to see how contribution patterns changed after AI adoption?{' '}
+              <a href="#/settings" className="font-medium text-primary hover:underline">Set an AI adoption date in Settings</a> to add before/after comparison columns to this table.
+            </div>
+          )}
         </CollapsibleContent>
       </Collapsible>
     </div>
