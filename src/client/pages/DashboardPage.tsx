@@ -787,6 +787,7 @@ export default function DashboardPage() {
             endDate={endDate}
             tenureMode={tenureMode}
             repoIds={repoIds}
+            aiMarkerDate={markerDate}
           />
           <HelpPanel>
             <p>
