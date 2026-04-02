@@ -1,3 +1,13 @@
+import { useState } from 'react';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -11,7 +21,16 @@ import {
   ChartTooltipContent,
 } from '@shared/components/ui/chart.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-import { useBotRatio } from '../../hooks/useBotRatio.js';
+import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@shared/components/ui/table.js';
+import { useBotRatio, type BotRatioRow } from '../../hooks/useBotRatio.js';
 import { computeBotRatioInsights } from '../../lib/insights.js';
 import { SectionHeader } from '../SectionHeader.js';
 import { HelpPanel } from '../HelpPanel.js';
@@ -32,8 +51,50 @@ const chartConfig = {
   },
 };
 
+const botRatioColumns: ColumnDef<BotRatioRow>[] = [
+  { accessorKey: 'periodMonth', header: 'Month', enableSorting: true },
+  {
+    accessorKey: 'botPercentage',
+    header: 'Bot %',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => (
+      <span className="tabular-nums">{getValue<number>().toFixed(1)}%</span>
+    ),
+  },
+  {
+    accessorKey: 'botCommits',
+    header: 'Bot Commits',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => (
+      <span className="tabular-nums">{getValue<number>().toLocaleString()}</span>
+    ),
+  },
+  {
+    accessorKey: 'humanCommits',
+    header: 'Human Commits',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => (
+      <span className="tabular-nums">{getValue<number>().toLocaleString()}</span>
+    ),
+  },
+];
+
 export function BotRatioChart({ startDate, endDate, repoIds }: BotRatioChartProps) {
+  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [sorting, setSorting] = useState<SortingState>([]);
   const { data = [], isFetching } = useBotRatio({ startDate, endDate, repoIds });
+
+  const tableInstance = useReactTable({
+    data,
+    columns: botRatioColumns,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting },
+    onSortingChange: setSorting,
+  });
 
   const insights = computeBotRatioInsights(data);
 
@@ -45,7 +106,15 @@ export function BotRatioChart({ startDate, endDate, repoIds }: BotRatioChartProp
 
   return (
     <section>
-      <SectionHeader title="Bot vs Human Contributions" scope="filtered" />
+      <div className="flex items-center justify-between">
+        <SectionHeader title="Bot vs Human Contributions" scope="filtered" />
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
+          <TabsList className="h-8 gap-1">
+            <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
+            <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
       <div className="mt-4">
         <StatCalloutRow>
           {insights.map((insight) => (
@@ -62,57 +131,124 @@ export function BotRatioChart({ startDate, endDate, repoIds }: BotRatioChartProp
       </div>
 
       <div className="mt-4">
-        {isFetching && data.length === 0 ? (
-          <div className="min-h-[240px] w-full flex flex-col justify-end gap-2 p-4">
-            <Skeleton className="h-[60%] w-full" />
-            <Skeleton className="h-[80%] w-full" />
-            <Skeleton className="h-[50%] w-full" />
-          </div>
-        ) : data.length === 0 ? (
-          <div className="min-h-[240px] w-full flex items-center justify-center">
-            <p className="text-sm text-muted-foreground">
-              No commit data available for this period.
-            </p>
-          </div>
-        ) : (
-          <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <LineChart accessibilityLayer data={data}>
-              <CartesianGrid vertical={false} />
-              <XAxis
-                dataKey="periodMonth"
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis
-                tickLine={false}
-                axisLine={false}
-                tickMargin={8}
-                domain={[0, 100]}
-                tickFormatter={(v: number) => `${v}%`}
-              />
-              <ChartTooltip
-                content={
-                  <ChartTooltipContent
-                    formatter={(value) => `${Math.round(Number(value))}%`}
+        {viewMode === 'chart' ? (
+          <>
+            {isFetching && data.length === 0 ? (
+              <div className="min-h-[240px] w-full flex flex-col justify-end gap-2 p-4">
+                <Skeleton className="h-[60%] w-full" />
+                <Skeleton className="h-[80%] w-full" />
+                <Skeleton className="h-[50%] w-full" />
+              </div>
+            ) : data.length === 0 ? (
+              <div className="min-h-[240px] w-full flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">
+                  No commit data available for this period.
+                </p>
+              </div>
+            ) : (
+              <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <LineChart accessibilityLayer data={data}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="periodMonth"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tick={{ fontSize: 12 }}
                   />
-                }
-              />
-              <Line
-                type="monotone"
-                dataKey="botPercentage"
-                stroke="var(--chart-2)"
-                strokeWidth={2}
-                dot={{ r: 4, fill: 'var(--chart-2)' }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ChartContainer>
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    domain={[0, 100]}
+                    tickFormatter={(v: number) => `${v}%`}
+                  />
+                  <ChartTooltip
+                    content={
+                      <ChartTooltipContent
+                        formatter={(value) => `${Math.round(Number(value))}%`}
+                      />
+                    }
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="botPercentage"
+                    stroke="var(--chart-2)"
+                    strokeWidth={2}
+                    dot={{ r: 4, fill: 'var(--chart-2)' }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ChartContainer>
+            )}
+          </>
+        ) : (
+          <>
+            {isFetching && data.length === 0 ? (
+              <Skeleton className="h-[300px] w-full" />
+            ) : data.length === 0 ? (
+              <div className="min-h-[120px] flex items-center justify-center">
+                <p className="text-sm text-muted-foreground">No data for selected filters.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    {tableInstance.getHeaderGroups().map((headerGroup) => (
+                      <TableRow key={headerGroup.id}>
+                        {headerGroup.headers.map((header) => {
+                          const isRightAligned =
+                            (header.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                          const sorted = header.column.getIsSorted();
+                          return (
+                            <TableHead key={header.id} className={isRightAligned ? 'text-right' : ''}>
+                              {header.column.getCanSort() ? (
+                                <button
+                                  className="flex items-center gap-1 hover:text-foreground transition-colors"
+                                  style={isRightAligned ? { marginLeft: 'auto' } : undefined}
+                                  onClick={header.column.getToggleSortingHandler()}
+                                >
+                                  {flexRender(header.column.columnDef.header, header.getContext())}
+                                  {sorted === 'asc' ? (
+                                    <ArrowUp className="h-3 w-3" />
+                                  ) : sorted === 'desc' ? (
+                                    <ArrowDown className="h-3 w-3" />
+                                  ) : (
+                                    <ArrowUpDown className="h-3 w-3 opacity-50" />
+                                  )}
+                                </button>
+                              ) : (
+                                flexRender(header.column.columnDef.header, header.getContext())
+                              )}
+                            </TableHead>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {tableInstance.getRowModel().rows.map((row) => (
+                      <TableRow key={row.id}>
+                        {row.getVisibleCells().map((cell) => {
+                          const isRightAligned =
+                            (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                          return (
+                            <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          );
+                        })}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </>
         )}
       </div>
 
-      {narrativeText && (
+      {viewMode === 'chart' && narrativeText && (
         <NarrativeCard text={narrativeText} isFetching={isFetching && data.length === 0} />
       )}
 

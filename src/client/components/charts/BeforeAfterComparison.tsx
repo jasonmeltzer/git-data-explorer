@@ -1,13 +1,40 @@
+import { useState, useMemo } from 'react';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  flexRender,
+  type ColumnDef,
+  type SortingState,
+} from '@tanstack/react-table';
+import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { useBeforeAfter } from '../../hooks/useBeforeAfter.js';
 import { SectionHeader } from '../SectionHeader.js';
 import { HelpPanel } from '../HelpPanel.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Badge } from '@shared/components/ui/badge.js';
+import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@shared/components/ui/table.js';
 import { pctDelta, formatNum } from '../../lib/deltaFormat.js';
 
 interface BeforeAfterComparisonProps {
   repoIds: number[];
   aiMarkerDate: string | null;
+}
+
+interface BeforeAfterTableRow {
+  metric: string;
+  before: string;
+  after: string;
+  change: string;
+  changePositive: boolean;
 }
 
 interface MetricRowProps {
@@ -37,8 +64,72 @@ function MetricRow({ label, beforeValue, afterValue, deltaStr, deltaPositive }: 
 }
 
 
+const TABLE_COLUMNS: ColumnDef<BeforeAfterTableRow>[] = [
+  { accessorKey: 'metric', header: 'Metric', enableSorting: true },
+  {
+    accessorKey: 'before',
+    header: 'Before',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => <span className="tabular-nums">{getValue<string>()}</span>,
+  },
+  {
+    accessorKey: 'after',
+    header: 'After',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => <span className="tabular-nums">{getValue<string>()}</span>,
+  },
+  {
+    accessorKey: 'change',
+    header: 'Change',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ row }) => (
+      <span
+        className={`tabular-nums text-xs font-medium ${row.original.changePositive ? 'text-emerald-500' : 'text-red-500'}`}
+      >
+        {row.original.change}
+      </span>
+    ),
+  },
+];
+
 export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComparisonProps) {
+  const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [sorting, setSorting] = useState<SortingState>([]);
   const { data, isFetching } = useBeforeAfter({ repoIds });
+
+  // Compute deltas (null-safe — only computed when data is present)
+  const commitSizeDelta = data ? pctDelta(data.before.avgCommitSize, data.after.avgCommitSize) : null;
+  const prFreqDelta = data ? pctDelta(data.before.prFrequency, data.after.prFrequency) : null;
+  const rampUpDelta = data
+    ? (data.before.rampUpSpeed != null && data.after.rampUpSpeed != null
+        ? pctDelta(data.before.rampUpSpeed, data.after.rampUpSpeed, true)
+        : { str: 'N/A', positive: true })
+    : null;
+  const contributorsDelta = data ? pctDelta(data.before.activeContributors, data.after.activeContributors) : null;
+  const formatRampUp = (v: number | null) => (v == null ? '—' : formatNum(v));
+
+  const tableRows: BeforeAfterTableRow[] = useMemo(() => {
+    if (!data || !commitSizeDelta || !prFreqDelta || !rampUpDelta || !contributorsDelta) return [];
+    return [
+      { metric: 'Avg Commit Size (lines)', before: formatNum(data.before.avgCommitSize), after: formatNum(data.after.avgCommitSize), change: commitSizeDelta.str, changePositive: commitSizeDelta.positive },
+      { metric: 'PRs / week / contributor', before: formatNum(data.before.prFrequency), after: formatNum(data.after.prFrequency), change: prFreqDelta.str, changePositive: prFreqDelta.positive },
+      { metric: 'New dev ramp-up (weeks)', before: formatRampUp(data.before.rampUpSpeed), after: formatRampUp(data.after.rampUpSpeed), change: rampUpDelta.str, changePositive: rampUpDelta.positive },
+      { metric: 'Active Contributors', before: formatNum(data.before.activeContributors), after: formatNum(data.after.activeContributors), change: contributorsDelta.str, changePositive: contributorsDelta.positive },
+    ];
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  const tableInstance = useReactTable({
+    data: tableRows,
+    columns: TABLE_COLUMNS,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    state: { sorting },
+    onSortingChange: setSorting,
+  });
 
   if (!aiMarkerDate) {
     return (
@@ -74,7 +165,7 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
     );
   }
 
-  if (!data) {
+  if (!data || !commitSizeDelta || !prFreqDelta || !rampUpDelta || !contributorsDelta) {
     return (
       <section>
         <SectionHeader title="Before/After AI Adoption" scope="filtered" />
@@ -89,62 +180,116 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
     );
   }
 
-  const commitSizeDelta = pctDelta(data.before.avgCommitSize, data.after.avgCommitSize);
-  const prFreqDelta = pctDelta(data.before.prFrequency, data.after.prFrequency);
-  const rampUpDelta = data.before.rampUpSpeed != null && data.after.rampUpSpeed != null
-    ? pctDelta(data.before.rampUpSpeed, data.after.rampUpSpeed, true)
-    : { str: 'N/A', positive: true };
-  const contributorsDelta = pctDelta(data.before.activeContributors, data.after.activeContributors);
-
-  const formatRampUp = (v: number | null) => v == null ? '—' : formatNum(v);
-
   return (
     <section>
-      <SectionHeader title="Before/After AI Adoption" scope="filtered" />
+      <div className="flex items-center justify-between">
+        <SectionHeader title="Before/After AI Adoption" scope="filtered" />
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
+          <TabsList className="h-8 gap-1">
+            <TabsTrigger value="chart" className="text-xs px-3 py-1">Chart</TabsTrigger>
+            <TabsTrigger value="table" className="text-xs px-3 py-1">Table</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
       <Card className="mt-4">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Impact of AI Adoption</CardTitle>
           <p className="text-xs text-muted-foreground">AI marker date: {aiMarkerDate}</p>
         </CardHeader>
         <CardContent>
-          <div className="space-y-0">
-            <div className="flex justify-between text-xs text-muted-foreground pb-2 border-b">
-              <span>Metric</span>
-              <div className="flex gap-3">
-                <span className="w-16 text-right">Before</span>
-                <span className="w-16 text-right">After</span>
-                <span className="w-16 text-right">Change</span>
+          {viewMode === 'chart' ? (
+            <div className="space-y-0">
+              <div className="flex justify-between text-xs text-muted-foreground pb-2 border-b">
+                <span>Metric</span>
+                <div className="flex gap-3">
+                  <span className="w-16 text-right">Before</span>
+                  <span className="w-16 text-right">After</span>
+                  <span className="w-16 text-right">Change</span>
+                </div>
               </div>
+              <MetricRow
+                label="Avg Commit Size (lines)"
+                beforeValue={formatNum(data.before.avgCommitSize)}
+                afterValue={formatNum(data.after.avgCommitSize)}
+                deltaStr={commitSizeDelta.str}
+                deltaPositive={commitSizeDelta.positive}
+              />
+              <MetricRow
+                label="PRs / week / contributor"
+                beforeValue={formatNum(data.before.prFrequency)}
+                afterValue={formatNum(data.after.prFrequency)}
+                deltaStr={prFreqDelta.str}
+                deltaPositive={prFreqDelta.positive}
+              />
+              <MetricRow
+                label="New dev ramp-up (weeks)"
+                beforeValue={formatRampUp(data.before.rampUpSpeed)}
+                afterValue={formatRampUp(data.after.rampUpSpeed)}
+                deltaStr={rampUpDelta.str}
+                deltaPositive={rampUpDelta.positive}
+              />
+              <MetricRow
+                label="Active Contributors"
+                beforeValue={formatNum(data.before.activeContributors)}
+                afterValue={formatNum(data.after.activeContributors)}
+                deltaStr={contributorsDelta.str}
+                deltaPositive={contributorsDelta.positive}
+              />
             </div>
-            <MetricRow
-              label="Avg Commit Size (lines)"
-              beforeValue={formatNum(data.before.avgCommitSize)}
-              afterValue={formatNum(data.after.avgCommitSize)}
-              deltaStr={commitSizeDelta.str}
-              deltaPositive={commitSizeDelta.positive}
-            />
-            <MetricRow
-              label="PRs / week / contributor"
-              beforeValue={formatNum(data.before.prFrequency)}
-              afterValue={formatNum(data.after.prFrequency)}
-              deltaStr={prFreqDelta.str}
-              deltaPositive={prFreqDelta.positive}
-            />
-            <MetricRow
-              label="New dev ramp-up (weeks)"
-              beforeValue={formatRampUp(data.before.rampUpSpeed)}
-              afterValue={formatRampUp(data.after.rampUpSpeed)}
-              deltaStr={rampUpDelta.str}
-              deltaPositive={rampUpDelta.positive}
-            />
-            <MetricRow
-              label="Active Contributors"
-              beforeValue={formatNum(data.before.activeContributors)}
-              afterValue={formatNum(data.after.activeContributors)}
-              deltaStr={contributorsDelta.str}
-              deltaPositive={contributorsDelta.positive}
-            />
-          </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  {tableInstance.getHeaderGroups().map((headerGroup) => (
+                    <TableRow key={headerGroup.id}>
+                      {headerGroup.headers.map((header) => {
+                        const isRightAligned =
+                          (header.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                        const sorted = header.column.getIsSorted();
+                        return (
+                          <TableHead key={header.id} className={isRightAligned ? 'text-right' : ''}>
+                            {header.column.getCanSort() ? (
+                              <button
+                                className="flex items-center gap-1 hover:text-foreground transition-colors"
+                                style={isRightAligned ? { marginLeft: 'auto' } : undefined}
+                                onClick={header.column.getToggleSortingHandler()}
+                              >
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                                {sorted === 'asc' ? (
+                                  <ArrowUp className="h-3 w-3" />
+                                ) : sorted === 'desc' ? (
+                                  <ArrowDown className="h-3 w-3" />
+                                ) : (
+                                  <ArrowUpDown className="h-3 w-3 opacity-50" />
+                                )}
+                              </button>
+                            ) : (
+                              flexRender(header.column.columnDef.header, header.getContext())
+                            )}
+                          </TableHead>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableHeader>
+                <TableBody>
+                  {tableInstance.getRowModel().rows.map((row) => (
+                    <TableRow key={row.id}>
+                      {row.getVisibleCells().map((cell) => {
+                        const isRightAligned =
+                          (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                        return (
+                          <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
+                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          </TableCell>
+                        );
+                      })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
       <div className="mt-4">
