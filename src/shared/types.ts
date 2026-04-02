@@ -219,3 +219,11 @@ export interface ContributorStats {
   avgFilesChanged: number;
   firstCommitAt: string;  // ISO timestamp
 }
+
+export interface ContributorBeforeAfterStats {
+  authorLogin: string;
+  cohort: CohortLabel;
+  firstCommitAt: string;
+  pre: ContributorStats | null;
+  post: ContributorStats | null;
+}
