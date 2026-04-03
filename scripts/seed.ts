@@ -215,6 +215,27 @@ const PERSONAS: ContributorPersona[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Senior persona early-commit stagger config
+// ---------------------------------------------------------------------------
+
+/**
+ * Maps senior persona logins to the repo indexes where they get tenure-anchor
+ * commits (inserted 2-3 years before DATA_START so per-repo tenure >= 360 days).
+ *
+ * Stagger design (D-07 showcase scenario):
+ *   jchen, mrodriguez, akumar  → Senior in platform (repo 0) only
+ *   sjohansson                 → Senior in platform + mobile-app (repos 0, 1)
+ *   lwilson                    → Senior in all 3 repos
+ */
+const SENIOR_EARLY_COMMIT_REPOS: Record<string, number[]> = {
+  'jchen':      [0],       // Senior in platform only
+  'mrodriguez': [0],       // Senior in platform only
+  'akumar':     [0],       // Senior in platform only
+  'sjohansson': [0, 1],   // Senior in platform + mobile-app
+  'lwilson':    [0, 1, 2], // Senior in all 3 repos
+};
+
+// ---------------------------------------------------------------------------
 // Commit message pools
 // ---------------------------------------------------------------------------
 
@@ -569,6 +590,52 @@ for (const persona of PERSONAS) {
   }
 }
 
+// Step 1b: Generate early tenure-anchor commits for senior personas
+// These are inserted BEFORE DATA_START so they don't appear in analytics date range
+// but they establish MIN(committed_at) per (author, repo) well past the 360-day threshold.
+console.log('Generating early commits for senior persona tenure anchors...');
+
+const EARLY_COMMIT_WINDOW_START_MS = DATA_START_MS - 3 * 365 * MS_PER_DAY; // 3 years before DATA_START
+const EARLY_COMMIT_WINDOW_END_MS   = DATA_START_MS - 2 * 365 * MS_PER_DAY; // 2 years before DATA_START
+
+const earlyCommits: CommitRecord[] = [];
+
+for (const [login, repoIndexes] of Object.entries(SENIOR_EARLY_COMMIT_REPOS)) {
+  for (const repoIndex of repoIndexes) {
+    // 5-10 anchor commits per persona per repo, spread across the pre-window
+    const count = 5 + Math.floor(Math.random() * 6); // 5–10
+    for (let c = 0; c < count; c++) {
+      // Evenly spread through the 1-year early window with some jitter
+      const spread = (c / count) * (EARLY_COMMIT_WINDOW_END_MS - EARLY_COMMIT_WINDOW_START_MS);
+      const jitter = Math.random() * (EARLY_COMMIT_WINDOW_END_MS - EARLY_COMMIT_WINDOW_START_MS) * 0.05;
+      const committedAtMs = EARLY_COMMIT_WINDOW_START_MS + spread + jitter;
+      const committedAt = new Date(committedAtMs);
+
+      // Small anchor commits: 1-20 lines added, 0-5 deleted, 1-3 files
+      const linesAdded = 1 + Math.floor(Math.random() * 20);
+      const linesDeleted = Math.floor(Math.random() * 6);
+      const filesChanged = 1 + Math.floor(Math.random() * 3);
+
+      globalCommitCounter++;
+      earlyCommits.push({
+        sha: `seed-early-${globalCommitCounter}`,
+        repoIndex,
+        authorLogin: login,
+        message: pickRandom(COMMIT_MESSAGES),
+        committedAt,
+        linesAdded,
+        linesDeleted,
+        filesChanged,
+      });
+    }
+  }
+}
+
+console.log(`Inserting ${earlyCommits.length} early commits for senior persona tenure anchors...`);
+
+// Merge early commits into allCommits (they'll be sorted below)
+allCommits.push(...earlyCommits);
+
 // Sort all commits by date for bulk insert
 allCommits.sort((a, b) => a.committedAt.getTime() - b.committedAt.getTime());
 
@@ -743,6 +810,35 @@ db.insert(schema.appConfig).values({
     updatedAt: now,
   },
 }).run();
+
+// ---------------------------------------------------------------------------
+// Senior persona per-repo tenure verification
+// ---------------------------------------------------------------------------
+
+console.log('\nSenior persona per-repo tenure check:');
+const nowEpochSec = Math.floor(Date.now() / 1000);
+const seniorCheckRows = sqlite.prepare(`
+  SELECT a.github_login, r.full_name,
+    MIN(CAST(c.committed_at AS INTEGER)) as earliest_commit,
+    ? - MIN(CAST(c.committed_at AS INTEGER)) as tenure_seconds
+  FROM commits c
+  INNER JOIN authors a ON a.id = c.author_id
+  INNER JOIN repositories r ON r.id = c.repo_id
+  WHERE a.github_login IN ('jchen','mrodriguez','akumar','sjohansson','lwilson')
+  GROUP BY a.id, c.repo_id
+  ORDER BY a.github_login, r.full_name
+`).all(nowEpochSec) as Array<{
+  github_login: string;
+  full_name: string;
+  earliest_commit: number;
+  tenure_seconds: number;
+}>;
+
+for (const row of seniorCheckRows) {
+  const days = Math.floor(row.tenure_seconds / 86400);
+  const cohort = days >= 360 ? 'SENIOR' : days >= 90 ? 'GROWING' : 'NEW';
+  console.log(`  ${row.github_login} in ${row.full_name}: ${days} days (${cohort})`);
+}
 
 // ---------------------------------------------------------------------------
 // Summary output
