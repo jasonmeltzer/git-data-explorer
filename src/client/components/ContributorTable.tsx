@@ -13,7 +13,14 @@ import { ChevronDown, ChevronUp, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-
 import { useContributors } from '../hooks/useContributors.js';
 import { useContributorBeforeAfter } from '../hooks/useContributorBeforeAfter.js';
 import { pctDelta, formatNum } from '../lib/deltaFormat.js';
-import type { ContributorStats, CohortLabel, ContributorBeforeAfterStats } from '@shared/types.js';
+import type {
+  ContributorStats,
+  ContributorRepoStats,
+  CohortLabel,
+  ContributorBeforeAfterStats,
+  ContributorRepoBeforeAfterStats,
+  TenureMode,
+} from '@shared/types.js';
 import { cohortColorMap, COHORT_LABELS } from '@shared/cohort-config.js';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@shared/components/ui/collapsible.js';
 import {
@@ -35,90 +42,21 @@ interface ContributorTableProps {
   aiMarkerDate: string | null;
 }
 
-const baseColumns: ColumnDef<ContributorStats>[] = [
-  {
-    accessorKey: 'authorLogin',
-    header: 'Author',
-    enableSorting: true,
-  },
-  {
-    accessorKey: 'cohort',
-    header: 'Cohort',
-    enableSorting: true,
-    cell: ({ getValue }) => {
-      const cohort = getValue<CohortLabel>();
-      return (
-        <Badge
-          style={{ backgroundColor: cohortColorMap[cohort], color: '#fff', border: 'none' }}
-        >
-          {COHORT_LABELS[cohort] ?? cohort}
-        </Badge>
-      );
-    },
-  },
-  {
-    accessorKey: 'totalCommits',
-    header: 'Commits',
-    enableSorting: true,
-    meta: { align: 'right' },
-    cell: ({ getValue }) => (
-      <span className="tabular-nums">{getValue<number>().toLocaleString()}</span>
-    ),
-  },
-  {
-    accessorKey: 'totalPrs',
-    header: 'PRs',
-    enableSorting: true,
-    meta: { align: 'right' },
-    cell: ({ getValue }) => (
-      <span className="tabular-nums">{getValue<number>().toLocaleString()}</span>
-    ),
-  },
-  {
-    accessorKey: 'avgLinesAdded',
-    header: 'Avg Lines Added',
-    enableSorting: true,
-    meta: { align: 'right' },
-    cell: ({ getValue }) => (
-      <span className="tabular-nums">{Math.round(getValue<number>()).toLocaleString()}</span>
-    ),
-  },
-  {
-    accessorKey: 'avgLinesDeleted',
-    header: 'Avg Lines Deleted',
-    enableSorting: true,
-    meta: { align: 'right' },
-    cell: ({ getValue }) => (
-      <span className="tabular-nums">{Math.round(getValue<number>()).toLocaleString()}</span>
-    ),
-  },
-  {
-    accessorKey: 'avgFilesChanged',
-    header: 'Avg Files',
-    enableSorting: true,
-    meta: { align: 'right' },
-    cell: ({ getValue }) => (
-      <span className="tabular-nums">{getValue<number>().toFixed(1)}</span>
-    ),
-  },
-  {
-    accessorKey: 'firstCommitAt',
-    header: 'First Commit',
-    enableSorting: true,
-    cell: ({ getValue }) => {
-      const val = getValue<string>();
-      return format(new Date(val), 'MMM yyyy');
-    },
-  },
-];
-
 type NumericKey = 'totalCommits' | 'totalPrs' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
+
+function getRowKey(row: ContributorStats, tenureMode: TenureMode): string {
+  if (tenureMode === 'repo' && 'repoId' in row) {
+    return `${row.authorLogin}::${(row as ContributorRepoStats).repoId}`;
+  }
+  return row.authorLogin;
+}
 
 function makeDeltaColumns(
   metricKey: NumericKey,
   preHeader: string,
   postHeader: string,
-  beforeAfterMap: Map<string, ContributorBeforeAfterStats>,
+  beforeAfterMap: Map<string, ContributorBeforeAfterStats | ContributorRepoBeforeAfterStats>,
+  tenureMode: TenureMode,
 ): ColumnDef<ContributorStats>[] {
   return [
     {
@@ -126,7 +64,7 @@ function makeDeltaColumns(
       header: preHeader,
       enableSorting: true,
       meta: { align: 'right' },
-      accessorFn: (row) => beforeAfterMap.get(row.authorLogin)?.pre?.[metricKey] ?? null,
+      accessorFn: (row) => beforeAfterMap.get(getRowKey(row, tenureMode))?.pre?.[metricKey] ?? null,
       sortingFn: (rowA, rowB, columnId) => {
         const a = rowA.getValue<number | null>(columnId);
         const b = rowB.getValue<number | null>(columnId);
@@ -146,7 +84,7 @@ function makeDeltaColumns(
       header: postHeader,
       enableSorting: true,
       meta: { align: 'right' },
-      accessorFn: (row) => beforeAfterMap.get(row.authorLogin)?.post?.[metricKey] ?? null,
+      accessorFn: (row) => beforeAfterMap.get(getRowKey(row, tenureMode))?.post?.[metricKey] ?? null,
       sortingFn: (rowA, rowB, columnId) => {
         const a = rowA.getValue<number | null>(columnId);
         const b = rowB.getValue<number | null>(columnId);
@@ -167,7 +105,7 @@ function makeDeltaColumns(
       enableSorting: true,
       meta: { align: 'right' },
       accessorFn: (row) => {
-        const ba = beforeAfterMap.get(row.authorLogin);
+        const ba = beforeAfterMap.get(getRowKey(row, tenureMode));
         const pre = ba?.pre?.[metricKey];
         const post = ba?.post?.[metricKey];
         if (pre == null || post == null) return null;
@@ -183,7 +121,7 @@ function makeDeltaColumns(
         return a - b;
       },
       cell: ({ row }) => {
-        const ba = beforeAfterMap.get(row.original.authorLogin);
+        const ba = beforeAfterMap.get(getRowKey(row.original, tenureMode));
         const pre = ba?.pre?.[metricKey];
         const post = ba?.post?.[metricKey];
         if (pre == null && post == null) return <span className="text-muted-foreground">—</span>;
@@ -203,6 +141,8 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds, aiMa
   const [open, setOpen] = useState(false);
   const [sorting, setSorting] = useState<SortingState>([{ id: 'totalCommits', desc: true }]);
 
+  const isPerRepoExpanded = tenureMode === 'repo' && repoIds.length !== 1;
+
   const { data: contributors, isFetching } = useContributors({
     startDate,
     endDate,
@@ -219,31 +159,127 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds, aiMa
   });
 
   const beforeAfterMap = useMemo(() => {
-    if (!beforeAfterData) return new Map<string, ContributorBeforeAfterStats>();
-    return new Map(beforeAfterData.map(d => [d.authorLogin, d]));
-  }, [beforeAfterData]);
+    if (!beforeAfterData) return new Map<string, ContributorBeforeAfterStats | ContributorRepoBeforeAfterStats>();
+    return new Map(beforeAfterData.map(d => {
+      const key = tenureMode === 'repo' && 'repoId' in d
+        ? `${d.authorLogin}::${(d as ContributorRepoBeforeAfterStats).repoId}`
+        : d.authorLogin;
+      return [key, d];
+    }));
+  }, [beforeAfterData, tenureMode]);
+
+  const columnVisibility = useMemo(() => ({
+    repoFullName: isPerRepoExpanded,
+  }), [isPerRepoExpanded]);
 
   const allColumns = useMemo<ColumnDef<ContributorStats>[]>(() => {
-    const base = [...baseColumns];
+    const baseColumns: ColumnDef<ContributorStats>[] = [
+      {
+        accessorKey: 'authorLogin',
+        header: 'Author',
+        enableSorting: true,
+      },
+      {
+        id: 'repoFullName',
+        accessorFn: (row) => (row as ContributorRepoStats).repoFullName ?? '',
+        header: 'Repo',
+        enableSorting: true,
+      },
+      {
+        accessorKey: 'cohort',
+        header: 'Cohort',
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const cohort = getValue<CohortLabel>();
+          return (
+            <Badge
+              style={{ backgroundColor: cohortColorMap[cohort], color: '#fff', border: 'none' }}
+            >
+              {COHORT_LABELS[cohort] ?? cohort}
+            </Badge>
+          );
+        },
+      },
+      {
+        accessorKey: 'totalCommits',
+        header: 'Commits',
+        enableSorting: true,
+        meta: { align: 'right' },
+        cell: ({ getValue }) => (
+          <span className="tabular-nums">{getValue<number>().toLocaleString()}</span>
+        ),
+      },
+      {
+        accessorKey: 'totalPrs',
+        header: 'PRs',
+        enableSorting: true,
+        meta: { align: 'right' },
+        cell: ({ getValue }) => (
+          <span className="tabular-nums">{getValue<number>().toLocaleString()}</span>
+        ),
+      },
+      {
+        accessorKey: 'avgLinesAdded',
+        header: 'Avg Lines Added',
+        enableSorting: true,
+        meta: { align: 'right' },
+        cell: ({ getValue }) => (
+          <span className="tabular-nums">{Math.round(getValue<number>()).toLocaleString()}</span>
+        ),
+      },
+      {
+        accessorKey: 'avgLinesDeleted',
+        header: 'Avg Lines Deleted',
+        enableSorting: true,
+        meta: { align: 'right' },
+        cell: ({ getValue }) => (
+          <span className="tabular-nums">{Math.round(getValue<number>()).toLocaleString()}</span>
+        ),
+      },
+      {
+        accessorKey: 'avgFilesChanged',
+        header: 'Avg Files',
+        enableSorting: true,
+        meta: { align: 'right' },
+        cell: ({ getValue }) => (
+          <span className="tabular-nums">{getValue<number>().toFixed(1)}</span>
+        ),
+      },
+      {
+        accessorFn: (row) => {
+          if ('firstCommitInRepoAt' in row && (row as ContributorRepoStats).firstCommitInRepoAt) {
+            return (row as ContributorRepoStats).firstCommitInRepoAt;
+          }
+          return row.firstCommitAt;
+        },
+        id: 'firstCommitAt',
+        header: tenureMode === 'repo' ? 'First Commit (in repo)' : 'First Commit',
+        enableSorting: true,
+        cell: ({ getValue }) => {
+          const val = getValue<string>();
+          return format(new Date(val), 'MMM yyyy');
+        },
+      },
+    ];
 
-    if (!aiMarkerDate) return base;
+    if (!aiMarkerDate) return baseColumns;
 
     return [
-      ...base,
-      ...makeDeltaColumns('totalCommits', 'Pre-AI Commits', 'Post-AI Commits', beforeAfterMap),
-      ...makeDeltaColumns('totalPrs', 'Pre-AI PRs', 'Post-AI PRs', beforeAfterMap),
-      ...makeDeltaColumns('avgLinesAdded', 'Pre-AI Lines+', 'Post-AI Lines+', beforeAfterMap),
-      ...makeDeltaColumns('avgLinesDeleted', 'Pre-AI Lines\u2212', 'Post-AI Lines\u2212', beforeAfterMap),
-      ...makeDeltaColumns('avgFilesChanged', 'Pre-AI Files', 'Post-AI Files', beforeAfterMap),
+      ...baseColumns,
+      ...makeDeltaColumns('totalCommits', 'Pre-AI Commits', 'Post-AI Commits', beforeAfterMap, tenureMode),
+      ...makeDeltaColumns('totalPrs', 'Pre-AI PRs', 'Post-AI PRs', beforeAfterMap, tenureMode),
+      ...makeDeltaColumns('avgLinesAdded', 'Pre-AI Lines+', 'Post-AI Lines+', beforeAfterMap, tenureMode),
+      ...makeDeltaColumns('avgLinesDeleted', 'Pre-AI Lines\u2212', 'Post-AI Lines\u2212', beforeAfterMap, tenureMode),
+      ...makeDeltaColumns('avgFilesChanged', 'Pre-AI Files', 'Post-AI Files', beforeAfterMap, tenureMode),
     ];
-  }, [aiMarkerDate, beforeAfterMap]);
+  }, [aiMarkerDate, beforeAfterMap, tenureMode]);
 
   const table = useReactTable({
     data: contributors ?? [],
     columns: allColumns,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    state: { sorting },
+    state: { sorting, columnVisibility },
     onSortingChange: setSorting,
   });
 
@@ -268,6 +304,11 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds, aiMa
           )}
         </CollapsibleTrigger>
         <CollapsibleContent>
+          {isPerRepoExpanded && (
+            <div className="text-xs text-muted-foreground bg-muted/20 rounded px-3 py-2 mb-2">
+              Showing one row per contributor-repo pair. Tenure is calculated per repo.
+            </div>
+          )}
           <div className="mt-4 overflow-x-auto">
             {isFetching ? (
               <div className="space-y-2">
@@ -318,22 +359,36 @@ export function ContributorTable({ startDate, endDate, tenureMode, repoIds, aiMa
                   ))}
                 </TableHeader>
                 <TableBody>
-                  {table.getRowModel().rows.map((row) => (
-                    <TableRow key={row.id}>
-                      {row.getVisibleCells().map((cell) => {
-                        const isRightAligned =
-                          (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
-                        return (
-                          <TableCell
-                            key={cell.id}
-                            className={isRightAligned ? 'text-right' : ''}
-                          >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
+                  {(() => {
+                    let lastLogin = '';
+                    let bandIndex = 0;
+                    return table.getRowModel().rows.map((row) => {
+                      const login = row.original.authorLogin;
+                      const isNewGroup = login !== lastLogin;
+                      if (isNewGroup) {
+                        bandIndex++;
+                        lastLogin = login;
+                      }
+                      const bandClass = isPerRepoExpanded && bandIndex % 2 === 0 ? 'bg-muted/20' : '';
+                      return (
+                        <TableRow key={row.id} className={bandClass}>
+                          {row.getVisibleCells().map((cell) => {
+                            const isRightAligned =
+                              (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
+                            const isAuthorCell = cell.column.id === 'authorLogin';
+                            const showArrow = isPerRepoExpanded && isAuthorCell && !isNewGroup;
+                            return (
+                              <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
+                                {showArrow
+                                  ? <span className="pl-4 text-muted-foreground">{'\u21B3'}</span>
+                                  : flexRender(cell.column.columnDef.cell, cell.getContext())}
+                              </TableCell>
+                            );
+                          })}
+                        </TableRow>
+                      );
+                    });
+                  })()}
                 </TableBody>
               </Table>
             )}

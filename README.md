@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 7.2 complete** — Dashboard Interpretability
+**Phase 7.3 complete** — Per-Repo Cohort Mode Fix & Seed Data Tenure Robustness
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -49,7 +49,7 @@ What works today:
 - **Rolling period comparison** — metric cards with change percentages, month-over-month and quarter-over-quarter toggle
 - **Date range filtering** — preset chips (90d, 6mo, 1yr, All) plus custom date range picker
 - **Repo filtering** — multi-select dropdown filters all dashboard views
-- **Contributor drill-down** — collapsible table with sortable per-author stats, collapsed by default to maintain privacy-first framing
+- **Contributor drill-down** — collapsible table with sortable per-author stats, collapsed by default to maintain privacy-first framing; per-repo mode shows one row per author-repo pair with Repo column, visual row grouping, and per-repo tenure
 - **Narrative insights** — auto-generated per-cohort trend breakdowns above each chart section
 - **Cohort analysis** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing with global and per-repo modes
 - **Analytics API** — 13 REST endpoints (cohorts, rampup, rolling, contributors, contributors/before-after, marker, pr-turnaround, bot-ratio, executive summary, before/after, cohort-config) with Zod validation
@@ -57,8 +57,8 @@ What works today:
 - **Dark mode** — full dark mode support with theme toggle and localStorage persistence
 - **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
 - **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
-- **250 passing tests** across 22 test files
-- **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access
+- **259 passing tests** across 22 test files
+- **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access; senior personas include early tenure-anchor commits that exercise per-repo Senior cohort thresholds
 - **Seed mode** — `npm run dev:seed` starts the app against seed data with a dashboard banner indicating synthetic data
 - **Accurate author tenure** — GitHub API first-commit fetcher resolves true first commit dates for authors who predate the collection window (2-API-call strategy)
 - **8-section dashboard** — Executive Summary KPI tiles, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table

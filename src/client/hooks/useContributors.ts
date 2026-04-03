@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ContributorStats } from '@shared/types.js';
+import type { ContributorStats, ContributorRepoStats } from '@shared/types.js';
 
 interface UseContributorsParams {
   startDate: string;
@@ -11,7 +11,7 @@ interface UseContributorsParams {
 export function useContributors(params: UseContributorsParams) {
   const { startDate, endDate, tenureMode, repoIds } = params;
 
-  return useQuery<ContributorStats[]>({
+  return useQuery<ContributorStats[] | ContributorRepoStats[]>({
     queryKey: ['analytics', 'contributors', startDate, endDate, tenureMode, repoIds],
     queryFn: async () => {
       const search = new URLSearchParams({
