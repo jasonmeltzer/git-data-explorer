@@ -97,7 +97,7 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 ### Shared (`src/shared/`)
 
 Code imported by both frontend and backend:
-- `types.ts` — TypeScript interfaces for API request/response shapes (GitHubRepo, TrackedRepo, CollectionRepoStatus, CohortMetricsRow, CohortMetricsParams, RampUpBucket, RampUpParams, RollingComparisonResult, ContributorBeforeAfterStats, etc.)
+- `types.ts` — TypeScript interfaces for API request/response shapes (GitHubRepo, TrackedRepo, CollectionRepoStatus, CohortMetricsRow, CohortMetricsParams, RampUpBucket, RampUpParams, RollingComparisonResult, ContributorBeforeAfterStats, ContributorRepoStats, ContributorRepoBeforeAfterStats, etc.)
 - `cohort-config.ts` — Single source of truth for cohort boundary definitions: `CohortThreshold`, `CohortConfig`, `DEFAULT_COHORT_CONFIG` (3mo/12mo thresholds), `getThresholdSeconds()` for SQL CASE WHEN generation. Free of server-only or client-only imports.
 - `components/ui/` — shadcn/ui primitives (used only by frontend, but placed in shared for the `@shared/*` path alias)
 - `lib/utils.ts` — `cn()` helper for Tailwind class merging
@@ -219,6 +219,27 @@ Phase 07.2 additions:
 │ Client: useContributorBeforeAfter hook, ContributorTable 15 delta columns   │
 │ Shared: deltaFormat.ts (pctDelta, formatNum) with 12 unit tests             │
 └──────────────────────────────────────────────────────────────────────────────┘
+
+Phase 07.3 additions:
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Per-repo contributor mode (analytics-contributors.ts)                        │
+│                                                                              │
+│ Per-repo mode returns one row per author-repo pair via GROUP BY (a.id,      │
+│ c.repo_id). Uses correlated subquery for true first-commit-in-repo date    │
+│ (not bounded by analysis window). Before/after stats use composite          │
+│ authorLogin::repoId key in per-repo mode.                                   │
+│                                                                              │
+│ Types: ContributorRepoStats (extends ContributorStats with repoId,          │
+│ repoFullName, firstCommitInRepoAt), ContributorRepoBeforeAfterStats        │
+│                                                                              │
+│ UI: ContributorTable per-repo row expansion — Repo column, ↳ row grouping, │
+│ alternating bg bands, inline note, dynamic "First Commit (in repo)" header  │
+│ HelpPanel per-repo explanations on cohort charts and contributor table      │
+│                                                                              │
+│ Seed: Senior personas get early tenure-anchor commits staggered across      │
+│ repos so MIN(committed_at) per (author, repo) crosses 360-day threshold    │
+│ 9 new tests (4 per-repo mode + 5 D-11 tenure regression tests)             │
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Key design decisions:**
@@ -258,7 +279,7 @@ src/
 │   │   ├── NavBar.tsx        # Persistent top navigation
 │   │   ├── TokenForm.tsx     # PAT entry form
 │   │   ├── FilterBar.tsx     # Dashboard sticky filter bar (date presets, repo select, tenure mode)
-│   │   ├── ContributorTable.tsx  # Collapsible sortable contributor table (TanStack Table)
+│   │   ├── ContributorTable.tsx  # Collapsible sortable contributor table (TanStack Table); per-repo mode: author×repo rows, Repo column, row grouping
 │   │   ├── StatCalloutBox.tsx    # Single KPI callout box with delta badge (min 44px touch height)
 │   │   ├── StatCalloutRow.tsx    # Horizontal row of 2–4 StatCalloutBox components
 │   │   ├── HelpPanel.tsx         # Expandable "What does this mean?" panel (chevron toggle)
@@ -324,7 +345,7 @@ src/
 │       ├── analytics-cohorts.ts   # Cohort assignment + metrics queries
 │       ├── analytics-rampup.ts    # New developer ramp-up curves
 │       ├── analytics-rolling.ts   # Rolling window MoM/QoQ comparisons
-│       ├── analytics-contributors.ts  # Per-author aggregate stats + before/after AI delta stats
+│       ├── analytics-contributors.ts  # Per-author aggregate stats + before/after AI delta stats; per-repo mode with GROUP BY (author, repo)
 │       ├── analytics-pr-turnaround.ts # Monthly median hours to merge
 │       ├── analytics-bot-ratio.ts     # Monthly bot vs human commit ratio
 │       ├── analytics-summary.ts       # Executive summary KPI tiles
