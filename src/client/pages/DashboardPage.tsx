@@ -576,6 +576,12 @@ export default function DashboardPage() {
                   Files Changed" tabs above. To adjust cohort boundaries, go to{' '}
                   <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
                 </p>
+                <p className="mt-2">
+                  When Per-repo cohort mode is active, a contributor's tenure resets to day 1 for each repo
+                  they join — so the same person may appear as 'New' in a repo they recently joined and
+                  'Senior' in one they've contributed to for years. Switch to Global mode to measure tenure
+                  from their earliest commit across all repos.
+                </p>
               </HelpPanel>
             </div>
 
@@ -665,6 +671,12 @@ export default function DashboardPage() {
               <p className="mt-2">
                 To adjust cohort date boundaries, go to{' '}
                 <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
+              </p>
+              <p className="mt-2">
+                When Per-repo cohort mode is active, a contributor's tenure resets to day 1 for each repo
+                they join — so the same person may appear as 'New' in a repo they recently joined and
+                'Senior' in one they've contributed to for years. Switch to Global mode to measure tenure
+                from their earliest commit across all repos.
               </p>
             </HelpPanel>
           </div>
@@ -817,6 +829,12 @@ export default function DashboardPage() {
             <p className="mt-2">
               To adjust cohort boundaries, go to{' '}
               <a href="#/settings" className="underline hover:text-foreground">Settings &gt; Cohort Configuration</a>.
+            </p>
+            <p className="mt-2">
+              In Per-repo mode, each row represents a specific contributor in a specific repo. An author
+              who contributes to three repos appears as three rows, each with tenure and metrics scoped
+              to that repo. When you filter to a single repo, the table collapses back to one row per
+              contributor.
             </p>
           </HelpPanel>
         </section>
