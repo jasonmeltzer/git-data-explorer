@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ContributorBeforeAfterStats } from '@shared/types.js';
+import type { ContributorBeforeAfterStats, ContributorRepoBeforeAfterStats } from '@shared/types.js';
 
 interface UseContributorBeforeAfterParams {
   startDate: string;
@@ -12,7 +12,7 @@ interface UseContributorBeforeAfterParams {
 export function useContributorBeforeAfter(params: UseContributorBeforeAfterParams) {
   const { startDate, endDate, tenureMode, repoIds, aiMarkerDate } = params;
 
-  return useQuery<ContributorBeforeAfterStats[]>({
+  return useQuery<ContributorBeforeAfterStats[] | ContributorRepoBeforeAfterStats[]>({
     queryKey: ['analytics', 'contributors', 'before-after', startDate, endDate, tenureMode, repoIds, aiMarkerDate],
     queryFn: async () => {
       const search = new URLSearchParams({

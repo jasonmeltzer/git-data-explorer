@@ -227,3 +227,20 @@ export interface ContributorBeforeAfterStats {
   pre: ContributorStats | null;
   post: ContributorStats | null;
 }
+
+export interface ContributorRepoStats extends ContributorStats {
+  repoId: number;
+  repoFullName: string;
+  firstCommitInRepoAt: string;  // ISO timestamp — MIN(committed_at) for this author in this repo
+}
+
+export interface ContributorRepoBeforeAfterStats {
+  authorLogin: string;
+  repoId: number;
+  repoFullName: string;
+  cohort: CohortLabel;
+  firstCommitInRepoAt: string;
+  firstCommitAt: string;
+  pre: ContributorRepoStats | null;
+  post: ContributorRepoStats | null;
+}
