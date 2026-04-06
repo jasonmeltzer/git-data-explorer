@@ -391,6 +391,7 @@ export default function DashboardPage() {
           customRange={customRange} setCustomRange={setCustomRange}
           repoIds={repoIds} setRepoIds={setRepoIds}
           tenureMode={tenureMode} setTenureMode={setTenureMode}
+          filters={{ preset, startDate, endDate, repoIds, tenureMode, rollingGranularity }}
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
           <Card>
@@ -423,6 +424,7 @@ export default function DashboardPage() {
           customRange={customRange} setCustomRange={setCustomRange}
           repoIds={repoIds} setRepoIds={setRepoIds}
           tenureMode={tenureMode} setTenureMode={setTenureMode}
+          filters={{ preset, startDate, endDate, repoIds, tenureMode, rollingGranularity }}
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
           <Card>
@@ -453,6 +455,7 @@ export default function DashboardPage() {
         customRange={customRange} setCustomRange={setCustomRange}
         repoIds={repoIds} setRepoIds={setRepoIds}
         tenureMode={tenureMode} setTenureMode={setTenureMode}
+        filters={{ preset, startDate, endDate, repoIds, tenureMode, rollingGranularity }}
       />
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         {/* Seed data banner */}

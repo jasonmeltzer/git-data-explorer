@@ -8,10 +8,11 @@ import {
 } from '@shared/components/ui/popover';
 import { Badge } from '@shared/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs';
+import { Button } from '@shared/components/ui/button.js';
 import { cn } from '@shared/lib/utils';
-import type { DatePreset } from '../hooks/useDashboardFilters';
+import type { DatePreset, DashboardFilters } from '../hooks/useDashboardFilters';
 import type { TrackedRepo } from '@shared/types.js';
-import { CalendarIcon, CheckIcon, ChevronDownIcon, HelpCircle } from 'lucide-react';
+import { CalendarIcon, CheckIcon, ChevronDownIcon, Download, HelpCircle } from 'lucide-react';
 import {
   Tooltip,
   TooltipTrigger,
@@ -19,6 +20,7 @@ import {
   TooltipProvider,
 } from '@shared/components/ui/tooltip';
 import type { DateRange } from 'react-day-picker';
+import ExportModal from './ExportModal.js';
 
 const DATE_PRESETS: { label: string; value: DatePreset }[] = [
   { label: '30d', value: '30d' },
@@ -37,6 +39,7 @@ interface FilterBarProps {
   setRepoIds: (ids: number[]) => void;
   tenureMode: 'global' | 'repo';
   setTenureMode: (m: 'global' | 'repo') => void;
+  filters?: DashboardFilters;
 }
 
 export default function FilterBar({
@@ -48,9 +51,11 @@ export default function FilterBar({
   setRepoIds,
   tenureMode,
   setTenureMode,
+  filters,
 }: FilterBarProps) {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [repoPickerOpen, setRepoPickerOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const { data: trackedData } = useQuery<{ repos: TrackedRepo[] }>({
     queryKey: ['repos', 'tracked'],
@@ -100,6 +105,7 @@ export default function FilterBar({
       : undefined;
 
   return (
+    <>
     <div className="h-12 border-b flex items-center gap-3 px-6">
       {/* Date preset chips */}
       <div className="flex items-center gap-1">
@@ -238,7 +244,27 @@ export default function FilterBar({
           </TabsList>
         </Tabs>
         </div>
+
+        {/* Export Data button */}
+        {filters && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setExportOpen(true)}
+            aria-label="Export dashboard data"
+            className="flex items-center gap-1.5 text-xs"
+          >
+            <Download className="h-4 w-4" />
+            Export Data
+          </Button>
+        )}
       </div>
     </div>
+
+    {/* Export modal — rendered outside the toolbar div so it can overlay */}
+    {filters && (
+      <ExportModal open={exportOpen} onOpenChange={setExportOpen} filters={filters} />
+    )}
+    </>
   );
 }
