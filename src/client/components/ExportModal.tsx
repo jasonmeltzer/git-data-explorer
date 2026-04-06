@@ -37,6 +37,7 @@ interface ExportModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   filters: DashboardFilters;
+  onExportComplete?: (bundle: ExportBundle) => void;
 }
 
 // ─── CSV helpers ──────────────────────────────────────────────────────────────
@@ -145,7 +146,7 @@ function createAndDownloadZip(
 
 // ─── ExportModal component ────────────────────────────────────────────────────
 
-export default function ExportModal({ open, onOpenChange, filters }: ExportModalProps) {
+export default function ExportModal({ open, onOpenChange, filters, onExportComplete }: ExportModalProps) {
   const [format, setFormat] = useState<'csv' | 'json'>('csv');
   const [anonymize, setAnonymize] = useState(true);
 
@@ -192,6 +193,7 @@ export default function ExportModal({ open, onOpenChange, filters }: ExportModal
       onSuccess: (bundle) => {
         createAndDownloadZip(bundle, format, anonymize);
         incrementExportMutation.mutate();
+        onExportComplete?.(bundle);
       },
     });
   }

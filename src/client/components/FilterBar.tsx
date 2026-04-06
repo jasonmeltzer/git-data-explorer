@@ -30,6 +30,8 @@ const DATE_PRESETS: { label: string; value: DatePreset }[] = [
   { label: 'All', value: 'all' },
 ];
 
+import type { ExportBundle } from '@shared/export-types.js';
+
 interface FilterBarProps {
   preset: DatePreset;
   setPreset: (p: DatePreset) => void;
@@ -40,6 +42,7 @@ interface FilterBarProps {
   tenureMode: 'global' | 'repo';
   setTenureMode: (m: 'global' | 'repo') => void;
   filters?: DashboardFilters;
+  onExportComplete?: (bundle: ExportBundle) => void;
 }
 
 export default function FilterBar({
@@ -52,6 +55,7 @@ export default function FilterBar({
   tenureMode,
   setTenureMode,
   filters,
+  onExportComplete,
 }: FilterBarProps) {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [repoPickerOpen, setRepoPickerOpen] = useState(false);
@@ -263,7 +267,7 @@ export default function FilterBar({
 
     {/* Export modal — rendered outside the toolbar div so it can overlay */}
     {filters && (
-      <ExportModal open={exportOpen} onOpenChange={setExportOpen} filters={filters} />
+      <ExportModal open={exportOpen} onOpenChange={setExportOpen} filters={filters} onExportComplete={onExportComplete} />
     )}
     </>
   );
