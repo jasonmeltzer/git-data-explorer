@@ -105,4 +105,67 @@ settings.put('/api/settings/depth', async (c) => {
   return c.json({ success: true, depthMonths: parsed.data.months });
 });
 
+// ─── Sharing consent endpoints ────────────────────────────────────────────────
+
+// Helper: read an app_config key and return its string value or null
+function readConfigKey(key: string): string | null {
+  const row = db.select().from(appConfig).where(eq(appConfig.key, key)).get();
+  return row?.value ?? null;
+}
+
+// Helper: upsert an app_config key
+function upsertConfigKey(key: string, value: string): void {
+  db.insert(appConfig)
+    .values({ key, value, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: appConfig.key,
+      set: { value, updatedAt: new Date() },
+    })
+    .run();
+}
+
+// GET /api/settings/sharing — returns current sharing consent state
+settings.get('/api/settings/sharing', (c) => {
+  const promptShown = readConfigKey('sharing_prompt_shown') === 'true';
+  const declined = readConfigKey('sharing_declined') === 'true';
+  const enabled = readConfigKey('sharing_enabled') === 'true';
+  const exportCount = parseInt(readConfigKey('export_count') ?? '0', 10);
+
+  return c.json({ promptShown, declined, enabled, exportCount });
+});
+
+// PUT /api/settings/sharing/decline — user declines sharing
+settings.put('/api/settings/sharing/decline', (c) => {
+  upsertConfigKey('sharing_declined', 'true');
+  upsertConfigKey('sharing_prompt_shown', 'true');
+  return c.json({ ok: true });
+});
+
+// PUT /api/settings/sharing/enable — user enables sharing
+settings.put('/api/settings/sharing/enable', (c) => {
+  upsertConfigKey('sharing_enabled', 'true');
+  upsertConfigKey('sharing_declined', 'false');
+  return c.json({ ok: true });
+});
+
+// PUT /api/settings/sharing/disable — user disables sharing
+settings.put('/api/settings/sharing/disable', (c) => {
+  upsertConfigKey('sharing_enabled', 'false');
+  return c.json({ ok: true });
+});
+
+// POST /api/settings/sharing/increment-export — increment export_count
+settings.post('/api/settings/sharing/increment-export', (c) => {
+  const current = parseInt(readConfigKey('export_count') ?? '0', 10);
+  const newCount = current + 1;
+  upsertConfigKey('export_count', String(newCount));
+  return c.json({ exportCount: newCount });
+});
+
+// PUT /api/settings/sharing/prompt-shown — mark sharing prompt as shown
+settings.put('/api/settings/sharing/prompt-shown', (c) => {
+  upsertConfigKey('sharing_prompt_shown', 'true');
+  return c.json({ ok: true });
+});
+
 export default settings;

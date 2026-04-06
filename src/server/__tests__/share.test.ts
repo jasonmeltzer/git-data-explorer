@@ -76,17 +76,15 @@ vi.mock('../services/token.js', () => ({
 // ─── Mock @octokit/rest ───────────────────────────────────────────────────────
 
 const mockGistsCreate = vi.fn();
-const MockOctokit = vi.fn().mockImplementation(() => ({
-  rest: {
-    gists: {
-      create: mockGistsCreate,
-    },
-  },
-}));
 
-vi.mock('@octokit/rest', () => ({
-  Octokit: MockOctokit,
-}));
+vi.mock('@octokit/rest', () => {
+  // Must be a class (constructor) for `new Octokit(...)` to work
+  class MockOctokit {
+    rest = { gists: { create: mockGistsCreate } };
+    constructor(_options?: unknown) {}
+  }
+  return { Octokit: MockOctokit };
+});
 
 // ─── Helper: build app with specific routes ───────────────────────────────────
 
@@ -170,11 +168,8 @@ describe('GET /api/share/reachability', () => {
 
 describe('POST /api/share/gist', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    mockGistsCreate.mockReset();
     mockReadToken.mockReturnValue(null);
-    MockOctokit.mockImplementation(() => ({
-      rest: { gists: { create: mockGistsCreate } },
-    }));
   });
 
   it('returns 401 when no token is configured', async () => {
