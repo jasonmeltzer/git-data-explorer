@@ -263,9 +263,46 @@ A standalone TypeScript script (`npm run seed`) that generates a synthetic `data
 - **Idempotent** — wipes and recreates seed.db on each run
 - **`npm run dev:seed`** starts the app against seed.db via `DB_PATH` env var
 
+## Export & Sharing Layer
+
+Added in Phase 8 — provides full dashboard data export with client-side anonymization and optional sharing.
+
+```
+Export flow:
+FilterBar "Export Data" button
+  → ExportModal (format selection, anonymization toggle, 5-row preview)
+      → POST /api/export { startDate, endDate, repoIds, tenureMode, rollingGranularity }
+          → buildExportBundle (server: aggregates all 8 analytics sections)
+              → ExportBundle returned to client
+                  → anonymizeBundle (client-side: buildPseudonymMap + buildRepoMap)
+                      → fflate zipSync → ZIP blob download
+                          → onExportComplete callback → check heuristic → SharingPrompt
+
+Sharing flow (post-export):
+SharingPrompt AlertDialog
+  → tier selection (summary = metadata+executiveSummary+rolling, full = entire bundle)
+  → destination selection:
+      HTTP → POST /api/share/http { data }
+      Gist → POST /api/share/gist { tier, data } → Octokit gist create → { gistUrl }
+      Manual → blob download with instructions text prepended
+  → Decline → PUT /api/settings/sharing/decline (persists in app_config)
+
+Consent persistence:
+  app_config table stores: sharing_prompt_shown, sharing_declined, sharing_enabled, sharing_export_count
+  GET /api/settings/sharing → { promptShown, declined, enabled, exportCount }
+  PUT endpoints: /decline, /enable, /disable, /prompt-shown
+  POST /api/settings/sharing/increment-export → increments export count
+```
+
+**Key design decisions:**
+- **Anonymization is client-side** — the server returns raw data; the browser applies pseudonym maps. Ensures the server never needs to store or process anonymized identities.
+- **Animal name pseudonyms** — 400-word pool of adjective+animal combinations (e.g., "Amber Bear"). Same login always maps to the same name within a single export (deterministic within session, different on next export).
+- **Per-section try/catch in buildExportBundle** — a single analytics service failure returns empty data for that section without aborting the entire export.
+- **Plain Octokit for Gist creation** — one-off API call, no need for the throttling plugin used by the collection engine.
+- **Sharing is always anonymized** — the SharingPrompt only operates on the already-downloaded export bundle; raw logins are never sent to Gist or HTTP endpoints.
+
 ## What's Not Built Yet
 
-- **Data Export** (Phase 8) — CSV/JSON export with optional contributor anonymization
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet (planned for a future phase)
 
 ## File Map
@@ -278,7 +315,9 @@ src/
 │   ├── components/
 │   │   ├── NavBar.tsx        # Persistent top navigation
 │   │   ├── TokenForm.tsx     # PAT entry form
-│   │   ├── FilterBar.tsx     # Dashboard sticky filter bar (date presets, repo select, tenure mode)
+│   │   ├── FilterBar.tsx     # Dashboard sticky filter bar (date presets, repo select, tenure mode, Export button)
+│   │   ├── ExportModal.tsx   # Export dialog: CSV/JSON format, anonymization toggle, 5-row preview, ZIP download
+│   │   ├── SharingPrompt.tsx # Post-export sharing AlertDialog: tier (summary/full) + destination (HTTP/Gist/manual) selection
 │   │   ├── ContributorTable.tsx  # Collapsible sortable contributor table (TanStack Table); per-repo mode: author×repo rows, Repo column, row grouping
 │   │   ├── StatCalloutBox.tsx    # Single KPI callout box with delta badge (min 44px touch height)
 │   │   ├── StatCalloutRow.tsx    # Horizontal row of 2–4 StatCalloutBox components
@@ -309,17 +348,21 @@ src/
 │   │   ├── useBotRatio.ts           # TanStack Query hook for bot ratio monthly data
 │   │   ├── useCohortConfig.ts       # TanStack Query hook for reading/writing cohort config
 │   │   ├── useContributorBeforeAfter.ts # TanStack Query hook for contributor before/after AI delta data
+│   │   ├── useExport.ts             # TanStack Query mutation for POST /api/export; useIncrementExport
+│   │   ├── useSharingStatus.ts      # Sharing consent state: useSharingStatus, useDeclineSharing, useEnableSharing, useDisableSharing, useMarkPromptShown
 │   │   └── useCollectionSSE.ts      # SSE connection for collection progress
 │   ├── lib/
+│   │   ├── anonymizer.ts            # Client-side pseudonym generation: buildPseudonymMap (400 animal names), buildRepoMap, anonymizeBundle
+│   │   ├── csv-serializer.ts        # RFC 4180 CSV serialization: toCsv(headers, rows)
 │   │   ├── chartTransforms.ts       # CohortMetricsRow[] → Recharts ChartPoint[]
 │   │   ├── deltaFormat.ts           # pctDelta/formatNum utilities for before/after delta display
 │   │   └── narratives.ts            # Trend narrative text generation
 │   └── pages/
-│       ├── DashboardPage.tsx  # Primary view: charts, filters, narratives
+│       ├── DashboardPage.tsx  # Primary view: charts, filters, narratives; SharingPrompt wired to post-export heuristic
 │       ├── LandingPage.tsx   # Setup status overview, "View Dashboard" CTA
 │       ├── ReposPage.tsx     # Repo selection, search, management (status badges)
 │       ├── CollectionPage.tsx # Data collection: depth slider, progress, start/stop
-│       └── SettingsPage.tsx  # Token configuration, bot toggle
+│       └── SettingsPage.tsx  # Token configuration, bot toggle, cohort config, Data Sharing toggle
 ├── server/
 │   ├── index.ts              # Hono app, CORS, route mounting
 │   ├── db/
@@ -328,10 +371,12 @@ src/
 │   │   └── migrate.ts        # Migration runner
 │   ├── routes/
 │   │   ├── health.ts         # GET /api/health
-│   │   ├── settings.ts       # GET/POST /api/settings/token, GET/PUT /api/settings
+│   │   ├── settings.ts       # GET/POST /api/settings/token, GET/PUT /api/settings, sharing consent endpoints
 │   │   ├── repositories.ts   # 7 repo endpoints
 │   │   ├── collection.ts     # Collection start/stop/status/progress (SSE)
-│   │   └── analytics.ts      # 6 analytics endpoints (marker, cohorts, rampup, rolling)
+│   │   ├── analytics.ts      # 13 analytics endpoints (marker, cohorts, rampup, rolling, contributors, before-after, etc.)
+│   │   ├── export.ts         # POST /api/export → buildExportBundle → ExportBundle JSON
+│   │   └── share.ts          # POST /api/share/gist, POST /api/share/http, GET /api/share/reachability
 │   └── services/
 │       ├── token.ts          # PAT read/write from .env
 │       ├── octokit.ts        # Octokit factory with throttling
@@ -351,10 +396,12 @@ src/
 │       ├── analytics-summary.ts       # Executive summary KPI tiles
 │       ├── analytics-before-after.ts  # Before/after AI marker comparison
 │       ├── cohort-config-service.ts   # Cohort boundary config get/set from app_config
+│       ├── export-service.ts          # buildExportBundle: aggregates all 8 analytics sections with per-section try/catch
 │       └── first-commit-fetcher.ts    # GitHub API true first-commit date finder
 └── shared/
     ├── types.ts              # Shared TypeScript interfaces
     ├── cohort-config.ts      # CohortConfig, CohortThreshold, DEFAULT_COHORT_CONFIG, getThresholdSeconds()
+    ├── export-types.ts       # ExportBundle, ExportMetadata, ExportRequest, PrTurnaroundRow, BotRatioRow, ExecutiveSummary, BeforeAfterComparison
     ├── lib/utils.ts          # cn() class merge helper
     └── components/ui/        # shadcn/ui primitives
 scripts/
