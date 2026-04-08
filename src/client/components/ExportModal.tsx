@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { Download, Info, Loader2 } from 'lucide-react';
 import { zipSync, strToU8 } from 'fflate';
 import {
@@ -26,11 +26,11 @@ import {
   TooltipContent,
   TooltipProvider,
 } from '@shared/components/ui/tooltip.js';
-import { useExport, useIncrementExport } from '../hooks/useExport.js';
+import { useExport, useExportPreview, useIncrementExport } from '../hooks/useExport.js';
 import { buildPseudonymMap, buildRepoMap, anonymizeBundle } from '../lib/anonymizer.js';
 import { toCsv } from '../lib/csv-serializer.js';
 import type { DashboardFilters } from '../hooks/useDashboardFilters.js';
-import type { ExportBundle } from '@shared/export-types.js';
+import type { ExportBundle, ExportRequest } from '@shared/export-types.js';
 import type { ContributorBeforeAfterStats } from '@shared/types.js';
 
 interface ExportModalProps {
@@ -153,41 +153,37 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
   const exportMutation = useExport();
   const incrementExportMutation = useIncrementExport();
 
-  // Store the raw fetched bundle for preview (before anonymization)
-  const rawBundleRef = useRef<ExportBundle | null>(null);
+  // Build the export request from current filters
+  const exportRequest: ExportRequest | null = filters ? {
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    repoIds: filters.repoIds,
+    tenureMode: filters.tenureMode,
+    rollingGranularity: filters.rollingGranularity,
+  } : null;
 
-  // When export data arrives, cache the raw bundle
-  const exportData = exportMutation.data;
-  if (exportData && rawBundleRef.current !== exportData) {
-    rawBundleRef.current = exportData;
-  }
+  // Eagerly fetch preview data when modal opens
+  const previewQuery = useExportPreview(exportRequest, open);
+  const previewBundle = previewQuery.data;
 
   // Build preview rows from the bundle
   // Apply anonymization live based on the toggle — build maps once per bundle
   const previewRows = useMemo(() => {
-    const bundle = rawBundleRef.current;
-    if (!bundle || bundle.contributors.length === 0) return [];
+    if (!previewBundle || previewBundle.contributors.length === 0) return [];
 
     if (anonymize) {
-      const logins = extractAllLogins(bundle);
-      const repoNames = bundle.metadata.repoNames;
+      const logins = extractAllLogins(previewBundle);
+      const repoNames = previewBundle.metadata.repoNames;
       const pseudonymMap = buildPseudonymMap(logins);
       const repoMap = buildRepoMap(repoNames);
-      const anon = anonymizeBundle(bundle, pseudonymMap, repoMap);
+      const anon = anonymizeBundle(previewBundle, pseudonymMap, repoMap);
       return anon.contributors.slice(0, 5);
     }
-    return bundle.contributors.slice(0, 5);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exportData, anonymize]);
+    return previewBundle.contributors.slice(0, 5);
+  }, [previewBundle, anonymize]);
 
   function handleDownload() {
-    const exportRequest = {
-      startDate: filters.startDate,
-      endDate: filters.endDate,
-      repoIds: filters.repoIds,
-      tenureMode: filters.tenureMode,
-      rollingGranularity: filters.rollingGranularity,
-    };
+    if (!exportRequest) return;
 
     exportMutation.mutate(exportRequest, {
       onSuccess: (bundle) => {
@@ -215,10 +211,10 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
             <span className="text-sm text-muted-foreground">Format:</span>
             <Tabs value={format} onValueChange={(v) => setFormat(v as 'csv' | 'json')}>
               <TabsList className="h-7">
-                <TabsTrigger value="csv" className="text-xs px-3 py-1">
+                <TabsTrigger value="csv" className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">
                   CSV
                 </TabsTrigger>
-                <TabsTrigger value="json" className="text-xs px-3 py-1">
+                <TabsTrigger value="json" className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">
                   JSON
                 </TabsTrigger>
               </TabsList>
@@ -268,7 +264,12 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
           {/* Preview section */}
           <div className="space-y-2">
             <p className="text-sm font-medium">Preview (first 5 rows)</p>
-            {exportData && previewRows.length > 0 ? (
+            {previewQuery.isLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading preview...
+              </div>
+            ) : previewBundle && previewRows.length > 0 ? (
               <div className="overflow-x-auto rounded-md border">
                 <Table>
                   <caption className="sr-only">
@@ -308,15 +309,15 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
                   </TableBody>
                 </Table>
               </div>
-            ) : exportData && previewRows.length === 0 ? (
+            ) : previewBundle && previewRows.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No contributor data available in the selected date range.
               </p>
-            ) : (
-              <p className="text-sm text-muted-foreground">
-                Click Download ZIP to prepare data.
+            ) : previewQuery.isError ? (
+              <p className="text-sm text-destructive">
+                Preview failed. Check your connection and try again.
               </p>
-            )}
+            ) : null}
 
             {/* Export error */}
             {exportMutation.isError && (
