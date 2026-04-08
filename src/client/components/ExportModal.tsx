@@ -29,6 +29,7 @@ import {
 import { useExport, useExportPreview, useIncrementExport } from '../hooks/useExport.js';
 import { buildPseudonymMap, buildRepoMap, anonymizeBundle } from '../lib/anonymizer.js';
 import { toCsv } from '../lib/csv-serializer.js';
+import { rollingToCsv, beforeAfterToCsv, executiveSummaryToCsv } from '../lib/csv-flatteners.js';
 import type { DashboardFilters } from '../hooks/useDashboardFilters.js';
 import type { ExportBundle, ExportRequest } from '@shared/export-types.js';
 import type { ContributorBeforeAfterStats } from '@shared/types.js';
@@ -120,15 +121,14 @@ function createAndDownloadZip(
     files['contributors.csv'] = strToU8(contributorsToCsv(finalBundle.contributors));
     files['pr-turnaround.csv'] = strToU8(arrayToCsv(finalBundle.prTurnaround as unknown as Record<string, unknown>[]));
     files['bot-ratio.csv'] = strToU8(arrayToCsv(finalBundle.botRatio as unknown as Record<string, unknown>[]));
-    // rolling and executive-summary are objects, not arrays — serialize as JSON even in CSV mode
     if (finalBundle.rolling) {
-      files['rolling-comparison.json'] = strToU8(JSON.stringify(finalBundle.rolling, null, 2));
+      files['rolling-comparison.csv'] = strToU8(rollingToCsv(finalBundle.rolling));
     }
     if (finalBundle.executiveSummary) {
-      files['executive-summary.json'] = strToU8(JSON.stringify(finalBundle.executiveSummary, null, 2));
+      files['executive-summary.csv'] = strToU8(executiveSummaryToCsv(finalBundle.executiveSummary));
     }
     if (finalBundle.beforeAfter) {
-      files['before-after.json'] = strToU8(JSON.stringify(finalBundle.beforeAfter, null, 2));
+      files['before-after.csv'] = strToU8(beforeAfterToCsv(finalBundle.beforeAfter));
     }
   }
 
