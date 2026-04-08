@@ -47,6 +47,7 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
   const [httpReachable, setHttpReachable] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [shareResult, setShareResult] = useState<ShareResult | null>(null);
+  const [lastDestination, setLastDestination] = useState<ShareDestination | null>(null);
 
   const declineMutation = useDeclineSharing();
   const markShownMutation = useMarkPromptShown();
@@ -75,6 +76,7 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
       setDestination('manual');
       setSharing(false);
       setShareResult(null);
+      setLastDestination(null);
     }
   }, [open]);
 
@@ -83,6 +85,7 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
 
     setSharing(true);
     setShareResult(null);
+    setLastDestination(destination);
 
     const shareData = prepareShareData(exportBundle, tier);
 
@@ -108,14 +111,12 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
         if (!res.ok) throw new Error('HTTP share failed');
         setShareResult({ success: true });
       } else {
-        // Manual download
-        const instructions = `# Git Data Explorer — Anonymized Export\n\nThank you for sharing this data to advance AI adoption research.\nThis file contains anonymized contribution data exported from Git Data Explorer.\nContributors appear as animal names; repos appear as Repo-Alpha, Repo-Beta, etc.\n\n`;
-        const content = instructions + JSON.stringify(shareData, null, 2);
-        const blob = new Blob([content], { type: 'text/plain' });
+        // Manual download — clean JSON sharing package (distinct from the export ZIP)
+        const blob = new Blob([JSON.stringify(shareData, null, 2)], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `git-data-explorer-share-${tier}-${new Date().toISOString().split('T')[0]}.txt`;
+        a.download = `gde-sharing-package-${tier}-${new Date().toISOString().split('T')[0]}.json`;
         a.click();
         URL.revokeObjectURL(url);
         setShareResult({ success: true });
@@ -265,9 +266,9 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
                       : 'hover:border-muted-foreground',
                   ].join(' ')}
                 >
-                  <p className="text-sm font-medium">Download file to share manually</p>
+                  <p className="text-sm font-medium">Download sharing package</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Download a text file with sharing instructions and anonymized data included.
+                    Download a JSON file with anonymized data you can email or upload to share with the research team.
                   </p>
                 </div>
               </div>
@@ -296,11 +297,17 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
             )}
           </div>
         ) : (
-          /* Success state */
+          /* Success state — message varies by destination */
           <div className="rounded-md border border-emerald-300 bg-emerald-50 dark:border-emerald-700 dark:bg-emerald-950/30 p-4">
-            <p className="text-sm text-emerald-800 dark:text-emerald-200 font-medium">
-              Shared successfully. Thank you for contributing to AI adoption research.
-            </p>
+            {lastDestination === 'manual' ? (
+              <p className="text-sm text-emerald-800 dark:text-emerald-200 font-medium">
+                Sharing package downloaded. Email it or upload it to contribute to AI adoption research. Thank you!
+              </p>
+            ) : (
+              <p className="text-sm text-emerald-800 dark:text-emerald-200 font-medium">
+                Shared successfully. Thank you for contributing to AI adoption research.
+              </p>
+            )}
             {shareResult.gistUrl && (
               <a
                 href={shareResult.gistUrl}
