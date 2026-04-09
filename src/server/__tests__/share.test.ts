@@ -22,6 +22,19 @@ function createTestDb() {
       value TEXT NOT NULL,
       updated_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS collection_state (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      repo_id INTEGER NOT NULL,
+      resource_type TEXT NOT NULL,
+      cursor TEXT,
+      last_page INTEGER,
+      status TEXT NOT NULL DEFAULT 'pending',
+      last_run_at INTEGER,
+      error_message TEXT,
+      direction TEXT,
+      oldest_month_collected TEXT,
+      depth_target TEXT
+    );
   `);
   return drizzle(sqlite, { schema });
 }
@@ -278,5 +291,213 @@ describe('POST /api/settings/sharing/increment-export', () => {
     });
     const body2 = await res2.json();
     expect(body2.exportCount).toBe(body1.exportCount + 1);
+  });
+});
+
+// ─── Eligibility endpoint tests ───────────────────────────────────────────────
+
+describe('GET /api/settings/sharing/eligible', () => {
+  beforeEach(() => {
+    testDb.delete(schema.appConfig).run();
+    testDb.delete(schema.collectionState).run();
+  });
+
+  it('returns { eligible: false } when export_count is 0', async () => {
+    // No keys set — export_count defaults to 0
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/eligible');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eligible).toBe(false);
+  });
+
+  it('returns { eligible: false } when sharing_declined is true', async () => {
+    // Set export_count >= 1 and add qualifying repos, but declined
+    const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    testDb.insert(schema.appConfig).values([
+      { key: 'export_count', value: '2', updatedAt: new Date() },
+      { key: 'sharing_declined', value: 'true', updatedAt: new Date() },
+    ]).run();
+    testDb.insert(schema.collectionState).values([
+      { repoId: 1, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+      { repoId: 2, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+    ]).run();
+
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/eligible');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eligible).toBe(false);
+  });
+
+  it('returns { eligible: false } when fewer than 2 repos have 3+ months of history', async () => {
+    // Only 1 qualifying repo
+    const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    testDb.insert(schema.appConfig).values([
+      { key: 'export_count', value: '1', updatedAt: new Date() },
+    ]).run();
+    testDb.insert(schema.collectionState).values([
+      { repoId: 1, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+    ]).run();
+
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/eligible');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eligible).toBe(false);
+  });
+
+  it('returns { eligible: true } when all gates pass', async () => {
+    const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    testDb.insert(schema.appConfig).values([
+      { key: 'export_count', value: '1', updatedAt: new Date() },
+    ]).run();
+    testDb.insert(schema.collectionState).values([
+      { repoId: 1, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+      { repoId: 2, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+    ]).run();
+
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/eligible');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eligible).toBe(true);
+  });
+
+  it('returns { eligible: false } when sharing_dismiss_count >= 3 (D-07 soft decline)', async () => {
+    const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    testDb.insert(schema.appConfig).values([
+      { key: 'export_count', value: '1', updatedAt: new Date() },
+      { key: 'sharing_dismiss_count', value: '3', updatedAt: new Date() },
+    ]).run();
+    testDb.insert(schema.collectionState).values([
+      { repoId: 1, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+      { repoId: 2, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+    ]).run();
+
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/eligible');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eligible).toBe(false);
+  });
+
+  it('returns { eligible: false } when sharing_prompt_dismissed_at is within 24 hours (D-06 cooldown)', async () => {
+    const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    testDb.insert(schema.appConfig).values([
+      { key: 'export_count', value: '1', updatedAt: new Date() },
+      { key: 'sharing_prompt_dismissed_at', value: oneHourAgo, updatedAt: new Date() },
+    ]).run();
+    testDb.insert(schema.collectionState).values([
+      { repoId: 1, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+      { repoId: 2, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+    ]).run();
+
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/eligible');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eligible).toBe(false);
+  });
+
+  it('returns { eligible: true } when sharing_prompt_dismissed_at is older than 24 hours', async () => {
+    const fourMonthsAgo = new Date(Date.now() - 120 * 24 * 60 * 60 * 1000).toISOString();
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    testDb.insert(schema.appConfig).values([
+      { key: 'export_count', value: '1', updatedAt: new Date() },
+      { key: 'sharing_prompt_dismissed_at', value: twoDaysAgo, updatedAt: new Date() },
+    ]).run();
+    testDb.insert(schema.collectionState).values([
+      { repoId: 1, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+      { repoId: 2, resourceType: 'commits', status: 'complete', oldestMonthCollected: fourMonthsAgo },
+    ]).run();
+
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/eligible');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.eligible).toBe(true);
+  });
+});
+
+// ─── Dismiss endpoint tests ───────────────────────────────────────────────────
+
+describe('PUT /api/settings/sharing/dismiss', () => {
+  beforeEach(() => {
+    testDb.delete(schema.appConfig).run();
+    testDb.delete(schema.collectionState).run();
+  });
+
+  it('increments sharing_dismiss_count and sets sharing_prompt_dismissed_at', async () => {
+    const app = await getSettingsApp();
+    const before = Date.now();
+
+    const res = await app.request('/api/settings/sharing/dismiss', { method: 'PUT' });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toEqual({ ok: true });
+
+    // Verify dismiss_count incremented from 0 to 1
+    const countRow = testDb.select().from(schema.appConfig)
+      .where(schema.appConfig.key ? undefined : undefined)
+      .all()
+      .find(r => r.key === 'sharing_dismiss_count');
+    expect(countRow?.value).toBe('1');
+
+    // Verify dismissed_at is set to a recent timestamp
+    const tsRow = testDb.select().from(schema.appConfig)
+      .all()
+      .find(r => r.key === 'sharing_prompt_dismissed_at');
+    expect(tsRow).toBeDefined();
+    const ts = new Date(tsRow!.value).getTime();
+    expect(ts).toBeGreaterThanOrEqual(before);
+  });
+
+  it('increments dismiss_count from an existing value', async () => {
+    testDb.insert(schema.appConfig).values([
+      { key: 'sharing_dismiss_count', value: '2', updatedAt: new Date() },
+    ]).run();
+
+    const app = await getSettingsApp();
+    await app.request('/api/settings/sharing/dismiss', { method: 'PUT' });
+
+    const countRow = testDb.select().from(schema.appConfig)
+      .all()
+      .find(r => r.key === 'sharing_dismiss_count');
+    expect(countRow?.value).toBe('3');
+  });
+});
+
+// ─── Enable endpoint full reset tests ────────────────────────────────────────
+
+describe('PUT /api/settings/sharing/enable — full D-08 reset', () => {
+  beforeEach(() => {
+    testDb.delete(schema.appConfig).run();
+    testDb.delete(schema.collectionState).run();
+  });
+
+  it('clears sharing_declined, resets sharing_dismiss_count to 0, and deletes sharing_prompt_dismissed_at', async () => {
+    // Seed existing dismiss state
+    testDb.insert(schema.appConfig).values([
+      { key: 'sharing_declined', value: 'true', updatedAt: new Date() },
+      { key: 'sharing_dismiss_count', value: '2', updatedAt: new Date() },
+      { key: 'sharing_prompt_dismissed_at', value: new Date(Date.now() - 3600000).toISOString(), updatedAt: new Date() },
+    ]).run();
+
+    const app = await getSettingsApp();
+    const res = await app.request('/api/settings/sharing/enable', { method: 'PUT' });
+    expect(res.status).toBe(200);
+
+    const allKeys = testDb.select().from(schema.appConfig).all();
+
+    const declined = allKeys.find(r => r.key === 'sharing_declined');
+    expect(declined?.value).toBe('false');
+
+    const dismissCount = allKeys.find(r => r.key === 'sharing_dismiss_count');
+    expect(dismissCount?.value).toBe('0');
+
+    const dismissedAt = allKeys.find(r => r.key === 'sharing_prompt_dismissed_at');
+    expect(dismissedAt).toBeUndefined();
   });
 });

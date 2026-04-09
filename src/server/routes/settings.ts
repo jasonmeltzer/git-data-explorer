@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { db } from '../db/client.js';
-import { appConfig } from '../db/schema.js';
+import { appConfig, collectionState } from '../db/schema.js';
 import { getTokenStatus, validateAndSaveToken } from '../services/token.js';
 import { getDepthSetting, setDepthSetting } from '../services/collection-state.js';
 
@@ -141,10 +141,12 @@ settings.put('/api/settings/sharing/decline', (c) => {
   return c.json({ ok: true });
 });
 
-// PUT /api/settings/sharing/enable — user enables sharing
+// PUT /api/settings/sharing/enable — user enables sharing (D-08 full reset)
 settings.put('/api/settings/sharing/enable', (c) => {
   upsertConfigKey('sharing_enabled', 'true');
   upsertConfigKey('sharing_declined', 'false');
+  upsertConfigKey('sharing_dismiss_count', '0');
+  db.delete(appConfig).where(eq(appConfig.key, 'sharing_prompt_dismissed_at')).run();
   return c.json({ ok: true });
 });
 
@@ -165,6 +167,56 @@ settings.post('/api/settings/sharing/increment-export', (c) => {
 // PUT /api/settings/sharing/prompt-shown — mark sharing prompt as shown
 settings.put('/api/settings/sharing/prompt-shown', (c) => {
   upsertConfigKey('sharing_prompt_shown', 'true');
+  return c.json({ ok: true });
+});
+
+// GET /api/settings/sharing/eligible — server-side eligibility heuristic (D-01 through D-07)
+settings.get('/api/settings/sharing/eligible', (c) => {
+  // Gate 1: permanent decline
+  if (readConfigKey('sharing_declined') === 'true') {
+    return c.json({ eligible: false });
+  }
+
+  // Gate 2: soft decline via dismiss_count >= 3 (D-07)
+  const dismissCount = parseInt(readConfigKey('sharing_dismiss_count') ?? '0', 10);
+  if (dismissCount >= 3) {
+    return c.json({ eligible: false });
+  }
+
+  // Gate 3: 24-hour cooldown after dismiss (D-06)
+  const dismissedAt = readConfigKey('sharing_prompt_dismissed_at');
+  if (dismissedAt && Date.now() - new Date(dismissedAt).getTime() < 86400000) {
+    return c.json({ eligible: false });
+  }
+
+  // Gate 4: at least 1 prior export (D-01)
+  const exportCount = parseInt(readConfigKey('export_count') ?? '0', 10);
+  if (exportCount < 1) {
+    return c.json({ eligible: false });
+  }
+
+  // Gate 5: 2+ repos with 3+ months of history (D-02)
+  const threeMonthsAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const rows = db
+    .select({ repoId: collectionState.repoId, oldestMonthCollected: collectionState.oldestMonthCollected })
+    .from(collectionState)
+    .all();
+
+  const qualifyingRepoIds = new Set<number>();
+  for (const row of rows) {
+    if (row.oldestMonthCollected && new Date(row.oldestMonthCollected) <= threeMonthsAgo) {
+      qualifyingRepoIds.add(row.repoId);
+    }
+  }
+
+  return c.json({ eligible: qualifyingRepoIds.size >= 2 });
+});
+
+// PUT /api/settings/sharing/dismiss — "not now" close with 24h cooldown (D-05, D-06)
+settings.put('/api/settings/sharing/dismiss', (c) => {
+  upsertConfigKey('sharing_prompt_dismissed_at', new Date().toISOString());
+  const current = parseInt(readConfigKey('sharing_dismiss_count') ?? '0', 10);
+  upsertConfigKey('sharing_dismiss_count', String(current + 1));
   return c.json({ ok: true });
 });
 
