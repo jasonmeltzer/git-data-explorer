@@ -56,3 +56,24 @@ export function useMarkPromptShown() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'sharing'] }),
   });
 }
+
+export function useSharingEligibility() {
+  return useQuery({
+    queryKey: ['settings', 'sharing', 'eligible'],
+    queryFn: async (): Promise<{ eligible: boolean }> => {
+      const res = await fetch('/api/settings/sharing/eligible');
+      return res.json();
+    },
+    staleTime: 0,
+  });
+}
+
+export function useDismissSharing() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await fetch('/api/settings/sharing/dismiss', { method: 'PUT' });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['settings', 'sharing'] }),
+  });
+}

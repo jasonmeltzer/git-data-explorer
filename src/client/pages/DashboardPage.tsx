@@ -22,7 +22,7 @@ import { computeCohortInsights, computeRampUpInsights, computeRollingInsights } 
 import { formatNum } from '../lib/deltaFormat.js';
 import FilterBar from '../components/FilterBar.js';
 import SharingPrompt from '../components/SharingPrompt.js';
-import { useSharingStatus } from '../hooks/useSharingStatus.js';
+import { useSharingStatus, useSharingEligibility } from '../hooks/useSharingStatus.js';
 import CohortAreaChart from '../components/charts/CohortAreaChart.js';
 import RampUpLineChart from '../components/charts/RampUpLineChart.js';
 import RollingCards from '../components/charts/RollingCards.js';
@@ -338,12 +338,13 @@ export default function DashboardPage() {
   const [sharingPromptOpen, setSharingPromptOpen] = useState(false);
   const [lastExportBundle, setLastExportBundle] = useState<ExportBundle | null>(null);
   const { data: sharingStatus } = useSharingStatus();
+  const { refetch: refetchEligibility } = useSharingEligibility();
 
-  function handleExportComplete(bundle: ExportBundle) {
+  async function handleExportComplete(bundle: ExportBundle) {
     setLastExportBundle(bundle);
-    // Show sharing prompt if heuristic conditions met:
-    // - at least 1 export done, prompt not yet shown, not declined
-    if (sharingStatus && !sharingStatus.promptShown && !sharingStatus.declined) {
+    // Wait for increment-export to settle then fetch fresh eligibility from server
+    const result = await refetchEligibility();
+    if (result.data?.eligible) {
       setSharingPromptOpen(true);
     }
   }

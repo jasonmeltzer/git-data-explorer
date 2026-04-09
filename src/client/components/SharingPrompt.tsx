@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
   AlertDialog,
@@ -11,7 +11,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Badge } from '@shared/components/ui/badge.js';
 import { Button } from '@shared/components/ui/button.js';
-import { useDeclineSharing, useMarkPromptShown } from '../hooks/useSharingStatus.js';
+import { useDeclineSharing, useMarkPromptShown, useDismissSharing } from '../hooks/useSharingStatus.js';
 import type { ExportBundle } from '@shared/export-types.js';
 
 interface SharingPromptProps {
@@ -51,6 +51,8 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
 
   const declineMutation = useDeclineSharing();
   const markShownMutation = useMarkPromptShown();
+  const dismissMutation = useDismissSharing();
+  const declineClickedRef = useRef(false);
 
   // Check HTTP reachability and mark prompt shown when dialog opens
   useEffect(() => {
@@ -132,14 +134,26 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
   }
 
   function handleDecline() {
+    declineClickedRef.current = true;
     declineMutation.mutate();
     onOpenChange(false);
+  }
+
+  function handleOpenChange(open: boolean) {
+    if (!open && !declineClickedRef.current) {
+      // "Not now" — dismiss without permanent decline (D-05)
+      dismissMutation.mutate();
+    }
+    if (!open) {
+      declineClickedRef.current = false;
+    }
+    onOpenChange(open);
   }
 
   const previewData = exportBundle ? prepareShareData(exportBundle, tier) : null;
 
   return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogContent className="max-w-2xl">
         <AlertDialogHeader>
           <AlertDialogTitle>Help advance AI adoption research?</AlertDialogTitle>
