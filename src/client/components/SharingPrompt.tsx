@@ -42,7 +42,7 @@ function prepareShareData(bundle: ExportBundle, tier: ShareTier): object {
 }
 
 export default function SharingPrompt({ open, onOpenChange, exportBundle }: SharingPromptProps) {
-  const [tier, setTier] = useState<ShareTier>('summary');
+  const [tier, setTier] = useState<ShareTier>('full');
   const [destination, setDestination] = useState<ShareDestination>('manual');
   const [httpReachable, setHttpReachable] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -74,7 +74,7 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
   // Reset state when dialog closes
   useEffect(() => {
     if (!open) {
-      setTier('summary');
+      setTier('full');
       setDestination('manual');
       setSharing(false);
       setShareResult(null);
@@ -178,14 +178,13 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setTier('summary'); }}
                   className={[
                     'cursor-pointer transition-colors',
-                    tier === 'summary' ? 'border-primary ring-1 ring-primary' : 'hover:border-muted-foreground',
+                    tier === 'summary'
+                      ? 'ring-2 ring-primary bg-primary/5'
+                      : 'ring-1 ring-foreground/10 hover:ring-foreground/25',
                   ].join(' ')}
                 >
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm flex items-center gap-2">
-                      Summary Report
-                      <Badge variant="secondary" className="text-[10px]">Recommended</Badge>
-                    </CardTitle>
+                    <CardTitle className="text-sm">Summary Report</CardTitle>
                   </CardHeader>
                   <CardContent className="text-xs text-muted-foreground">
                     <p>Aggregate stats only — no individual rows.</p>
@@ -206,11 +205,16 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setTier('full'); }}
                   className={[
                     'cursor-pointer transition-colors',
-                    tier === 'full' ? 'border-primary ring-1 ring-primary' : 'hover:border-muted-foreground',
+                    tier === 'full'
+                      ? 'ring-2 ring-primary bg-primary/5'
+                      : 'ring-1 ring-foreground/10 hover:ring-foreground/25',
                   ].join(' ')}
                 >
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm">Full Dataset</CardTitle>
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      Full Dataset
+                      <Badge variant="secondary" className="text-[10px]">Recommended</Badge>
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="text-xs text-muted-foreground">
                     All anonymized rows with animal-name contributors and pseudonym repos.
@@ -232,10 +236,10 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
                     onClick={() => setDestination('http')}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setDestination('http'); }}
                     className={[
-                      'rounded-lg border px-4 py-3 cursor-pointer transition-colors',
+                      'rounded-lg px-4 py-3 cursor-pointer transition-colors',
                       destination === 'http'
-                        ? 'border-primary ring-1 ring-primary'
-                        : 'hover:border-muted-foreground',
+                        ? 'ring-2 ring-primary bg-primary/5'
+                        : 'ring-1 ring-foreground/10 hover:ring-foreground/25',
                     ].join(' ')}
                   >
                     <p className="text-sm font-medium">Send to research endpoint</p>
@@ -253,10 +257,10 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
                   onClick={() => setDestination('gist')}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setDestination('gist'); }}
                   className={[
-                    'rounded-lg border px-4 py-3 cursor-pointer transition-colors',
+                    'rounded-lg px-4 py-3 cursor-pointer transition-colors',
                     destination === 'gist'
-                      ? 'border-primary ring-1 ring-primary'
-                      : 'hover:border-muted-foreground',
+                      ? 'ring-2 ring-primary bg-primary/5'
+                      : 'ring-1 ring-foreground/10 hover:ring-foreground/25',
                   ].join(' ')}
                 >
                   <p className="text-sm font-medium">Save as Private GitHub Gist</p>
@@ -274,10 +278,10 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
                   onClick={() => setDestination('manual')}
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setDestination('manual'); }}
                   className={[
-                    'rounded-lg border px-4 py-3 cursor-pointer transition-colors',
+                    'rounded-lg px-4 py-3 cursor-pointer transition-colors',
                     destination === 'manual'
-                      ? 'border-primary ring-1 ring-primary'
-                      : 'hover:border-muted-foreground',
+                      ? 'ring-2 ring-primary bg-primary/5'
+                      : 'ring-1 ring-foreground/10 hover:ring-foreground/25',
                   ].join(' ')}
                 >
                   <p className="text-sm font-medium">Download sharing package</p>
