@@ -197,7 +197,7 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" style={{ transform: 'translate(-50%, -50%)' }}>
         <DialogHeader>
           <DialogTitle>Export Dashboard Data</DialogTitle>
           <DialogDescription>
