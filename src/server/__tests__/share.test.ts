@@ -255,6 +255,10 @@ describe('GET /api/settings/sharing', () => {
 });
 
 describe('PUT /api/settings/sharing/decline', () => {
+  beforeEach(() => {
+    testDb.delete(schema.appConfig).run();
+  });
+
   it('sets sharing_declined and sharing_prompt_shown to true', async () => {
     const app = await getSettingsApp();
     const res = await app.request('/api/settings/sharing/decline', {
@@ -274,6 +278,10 @@ describe('PUT /api/settings/sharing/decline', () => {
 });
 
 describe('POST /api/settings/sharing/increment-export', () => {
+  beforeEach(() => {
+    testDb.delete(schema.appConfig).run();
+  });
+
   it('increments export_count by 1 each call', async () => {
     const app = await getSettingsApp();
 
@@ -440,7 +448,6 @@ describe('PUT /api/settings/sharing/dismiss', () => {
 
     // Verify dismiss_count incremented from 0 to 1
     const countRow = testDb.select().from(schema.appConfig)
-      .where(schema.appConfig.key ? undefined : undefined)
       .all()
       .find(r => r.key === 'sharing_dismiss_count');
     expect(countRow?.value).toBe('1');

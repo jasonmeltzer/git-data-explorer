@@ -188,8 +188,9 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
     exportMutation.mutate(exportRequest, {
       onSuccess: (bundle) => {
         createAndDownloadZip(bundle, format, anonymize);
-        incrementExportMutation.mutate();
-        onExportComplete?.(bundle);
+        incrementExportMutation.mutate(undefined, {
+          onSettled: () => onExportComplete?.(bundle),
+        });
       },
     });
   }

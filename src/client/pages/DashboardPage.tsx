@@ -22,7 +22,7 @@ import { computeCohortInsights, computeRampUpInsights, computeRollingInsights } 
 import { formatNum } from '../lib/deltaFormat.js';
 import FilterBar from '../components/FilterBar.js';
 import SharingPrompt from '../components/SharingPrompt.js';
-import { useSharingStatus, useSharingEligibility } from '../hooks/useSharingStatus.js';
+import { useSharingEligibility } from '../hooks/useSharingStatus.js';
 import CohortAreaChart from '../components/charts/CohortAreaChart.js';
 import RampUpLineChart from '../components/charts/RampUpLineChart.js';
 import RollingCards from '../components/charts/RollingCards.js';
@@ -337,7 +337,6 @@ export default function DashboardPage() {
   // Sharing prompt state
   const [sharingPromptOpen, setSharingPromptOpen] = useState(false);
   const [lastExportBundle, setLastExportBundle] = useState<ExportBundle | null>(null);
-  const { data: sharingStatus } = useSharingStatus();
   const { refetch: refetchEligibility } = useSharingEligibility();
 
   async function handleExportComplete(bundle: ExportBundle) {
