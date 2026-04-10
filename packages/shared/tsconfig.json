@@ -6,16 +6,15 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
     "outDir": "dist",
     "baseUrl": ".",
     "jsx": "react-jsx",
     "paths": {
-      "@shared/*": ["packages/shared/*"]
+      "@shared/*": ["./*"]
     }
   },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx"],
-  "references": [
-    { "path": "packages/shared" },
-    { "path": "packages/main" }
-  ]
+  "include": ["**/*.ts", "**/*.tsx"]
 }

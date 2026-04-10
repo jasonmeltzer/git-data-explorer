@@ -10,12 +10,9 @@
     "baseUrl": ".",
     "jsx": "react-jsx",
     "paths": {
-      "@shared/*": ["packages/shared/*"]
+      "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx"],
-  "references": [
-    { "path": "packages/shared" },
-    { "path": "packages/main" }
-  ]
+  "include": ["server/**/*.ts", "client/**/*.ts", "client/**/*.tsx", "scripts/**/*.ts"],
+  "references": [{ "path": "../shared" }]
 }
