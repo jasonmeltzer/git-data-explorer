@@ -13,9 +13,5 @@
       "@shared/*": ["packages/shared/*"]
     }
   },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx"],
-  "references": [
-    { "path": "packages/shared" },
-    { "path": "packages/main" }
-  ]
+  "include": ["packages/**/*.ts", "packages/**/*.tsx"]
 }

@@ -13,6 +13,5 @@
       "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["server/**/*.ts", "client/**/*.ts", "client/**/*.tsx", "scripts/**/*.ts"],
-  "references": [{ "path": "../shared" }]
+  "include": ["server/**/*.ts", "client/**/*.ts", "client/**/*.tsx", "scripts/**/*.ts"]
 }

@@ -41,7 +41,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
 
   // Read tool version from package.json
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pkg = require('../../../package.json') as { version: string };
+  const pkg = require('../../../../package.json') as { version: string };
   const toolVersion: string = pkg.version;
 
   // ── Build query params ────────────────────────────────────────────────────

@@ -48,7 +48,7 @@ describe('Database (INFR-01)', () => {
   it('runs migrations without error', () => {
     const db = drizzle(sqlite, { schema });
     expect(() => {
-      migrate(db, { migrationsFolder: path.join(process.cwd(), 'drizzle', 'migrations') });
+      migrate(db, { migrationsFolder: path.join(import.meta.dirname, '..', '..', 'drizzle', 'migrations') });
     }).not.toThrow();
   });
 
