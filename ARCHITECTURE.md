@@ -285,10 +285,20 @@ SharingPrompt AlertDialog
       HTTP → POST /api/share/http { data }
       Gist → POST /api/share/gist { tier, data } → Octokit gist create → { gistUrl }
       Manual → blob download with instructions text prepended
-  → Decline → PUT /api/settings/sharing/decline (persists in app_config)
+  → Decline → PUT /api/settings/sharing/decline (permanent suppression)
+  → Escape/backdrop close → PUT /api/settings/sharing/dismiss (24h cooldown, 3-strike auto-stop)
 
-Consent persistence:
-  app_config table stores: sharing_prompt_shown, sharing_declined, sharing_enabled, sharing_export_count
+Eligibility & consent persistence:
+  app_config keys: sharing_prompt_shown, sharing_declined, sharing_enabled,
+                   sharing_export_count, sharing_dismiss_count, sharing_prompt_dismissed_at
+  GET /api/settings/sharing/eligible → 5-gate server-side heuristic:
+      1. sharing_declined != true
+      2. sharing_dismiss_count < 3
+      3. sharing_prompt_dismissed_at older than 24h (or absent)
+      4. export_count >= 1
+      5. 2+ repos with oldest_month_collected >= 3 months ago
+  PUT /api/settings/sharing/dismiss → increment dismiss count + set dismissed_at timestamp
+  PUT /api/settings/sharing/enable → full reset (clears declined, dismiss count, dismissed_at)
   GET /api/settings/sharing → { promptShown, declined, enabled, exportCount }
   PUT endpoints: /decline, /enable, /disable, /prompt-shown
   POST /api/settings/sharing/increment-export → increments export count
