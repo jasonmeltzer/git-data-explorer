@@ -1,0 +1,358 @@
+import { createHash } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { unzipSync, strFromU8 } from 'fflate';
+import { db } from '../db/client.js';
+import {
+  snapshots,
+  cohortMetrics,
+  rampUp,
+  rollingComparisons,
+  contributors,
+  prTurnaround,
+  botRatio,
+} from '../db/schema.js';
+import { eq } from 'drizzle-orm';
+import { validateBundle } from './validation.js';
+import { createOrg } from './org-service.js';
+
+export type ImportSource = 'file' | 'gist' | 'url' | 'batch';
+
+export interface ImportResult {
+  orgId: number;
+  snapshotId: number;
+  warnings: string[];
+  isDuplicate: boolean;
+}
+
+/**
+ * Parse a ZIP buffer containing an ExportBundle.
+ * The ZIP contains individual JSON files (metadata.json, cohort-commits.json, etc.)
+ * that were created by the ExportModal client component.
+ */
+export function parseZipBundle(buffer: Buffer): unknown {
+  const uint8 = new Uint8Array(buffer);
+  const unzipped = unzipSync(uint8);
+
+  const readJson = (filename: string): unknown => {
+    const data = unzipped[filename];
+    if (!data) return null;
+    return JSON.parse(strFromU8(data));
+  };
+
+  const metadata = readJson('metadata.json');
+  if (!metadata) {
+    throw new Error('ZIP bundle missing required metadata.json');
+  }
+
+  return {
+    metadata,
+    cohortCommits: readJson('cohort-commits.json') ?? [],
+    cohortPrs: readJson('cohort-prs.json') ?? [],
+    rampUp: readJson('ramp-up.json') ?? [],
+    rolling: readJson('rolling-comparison.json') ?? null,
+    contributors: readJson('contributors.json') ?? [],
+    prTurnaround: readJson('pr-turnaround.json') ?? [],
+    botRatio: readJson('bot-ratio.json') ?? [],
+    executiveSummary: readJson('executive-summary.json') ?? null,
+    beforeAfter: readJson('before-after.json') ?? null,
+  };
+}
+
+/**
+ * Import a bundle object into the research database.
+ * Creates an org if orgId is null. Returns orgId, snapshotId, warnings, isDuplicate.
+ */
+export function importBundle(
+  bundle: unknown,
+  orgId: number | null,
+  importSource: ImportSource,
+  orgLabel?: string,
+): ImportResult {
+  const validation = validateBundle(bundle);
+  if (!validation.valid || !validation.data) {
+    throw new Error(`Invalid bundle: ${validation.errors?.join('; ')}`);
+  }
+
+  const data = validation.data;
+  const warnings = [...validation.warnings];
+
+  // Compute content hash for dedup detection
+  const contentHash = createHash('sha256').update(JSON.stringify(bundle)).digest('hex');
+
+  // Auto-create org if needed
+  if (orgId === null) {
+    const label =
+      orgLabel ??
+      (data.metadata.repoNames.length > 0
+        ? data.metadata.repoNames.join(', ')
+        : `Org-${Date.now()}`);
+    orgId = createOrg(label, importSource);
+  }
+
+  // Check for duplicate (same contentHash for this org)
+  let isDuplicate = false;
+  const existing = db
+    .select({ id: snapshots.id })
+    .from(snapshots)
+    .where(eq(snapshots.orgId, orgId))
+    .all();
+  isDuplicate = existing.some((s) => {
+    const snap = db.select().from(snapshots).where(eq(snapshots.id, s.id)).get();
+    return snap?.contentHash === contentHash;
+  });
+  if (isDuplicate) {
+    warnings.push('Duplicate bundle detected (same content hash) — importing as new snapshot anyway');
+  }
+
+  // Derived counts
+  const contributorCount = new Set(data.contributors.map((c) => c.authorLogin)).size;
+  const repoCount = data.metadata.repoNames.length;
+
+  // All inserts in a single transaction
+  const snapshotId = db.transaction(() => {
+    const snap = db
+      .insert(snapshots)
+      .values({
+        orgId: orgId as number,
+        importTimestamp: Date.now(),
+        metadataJson: JSON.stringify(data.metadata),
+        toolVersion: data.metadata.toolVersion,
+        startDate: data.metadata.startDate,
+        endDate: data.metadata.endDate,
+        aiMarkerDate: data.metadata.aiMarkerDate,
+        contributorCount,
+        repoCount,
+        contentHash,
+        executiveSummaryJson: data.executiveSummary
+          ? JSON.stringify(data.executiveSummary)
+          : null,
+        beforeAfterJson: data.beforeAfter ? JSON.stringify(data.beforeAfter) : null,
+      })
+      .returning({ id: snapshots.id })
+      .get();
+
+    const snapId = snap.id;
+
+    // Insert cohort_metrics rows
+    if (data.cohortCommits.length > 0) {
+      db.insert(cohortMetrics)
+        .values(
+          data.cohortCommits.map((row) => ({
+            snapshotId: snapId,
+            orgId: orgId as number,
+            metricType: 'commits' as const,
+            cohort: row.cohort,
+            period: row.period,
+            periodMonth: row.periodMonth,
+            avgLinesAdded: row.avgLinesAdded,
+            avgLinesDeleted: row.avgLinesDeleted,
+            avgFilesChanged: row.avgFilesChanged,
+            totalCount: row.totalCount,
+            contributorCount: row.contributorCount,
+          }))
+        )
+        .run();
+    }
+
+    if (data.cohortPrs.length > 0) {
+      db.insert(cohortMetrics)
+        .values(
+          data.cohortPrs.map((row) => ({
+            snapshotId: snapId,
+            orgId: orgId as number,
+            metricType: 'prs' as const,
+            cohort: row.cohort,
+            period: row.period,
+            periodMonth: row.periodMonth,
+            avgLinesAdded: row.avgLinesAdded,
+            avgLinesDeleted: row.avgLinesDeleted,
+            avgFilesChanged: row.avgFilesChanged,
+            totalCount: row.totalCount,
+            contributorCount: row.contributorCount,
+          }))
+        )
+        .run();
+    }
+
+    // Insert ramp_up rows
+    if (data.rampUp.length > 0) {
+      db.insert(rampUp)
+        .values(
+          data.rampUp.map((row) => ({
+            snapshotId: snapId,
+            orgId: orgId as number,
+            weekIndex: row.weekIndex,
+            avgLinesChanged: row.avgLinesChanged,
+            avgFilesChanged: row.avgFilesChanged,
+            contributionCount: row.contributionCount,
+            contributorCount: row.contributorCount,
+            joinPeriod: row.joinPeriod,
+          }))
+        )
+        .run();
+    }
+
+    // Insert rolling_comparisons row (single JSON blob)
+    if (data.rolling !== null) {
+      db.insert(rollingComparisons)
+        .values({
+          snapshotId: snapId,
+          orgId: orgId as number,
+          dataJson: JSON.stringify(data.rolling),
+        })
+        .run();
+    }
+
+    // Insert contributors rows
+    if (data.contributors.length > 0) {
+      db.insert(contributors)
+        .values(
+          data.contributors.map((row) => ({
+            snapshotId: snapId,
+            orgId: orgId as number,
+            authorLogin: row.authorLogin,
+            cohort: row.cohort,
+            firstCommitAt: row.firstCommitAt ?? null,
+            preJson: row.pre ? JSON.stringify(row.pre) : null,
+            postJson: row.post ? JSON.stringify(row.post) : null,
+          }))
+        )
+        .run();
+    }
+
+    // Insert pr_turnaround rows
+    if (data.prTurnaround.length > 0) {
+      db.insert(prTurnaround)
+        .values(
+          data.prTurnaround.map((row) => ({
+            snapshotId: snapId,
+            orgId: orgId as number,
+            periodMonth: row.periodMonth,
+            avgHoursToMerge: row.avgHoursToMerge,
+            medianHoursToMerge: row.medianHoursToMerge,
+            prCount: row.prCount,
+          }))
+        )
+        .run();
+    }
+
+    // Insert bot_ratio rows
+    if (data.botRatio.length > 0) {
+      db.insert(botRatio)
+        .values(
+          data.botRatio.map((row) => ({
+            snapshotId: snapId,
+            orgId: orgId as number,
+            periodMonth: row.periodMonth,
+            botCommits: row.botCommits,
+            humanCommits: row.humanCommits,
+            totalCommits: row.totalCommits,
+            botPercentage: row.botPercentage,
+          }))
+        )
+        .run();
+    }
+
+    return snapId;
+  });
+
+  return {
+    orgId: orgId as number,
+    snapshotId,
+    warnings,
+    isDuplicate,
+  };
+}
+
+/**
+ * Fetch a bundle from a URL (Gist URL or plain HTTP URL).
+ * Returns parsed raw JSON object (not yet validated).
+ */
+export async function importFromUrl(
+  url: string,
+  source: 'gist' | 'url'
+): Promise<unknown> {
+  let fetchUrl = url;
+
+  // Detect Gist URLs and convert to raw content API URL
+  // e.g. https://gist.github.com/user/abc123 -> https://api.github.com/gists/abc123
+  if (source === 'gist') {
+    const gistMatch = url.match(/gist\.github\.com\/[^/]+\/([a-f0-9]+)/i);
+    if (gistMatch) {
+      const gistId = gistMatch[1];
+      // Fetch the Gist API to get the raw URL for the first file
+      const apiRes = await fetch(`https://api.github.com/gists/${gistId}`, {
+        headers: { Accept: 'application/vnd.github.v3+json' },
+      });
+      if (!apiRes.ok) {
+        throw new Error(`Failed to fetch Gist metadata: HTTP ${apiRes.status}`);
+      }
+      const gistData = await apiRes.json() as { files: Record<string, { raw_url: string }> };
+      const fileKeys = Object.keys(gistData.files);
+      if (fileKeys.length === 0) {
+        throw new Error('Gist has no files');
+      }
+      // Look for a .json file, or use the first file
+      const jsonFile = fileKeys.find((k) => k.endsWith('.json')) ?? fileKeys[0];
+      fetchUrl = gistData.files[jsonFile].raw_url;
+    }
+  }
+
+  const res = await fetch(fetchUrl);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch bundle from URL: HTTP ${res.status}`);
+  }
+
+  const contentType = res.headers.get('content-type') ?? '';
+
+  // Handle ZIP responses
+  if (contentType.includes('zip') || fetchUrl.endsWith('.zip')) {
+    const buf = Buffer.from(await res.arrayBuffer());
+    return parseZipBundle(buf);
+  }
+
+  return res.json();
+}
+
+/**
+ * Import all .json and .zip bundle files from a directory.
+ * Returns array of import results (one per file).
+ */
+export function importFromDirectory(
+  dirPath: string
+): Array<ImportResult & { file: string; error?: string }> {
+  const files = fs.readdirSync(dirPath).filter(
+    (f) => f.endsWith('.json') || f.endsWith('.zip')
+  );
+
+  const results: Array<ImportResult & { file: string; error?: string }> = [];
+
+  for (const file of files) {
+    const filePath = path.join(dirPath, file);
+    try {
+      let bundle: unknown;
+      if (file.endsWith('.zip')) {
+        const buf = fs.readFileSync(filePath);
+        bundle = parseZipBundle(buf);
+      } else {
+        const content = fs.readFileSync(filePath, 'utf8');
+        bundle = JSON.parse(content);
+      }
+      const result = importBundle(bundle, null, 'batch');
+      results.push({ ...result, file });
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      results.push({
+        orgId: -1,
+        snapshotId: -1,
+        warnings: [],
+        isDuplicate: false,
+        file,
+        error,
+      });
+    }
+  }
+
+  return results;
+}
