@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "jsx": "react-jsx",
+    "paths": {
+      "@shared/*": ["../shared/*"]
+    }
+  },
+  "include": ["server/**/*.ts", "client/**/*.ts", "client/**/*.tsx"]
+}
