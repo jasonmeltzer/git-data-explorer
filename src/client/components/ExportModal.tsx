@@ -196,7 +196,7 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} disablePointerDismissal>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Export Dashboard Data</DialogTitle>
