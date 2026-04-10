@@ -30,7 +30,7 @@ interface ShareResult {
 }
 
 function prepareShareData(bundle: ExportBundle, tier: ShareTier): object {
-  // Sharing always uses the already-anonymized export bundle
+  // Bundle is always pre-anonymized by ExportModal before reaching here
   if (tier === 'summary') {
     return {
       metadata: bundle.metadata,

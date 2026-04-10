@@ -188,8 +188,15 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
     exportMutation.mutate(exportRequest, {
       onSuccess: (bundle) => {
         createAndDownloadZip(bundle, format, anonymize);
+        // Always anonymize the bundle passed to the sharing prompt —
+        // sharing should never expose real contributor logins
+        const logins = extractAllLogins(bundle);
+        const repoNames = bundle.metadata.repoNames;
+        const pseudonymMap = buildPseudonymMap(logins);
+        const repoMap = buildRepoMap(repoNames);
+        const anonymizedBundle = anonymizeBundle(bundle, pseudonymMap, repoMap);
         incrementExportMutation.mutate(undefined, {
-          onSettled: () => onExportComplete?.(bundle),
+          onSettled: () => onExportComplete?.(anonymizedBundle),
         });
       },
     });

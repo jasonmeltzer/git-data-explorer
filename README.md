@@ -57,7 +57,7 @@ What works today:
 - **Dark mode** — full dark mode support with theme toggle and localStorage persistence
 - **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
 - **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
-- **309 passing tests** across 25 test files
+- **334 passing tests** across 26 test files
 - **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access; senior personas include early tenure-anchor commits that exercise per-repo Senior cohort thresholds
 - **Seed mode** — `npm run dev:seed` starts the app against seed data with a dashboard banner indicating synthetic data
 - **Accurate author tenure** — GitHub API first-commit fetcher resolves true first commit dates for authors who predate the collection window (2-API-call strategy)

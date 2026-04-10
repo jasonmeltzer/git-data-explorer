@@ -42,6 +42,9 @@ export function useIncrementExport() {
   return useMutation({
     mutationFn: async (): Promise<{ exportCount: number }> => {
       const res = await fetch('/api/settings/sharing/increment-export', { method: 'POST' });
+      if (!res.ok) {
+        throw new Error('Failed to increment export count');
+      }
       return res.json();
     },
   });

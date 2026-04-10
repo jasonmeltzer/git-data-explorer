@@ -65,7 +65,7 @@ share.post('/api/share/gist', async (c) => {
     files = {
       'summary-report.json': {
         content: JSON.stringify(
-          { executiveSummary: data?.executiveSummary ?? null, metadata: data?.metadata ?? null },
+          { executiveSummary: data?.executiveSummary ?? null, rolling: data?.rolling ?? null, metadata: data?.metadata ?? null },
           null,
           2
         ),
