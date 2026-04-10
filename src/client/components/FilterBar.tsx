@@ -254,7 +254,7 @@ export default function FilterBar({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setExportOpen(true)}
+            onClick={(e) => { e.stopPropagation(); setExportOpen(true); }}
             aria-label="Export dashboard data"
             className="flex items-center gap-1.5 text-xs"
           >
