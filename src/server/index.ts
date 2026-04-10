@@ -10,6 +10,8 @@ import settings from './routes/settings.js';
 import repositories from './routes/repositories.js';
 import collection from './routes/collection.js';
 import analytics from './routes/analytics.js';
+import export_ from './routes/export.js';
+import share from './routes/share.js';
 
 // Run migrations synchronously before accepting requests
 runMigrations();
@@ -25,6 +27,8 @@ app.route('/', health);
 app.route('/', settings);
 app.route('/', repositories);
 app.route('/', collection);
+app.route('/', export_);
+app.route('/', share);
 app.route('/', analytics);
 
 const port = parseInt(process.env.PORT ?? '3001', 10);

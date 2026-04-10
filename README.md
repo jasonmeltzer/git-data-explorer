@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 7.3 complete** — Per-Repo Cohort Mode Fix & Seed Data Tenure Robustness
+**Phase 8 complete** — Data Export, Anonymization, and Optional Sharing
 
 What works today:
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
@@ -57,7 +57,7 @@ What works today:
 - **Dark mode** — full dark mode support with theme toggle and localStorage persistence
 - **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
 - **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
-- **259 passing tests** across 22 test files
+- **334 passing tests** across 26 test files
 - **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access; senior personas include early tenure-anchor commits that exercise per-repo Senior cohort thresholds
 - **Seed mode** — `npm run dev:seed` starts the app against seed data with a dashboard banner indicating synthetic data
 - **Accurate author tenure** — GitHub API first-commit fetcher resolves true first commit dates for authors who predate the collection window (2-API-call strategy)
@@ -75,9 +75,15 @@ What works today:
 - **Shared deltaFormat utility** — `pctDelta` and `formatNum` helpers with 12 unit tests
 - **Cohort mode tooltip** — explains difference between Global and Per-repo tenure modes
 - **Consistent active states** — all toggle buttons show clear active/inactive styling
+- **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle; metadata.json always included with date range, AI marker, cohort config, and version
+- **Contributor anonymization** — random animal names (e.g., "Amber Bear") replace contributor logins on by default; same person always gets the same name within a single export session
+- **Repo pseudonymization** — repo names replaced with Repo-Alpha, Repo-Beta, etc. when anonymization is enabled
+- **Export preview** — live 5-row preview table updates as you toggle anonymization on/off before downloading
+- **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download; data is always anonymized before sharing
+- **Sharing consent in Settings** — Data Sharing section with opt-in toggle and "Opted in" / "Opted out" status badge; persists across sessions
 
 What's next:
-- **Phase 8:** Data export with contributor anonymization
+- **Settings UI for AI marker** — currently API-only; a date picker in Settings would make it more discoverable
 
 ## Tech Stack
 

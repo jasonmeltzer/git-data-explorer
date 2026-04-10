@@ -21,6 +21,8 @@ import { cohortTrendNarrative, rollingNarrative } from '../lib/narratives.js';
 import { computeCohortInsights, computeRampUpInsights, computeRollingInsights } from '../lib/insights.js';
 import { formatNum } from '../lib/deltaFormat.js';
 import FilterBar from '../components/FilterBar.js';
+import SharingPrompt from '../components/SharingPrompt.js';
+import { useSharingEligibility } from '../hooks/useSharingStatus.js';
 import CohortAreaChart from '../components/charts/CohortAreaChart.js';
 import RampUpLineChart from '../components/charts/RampUpLineChart.js';
 import RollingCards from '../components/charts/RollingCards.js';
@@ -46,6 +48,7 @@ import {
   TableCell,
 } from '@shared/components/ui/table.js';
 import type { TrackedRepo, CohortMetricsRow, RampUpBucket } from '@shared/types.js';
+import type { ExportBundle } from '@shared/export-types.js';
 
 type MetricOption = 'totalCount' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
 
@@ -331,6 +334,20 @@ export default function DashboardPage() {
   const [cohortCommitView, setCohortCommitView] = useState<'chart' | 'table'>('chart');
   const [rampUpView, setRampUpView] = useState<'chart' | 'table'>('chart');
 
+  // Sharing prompt state
+  const [sharingPromptOpen, setSharingPromptOpen] = useState(false);
+  const [lastExportBundle, setLastExportBundle] = useState<ExportBundle | null>(null);
+  const { refetch: refetchEligibility } = useSharingEligibility();
+
+  async function handleExportComplete(bundle: ExportBundle) {
+    setLastExportBundle(bundle);
+    // Wait for increment-export to settle then fetch fresh eligibility from server
+    const result = await refetchEligibility();
+    if (result.data?.eligible) {
+      setSharingPromptOpen(true);
+    }
+  }
+
   // Fetch AI marker date
   const { data: markerData } = useAiMarker();
   const markerDate = markerData?.date ?? null;
@@ -391,6 +408,8 @@ export default function DashboardPage() {
           customRange={customRange} setCustomRange={setCustomRange}
           repoIds={repoIds} setRepoIds={setRepoIds}
           tenureMode={tenureMode} setTenureMode={setTenureMode}
+          filters={{ preset, startDate, endDate, repoIds, tenureMode, rollingGranularity }}
+          onExportComplete={handleExportComplete}
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
           <Card>
@@ -423,6 +442,8 @@ export default function DashboardPage() {
           customRange={customRange} setCustomRange={setCustomRange}
           repoIds={repoIds} setRepoIds={setRepoIds}
           tenureMode={tenureMode} setTenureMode={setTenureMode}
+          filters={{ preset, startDate, endDate, repoIds, tenureMode, rollingGranularity }}
+          onExportComplete={handleExportComplete}
         />
         <div className="max-w-6xl mx-auto px-6 py-8">
           <Card>
@@ -453,6 +474,13 @@ export default function DashboardPage() {
         customRange={customRange} setCustomRange={setCustomRange}
         repoIds={repoIds} setRepoIds={setRepoIds}
         tenureMode={tenureMode} setTenureMode={setTenureMode}
+        filters={{ preset, startDate, endDate, repoIds, tenureMode, rollingGranularity }}
+        onExportComplete={handleExportComplete}
+      />
+      <SharingPrompt
+        open={sharingPromptOpen}
+        onOpenChange={setSharingPromptOpen}
+        exportBundle={lastExportBundle}
       />
       <div className="max-w-6xl mx-auto px-6 py-8 space-y-8">
         {/* Seed data banner */}

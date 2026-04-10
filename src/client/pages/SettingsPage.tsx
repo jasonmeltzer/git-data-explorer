@@ -7,6 +7,7 @@ import { Button } from '@shared/components/ui/button';
 import TokenForm from '../components/TokenForm.js';
 import { useCohortConfig } from '../hooks/useCohortConfig.js';
 import { DEFAULT_COHORT_CONFIG } from '@shared/cohort-config.js';
+import { useSharingStatus, useEnableSharing, useDisableSharing } from '../hooks/useSharingStatus.js';
 
 interface Props {
   onNavigateRepos: () => void;
@@ -34,6 +35,11 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
 
   // --- Cohort config ---
   const { config, isLoading: isConfigLoading, saveConfig, isSaving } = useCohortConfig();
+
+  // --- Data Sharing ---
+  const { data: sharingStatus } = useSharingStatus();
+  const enableMutation = useEnableSharing();
+  const disableMutation = useDisableSharing();
 
   const defaults = DEFAULT_COHORT_CONFIG;
 
@@ -256,6 +262,39 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
                 </div>
               </form>
             )}
+          </CardContent>
+        </Card>
+        {/* Data Sharing */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-base font-medium">Data Sharing</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Opt in to share anonymized export data for AI adoption research. You control exactly what is shared.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center gap-3 min-h-[44px]">
+              <Switch
+                id="sharing-toggle"
+                checked={sharingStatus?.enabled ?? false}
+                onCheckedChange={(checked) => {
+                  if (checked) enableMutation.mutate();
+                  else disableMutation.mutate();
+                }}
+              />
+              <label htmlFor="sharing-toggle" className="text-sm font-medium">
+                Share anonymized data when exporting
+              </label>
+              {sharingStatus?.enabled ? (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400">
+                  Opted in
+                </span>
+              ) : (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                  Opted out
+                </span>
+              )}
+            </div>
           </CardContent>
         </Card>
       </div>

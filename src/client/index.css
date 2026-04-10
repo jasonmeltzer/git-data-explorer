@@ -141,3 +141,11 @@
     @apply font-sans;
     }
 }
+
+@layer utilities {
+  .dialog-center {
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+  }
+}
