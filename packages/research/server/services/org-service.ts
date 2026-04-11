@@ -1,15 +1,27 @@
 import { db } from '../db/client.js';
-import { orgs, snapshots, cohortMetrics, rampUp, rollingComparisons, contributors, prTurnaround, botRatio } from '../db/schema.js';
+import {
+  orgs,
+  snapshots,
+  cohortMetrics,
+  rampUp,
+  rollingComparisons,
+  contributors,
+  prTurnaround,
+  botRatio,
+} from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
-export function createOrg(label: string, importSource: string, sizeCategory?: string): number {
-  const result = db.insert(orgs).values({
-    label,
-    importSource,
-    sizeCategory: sizeCategory ?? null,
-    createdAt: Date.now(),
-  }).returning({ id: orgs.id }).get();
-  return result!.id;
+export function createOrg(label: string, importSource: string): number {
+  const result = db
+    .insert(orgs)
+    .values({
+      label,
+      importSource,
+      createdAt: Date.now(),
+    })
+    .returning({ id: orgs.id })
+    .get();
+  return result.id;
 }
 
 export function listOrgs() {
@@ -20,8 +32,25 @@ export function getOrg(id: number) {
   return db.select().from(orgs).where(eq(orgs.id, id)).get();
 }
 
-export function updateOrg(id: number, data: { label?: string; sizeCategory?: string; industry?: string; aiTool?: string }) {
+export function updateOrg(
+  id: number,
+  data: { label?: string; sizeCategory?: string; industry?: string; aiTool?: string }
+) {
   db.update(orgs).set(data).where(eq(orgs.id, id)).run();
+}
+
+export function deleteOrg(id: number) {
+  // Delete all snapshot data for this org (cascade manually since SQLite FK cascade not guaranteed)
+  const orgSnapshots = db
+    .select({ id: snapshots.id })
+    .from(snapshots)
+    .where(eq(snapshots.orgId, id))
+    .all();
+  for (const s of orgSnapshots) {
+    deleteSnapshotData(s.id);
+  }
+  db.delete(snapshots).where(eq(snapshots.orgId, id)).run();
+  db.delete(orgs).where(eq(orgs.id, id)).run();
 }
 
 export function deleteSnapshotData(snapshotId: number) {
@@ -36,15 +65,6 @@ export function deleteSnapshotData(snapshotId: number) {
 export function deleteSnapshot(snapshotId: number) {
   deleteSnapshotData(snapshotId);
   db.delete(snapshots).where(eq(snapshots.id, snapshotId)).run();
-}
-
-export function deleteOrg(id: number) {
-  const orgSnapshots = db.select({ id: snapshots.id }).from(snapshots).where(eq(snapshots.orgId, id)).all();
-  for (const s of orgSnapshots) {
-    deleteSnapshotData(s.id);
-  }
-  db.delete(snapshots).where(eq(snapshots.orgId, id)).run();
-  db.delete(orgs).where(eq(orgs.id, id)).run();
 }
 
 export function getSnapshotsForOrg(orgId: number) {

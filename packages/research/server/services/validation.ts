@@ -45,20 +45,18 @@ const RampUpBucketSchema = z.object({
 });
 
 const ContributorStatsSchema = z.object({
-  authorLogin: z.string().optional(),
-  cohort: z.string().optional(),
-  totalCommits: z.number().optional(),
-  totalPrs: z.number().optional(),
-  avgLinesAdded: z.number().optional(),
-  avgLinesDeleted: z.number().optional(),
-  avgFilesChanged: z.number().optional(),
-  firstCommitAt: z.string().optional(),
-}).passthrough().nullable();
+  commitCount: z.number(),
+  avgCommitLinesAdded: z.number(),
+  avgCommitLinesDeleted: z.number(),
+  prCount: z.number(),
+  avgPrLinesAdded: z.number(),
+  avgPrLinesDeleted: z.number(),
+}).nullable();
 
 const ContributorBeforeAfterSchema = z.object({
   authorLogin: z.string(),
   cohort: z.string(),
-  firstCommitAt: z.string().nullable().optional(),
+  firstCommitAt: z.string().nullable(),
   repoId: z.number().optional(),
   pre: ContributorStatsSchema,
   post: ContributorStatsSchema,
@@ -84,12 +82,12 @@ export const ExportBundleSchema = z.object({
   cohortCommits: z.array(CohortMetricsRowSchema).default([]),
   cohortPrs: z.array(CohortMetricsRowSchema).default([]),
   rampUp: z.array(RampUpBucketSchema).default([]),
-  rolling: z.any().nullable().default(null),
+  rolling: z.unknown().nullable().default(null),
   contributors: z.array(ContributorBeforeAfterSchema).default([]),
   prTurnaround: z.array(PrTurnaroundRowSchema).default([]),
   botRatio: z.array(BotRatioRowSchema).default([]),
-  executiveSummary: z.any().nullable().default(null),
-  beforeAfter: z.any().nullable().default(null),
+  executiveSummary: z.unknown().nullable().default(null),
+  beforeAfter: z.unknown().nullable().default(null),
 });
 
 export type ValidationResult = {
