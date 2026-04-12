@@ -47,11 +47,11 @@ export default function RampUpLineChart({ data, isFetching }: RampUpLineChartPro
   // Group data by joinPeriod to determine unique periods
   const joinPeriods = [...new Set(data.map((b) => b.joinPeriod))].sort();
 
-  if (joinPeriods.length < 2) {
+  if (joinPeriods.length === 0) {
     return (
       <div className="min-h-[240px] w-full flex items-center justify-center">
         <p className="text-sm text-muted-foreground max-w-md text-center">
-          Not enough data across periods to compare ramp-up. Collect more history to see this view.
+          No ramp-up data available.
         </p>
       </div>
     );

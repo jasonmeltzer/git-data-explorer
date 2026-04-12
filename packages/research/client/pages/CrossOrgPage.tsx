@@ -18,8 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from '@shared/components/ui/table.js';
-import CohortAreaChart from '@shared/components/charts/CohortAreaChart.js';
-import RampUpLineChart from '@shared/components/charts/RampUpLineChart.js';
+import { InlineCohortChart, InlineRampUpChart } from '../components/InlineCharts.js';
 import AggregationToggle from '../components/AggregationToggle.js';
 import { useOrgs } from '../hooks/useOrgs.js';
 import {
@@ -169,13 +168,7 @@ export default function CrossOrgPage() {
             <CardTitle>Aggregated Cohort Commits</CardTitle>
           </CardHeader>
           <CardContent>
-            <CohortAreaChart
-              data={commitMetrics ?? []}
-              metric="avgLinesAdded"
-              title="Aggregated Cohort Commits"
-              aiMarkerDate={null}
-              isFetching={commitsFetching && !commitMetrics}
-            />
+            <InlineCohortChart data={commitMetrics ?? []} metric="avgLinesAdded" aiMarkerDate={null} />
           </CardContent>
         </Card>
       )}
@@ -187,13 +180,7 @@ export default function CrossOrgPage() {
             <CardTitle>Aggregated Cohort Pull Requests</CardTitle>
           </CardHeader>
           <CardContent>
-            <CohortAreaChart
-              data={prMetrics ?? []}
-              metric="totalCount"
-              title="Aggregated Cohort Pull Requests"
-              aiMarkerDate={null}
-              isFetching={prsFetching && !prMetrics}
-            />
+            <InlineCohortChart data={prMetrics ?? []} metric="totalCount" aiMarkerDate={null} />
           </CardContent>
         </Card>
       )}
@@ -205,10 +192,7 @@ export default function CrossOrgPage() {
             <CardTitle>Aggregated Ramp-Up Speed</CardTitle>
           </CardHeader>
           <CardContent>
-            <RampUpLineChart
-              data={rampUpData ?? []}
-              isFetching={rampUpFetching && !rampUpData}
-            />
+            <InlineRampUpChart data={rampUpData ?? []} />
           </CardContent>
         </Card>
       )}
