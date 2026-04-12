@@ -44,13 +44,18 @@ const RampUpBucketSchema = z.object({
   joinPeriod: z.string(),
 });
 
+// ContributorStats shape matches the shared ContributorStats interface in @shared/types.ts
+// Fields: totalCommits, totalPrs, avgLinesAdded, avgLinesDeleted, avgFilesChanged, firstCommitAt, authorLogin, cohort
+// These match the actual ExportBundle.contributors[].pre / .post shape produced by the export service.
 const ContributorStatsSchema = z.object({
-  commitCount: z.number(),
-  avgCommitLinesAdded: z.number(),
-  avgCommitLinesDeleted: z.number(),
-  prCount: z.number(),
-  avgPrLinesAdded: z.number(),
-  avgPrLinesDeleted: z.number(),
+  authorLogin: z.string(),
+  cohort: z.string(),
+  totalCommits: z.number(),
+  totalPrs: z.number(),
+  avgLinesAdded: z.number(),
+  avgLinesDeleted: z.number(),
+  avgFilesChanged: z.number(),
+  firstCommitAt: z.string(),
 }).nullable();
 
 const ContributorBeforeAfterSchema = z.object({
