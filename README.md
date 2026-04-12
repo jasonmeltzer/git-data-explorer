@@ -30,9 +30,11 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 8 complete** — Data Export, Anonymization, and Optional Sharing
+**Phase 9 complete** — Import & Explore Research Tool (monorepo migration + cross-org analysis)
 
 What works today:
+
+### Main App (`packages/main/`)
 - Local Hono API server + Vite React SPA, started with a single `npm run dev`
 - SQLite database with full schema (repos, commits, PRs, authors, collection cursors)
 - GitHub PAT authentication with settings UI
@@ -49,38 +51,27 @@ What works today:
 - **Rolling period comparison** — metric cards with change percentages, month-over-month and quarter-over-quarter toggle
 - **Date range filtering** — preset chips (90d, 6mo, 1yr, All) plus custom date range picker
 - **Repo filtering** — multi-select dropdown filters all dashboard views
-- **Contributor drill-down** — collapsible table with sortable per-author stats, collapsed by default to maintain privacy-first framing; per-repo mode shows one row per author-repo pair with Repo column, visual row grouping, and per-repo tenure
-- **Narrative insights** — auto-generated per-cohort trend breakdowns above each chart section
-- **Cohort analysis** — dynamic 0-3mo, 3-12mo, 1yr+ tenure bucketing with global and per-repo modes
-- **Analytics API** — 13 REST endpoints (cohorts, rampup, rolling, contributors, contributors/before-after, marker, pr-turnaround, bot-ratio, executive summary, before/after, cohort-config) with Zod validation
-- **Hardened pipeline** — SQL injection guards, Invalid Date protection, integer-only repoIds filtering
-- **Dark mode** — full dark mode support with theme toggle and localStorage persistence
-- **Standalone Collection page** — dedicated page at #/collection, separated from repo selection
-- **Semantic token migration** — zero hardcoded color classes, all pages use shadcn theme tokens
-- **334 passing tests** across 26 test files
-- **Synthetic seed data** — `npm run seed` generates realistic fake data (3 repos, ~31 contributors, ~9000 commits, ~650 PRs) for demo/testing without GitHub API access; senior personas include early tenure-anchor commits that exercise per-repo Senior cohort thresholds
-- **Seed mode** — `npm run dev:seed` starts the app against seed data with a dashboard banner indicating synthetic data
-- **Accurate author tenure** — GitHub API first-commit fetcher resolves true first commit dates for authors who predate the collection window (2-API-call strategy)
+- **Contributor drill-down** — collapsible table with sortable per-author stats; per-repo mode shows one row per author-repo pair with Repo column, visual row grouping, and per-repo tenure
 - **8-section dashboard** — Executive Summary KPI tiles, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
-- **Executive Summary** — split layout: filtered metrics (commits, contributors) on top, AI Impact metrics (ramp-up trend, adoption delta) spanning all data below
-- **Before/After Comparison** — single card with before/after/delta table showing avg commit size (lines), PRs/week/contributor, new dev ramp-up (weeks), active contributors
-- **PR Turnaround chart** — monthly median hours to merge with trend direction
-- **Bot Ratio chart** — monthly bot vs human commit percentage with trend direction
-- **Stat callout boxes** — above each chart section with computed insights and delta badges
-- **Help panels** — expandable "What does this mean?" explanations on every chart section with coaching tone, concrete examples, Settings cross-references, and privacy notes
-- **Filter scope badges** — "Filtered" / "All Data" badges with hover tooltips on each section header
-- **Customizable cohort boundaries** — Settings page Cohort Boundaries card lets users adjust thresholds and labels; persists across page reloads with Reset to Defaults support
-- **Chart|Table toggle** — icon-based BarChart3/TableProperties toggle on all 6 chart sections; table views use sortable columns via @tanstack/react-table
-- **Contributor before/after AI deltas** — 15 delta columns (Pre-AI, Post-AI, Change for 5 metrics) with green/red directional coloring, null handling, and discoverable Settings prompt when no AI marker is set
-- **Shared deltaFormat utility** — `pctDelta` and `formatNum` helpers with 12 unit tests
-- **Cohort mode tooltip** — explains difference between Global and Per-repo tenure modes
-- **Consistent active states** — all toggle buttons show clear active/inactive styling
-- **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle; metadata.json always included with date range, AI marker, cohort config, and version
-- **Contributor anonymization** — random animal names (e.g., "Amber Bear") replace contributor logins on by default; same person always gets the same name within a single export session
-- **Repo pseudonymization** — repo names replaced with Repo-Alpha, Repo-Beta, etc. when anonymization is enabled
-- **Export preview** — live 5-row preview table updates as you toggle anonymization on/off before downloading
-- **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download; data is always anonymized before sharing
-- **Sharing consent in Settings** — Data Sharing section with opt-in toggle and "Opted in" / "Opted out" status badge; persists across sessions
+- **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle with anonymization
+- **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download
+- **410 passing tests** across 34 test files
+
+### Research Tool (`packages/research/`)
+A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
+
+- **Import pipeline** — 4 sources: Local File (ZIP/JSON), GitHub Gist URL, HTTP/Cloud URL, Batch Directory
+- **Org management** — each imported bundle creates an org entry; name and categorize orgs
+- **Snapshot history** — multiple imports per org tracked as snapshots; compare over time
+- **Cross-org comparison** — select 2+ orgs, compare aggregated metrics side-by-side
+- **Two aggregation modes** — Weighted (larger orgs count more) and Equal Weight (each org counts once)
+- **No GitHub token required** — works entirely from imported export bundles
+
+### Monorepo Structure
+The project is organized as an npm workspaces monorepo:
+- `packages/main/` — main app (Hono server + Vite SPA, port 3001/5173)
+- `packages/shared/` — shared types, UI components (shadcn/ui), chart components, utilities
+- `packages/research/` — research tool (Hono server + Vite SPA, port 3002/5174)
 
 What's next:
 - **Settings UI for AI marker** — currently API-only; a date picker in Settings would make it more discoverable
@@ -98,12 +89,40 @@ What's next:
 | Data fetching | TanStack Query 5 |
 | Testing | Vitest |
 
+## Project Structure
+
+```
+packages/
+├── main/           # Main app — GitHub API collection + dashboard UI
+│   ├── src/
+│   │   ├── client/ # React SPA (pages, hooks, components, charts)
+│   │   └── server/ # Hono API (routes, services, DB)
+│   └── scripts/    # Seed data generator
+│
+├── shared/         # Shared across main + research
+│   ├── types.ts    # TypeScript interfaces
+│   ├── export-types.ts  # ExportBundle type
+│   ├── cohort-config.ts # Cohort boundary definitions
+│   └── components/ # shadcn/ui primitives
+│
+└── research/       # Research tool — cross-org AI adoption analysis
+    ├── client/     # React SPA (ImportPage, OrgDashboard, CrossOrgPage)
+    └── server/     # Hono API (import pipeline, aggregation engine)
+        ├── services/
+        │   ├── import-service.ts    # ZIP/JSON bundle ingestion
+        │   ├── aggregation.ts       # Weighted/normalized cross-org aggregation
+        │   ├── org-service.ts       # Org and snapshot CRUD
+        │   ├── validation.ts        # Zod schema for ExportBundle
+        │   └── test-data-generator.ts  # Synthetic org bundles for testing
+        └── __tests__/              # 76 tests across 8 test files
+```
+
 ## Getting Started
 
 ### Prerequisites
 
 - Node.js 22.x LTS
-- A GitHub Personal Access Token with `repo` scope
+- A GitHub Personal Access Token with `repo` scope (for the main app; not needed for research tool)
 
 ### Setup
 
@@ -113,7 +132,7 @@ cd git-data-explorer
 npm install
 ```
 
-### Run
+### Run the Main App
 
 ```bash
 npm run dev
@@ -121,22 +140,44 @@ npm run dev
 
 This starts both the API server (port 3001) and the Vite dev server (port 5173). Open http://localhost:5173 in your browser.
 
+### Run the Research Tool
+
+```bash
+npm run research
+```
+
+This starts the research tool API server (port 3002) and Vite dev server (port 5174). No GitHub token required. Open http://localhost:5174 in your browser.
+
 ### Try It Without GitHub
 
 ```bash
-npm run seed        # Generate realistic fake data
-npm run dev:seed    # Start the app with seed data
+npm run seed        # Generate realistic fake data for the main app
+npm run dev:seed    # Start the main app with seed data
 ```
 
 Open http://localhost:5173 — all dashboard views populated with synthetic data (3 repos, 31 contributors, AI adoption inflection point).
 
-### First Use (with real data)
+### Run Tests
+
+```bash
+npm run test        # Run all tests across workspaces (410 tests, 34 files)
+```
+
+### First Use (main app, with real data)
 
 1. Go to **Settings** and enter your GitHub PAT
 2. You'll be redirected to the **Repos** page
 3. Select which repos to track and click **Save Selection**
 4. Go to the **Collection** page, set your depth, and start collection
 5. Once data is collected, the **Dashboard** shows trend charts automatically
+
+### Using the Research Tool
+
+1. Start the main app, open the Dashboard, use **Export Data** to download a ZIP bundle
+2. Start the research tool (`npm run research`), open http://localhost:5174
+3. On the **Import** page, upload the ZIP via the "Local File" tab
+4. View trends on the **Org Dashboard** page
+5. Import bundles from other orgs and compare them on the **Cross-Org** page
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for technical details.
 
