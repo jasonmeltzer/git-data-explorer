@@ -35,6 +35,7 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS cohort_metrics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
     metric_type TEXT NOT NULL,
     cohort TEXT NOT NULL,
     period TEXT NOT NULL,
@@ -48,6 +49,7 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS ramp_up (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
     week_index INTEGER NOT NULL,
     join_period TEXT NOT NULL,
     avg_lines_changed REAL NOT NULL DEFAULT 0,
@@ -58,17 +60,23 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS rolling_comparisons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
     data_json TEXT NOT NULL
   );
   CREATE TABLE IF NOT EXISTS contributors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    login TEXT NOT NULL,
-    data_json TEXT NOT NULL
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
+    author_login TEXT NOT NULL,
+    cohort TEXT NOT NULL,
+    first_commit_at TEXT,
+    pre_json TEXT,
+    post_json TEXT
   );
   CREATE TABLE IF NOT EXISTS pr_turnaround (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
     period_month TEXT NOT NULL,
     avg_hours_to_merge REAL NOT NULL DEFAULT 0,
     median_hours_to_merge REAL NOT NULL DEFAULT 0,
@@ -77,6 +85,7 @@ sqlite.exec(`
   CREATE TABLE IF NOT EXISTS bot_ratio (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
     period_month TEXT NOT NULL,
     bot_commits INTEGER NOT NULL DEFAULT 0,
     human_commits INTEGER NOT NULL DEFAULT 0,
@@ -85,10 +94,15 @@ sqlite.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_snapshots_org_id ON snapshots(org_id);
   CREATE INDEX IF NOT EXISTS idx_cohort_metrics_snapshot ON cohort_metrics(snapshot_id);
+  CREATE INDEX IF NOT EXISTS idx_cohort_metrics_org ON cohort_metrics(org_id, metric_type);
   CREATE INDEX IF NOT EXISTS idx_ramp_up_snapshot ON ramp_up(snapshot_id);
+  CREATE INDEX IF NOT EXISTS idx_ramp_up_org ON ramp_up(org_id);
   CREATE INDEX IF NOT EXISTS idx_rolling_snapshot ON rolling_comparisons(snapshot_id);
   CREATE INDEX IF NOT EXISTS idx_contributors_snapshot ON contributors(snapshot_id);
+  CREATE INDEX IF NOT EXISTS idx_contributors_org ON contributors(org_id);
   CREATE INDEX IF NOT EXISTS idx_pr_turnaround_snapshot ON pr_turnaround(snapshot_id);
+  CREATE INDEX IF NOT EXISTS idx_pr_turnaround_org ON pr_turnaround(org_id);
+  CREATE INDEX IF NOT EXISTS idx_bot_ratio_org ON bot_ratio(org_id);
 `);
 
 const app = new Hono();
