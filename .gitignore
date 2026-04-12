@@ -14,6 +14,7 @@ data/seed.db-shm
 data/research.db
 data/research.db-wal
 data/research.db-shm
+data/test-bundles/
 .env
 .env.local
 *.tsbuildinfo
