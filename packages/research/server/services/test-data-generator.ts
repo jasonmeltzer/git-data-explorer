@@ -154,30 +154,34 @@ interface RampUpParams {
 
 function buildRampUp(params: RampUpParams): RampUpBucket[] {
   const buckets: RampUpBucket[] = [];
-  const joinPeriod = format(subMonths(params.referenceDate, 6), "'Q'Q yyyy").replace(/(\d) (\d{4})/, '$2-Q$1');
 
-  // Use a simpler join period format: YYYY-QN
-  const monthsAgo = 6;
-  const qDate = subMonths(params.referenceDate, monthsAgo);
-  const quarter = Math.ceil((qDate.getMonth() + 1) / 3);
-  const joinPeriodStr = `${qDate.getFullYear()}-Q${quarter}`;
+  // Generate 3 join periods (quarters) so ramp-up comparison charts have multiple lines
+  const periodsToGenerate = 3;
+  for (let p = 0; p < periodsToGenerate; p++) {
+    const monthsAgo = 3 + p * 3; // 3, 6, 9 months ago
+    const qDate = subMonths(params.referenceDate, monthsAgo);
+    const quarter = Math.ceil((qDate.getMonth() + 1) / 3);
+    const joinPeriodStr = `${qDate.getFullYear()}-Q${quarter}`;
 
-  for (let week = 0; week < 12; week++) {
-    // Ramp-up curve: starts low, plateaus at totalWeeks
-    const rampFraction = week >= params.totalWeeks ? 1.0 : week / params.totalWeeks;
-    const avgLinesChanged = Math.round(params.peakLinesPerWeek * rampFraction * jitter(1, 0.1));
-    const avgFilesChanged = Math.max(1, Math.round(avgLinesChanged / 25));
-    const contributorCount = Math.max(1, Math.round(params.totalContributors * 0.3 * jitter(1, 0.1)));
-    const contributionCount = Math.round(contributorCount * 3 * jitter(1, 0.15));
+    // Later cohorts ramp up faster (AI adoption effect)
+    const speedMultiplier = 1 + p * 0.15; // older cohorts were slower
 
-    buckets.push({
-      weekIndex: week,
-      avgLinesChanged: Math.max(0, avgLinesChanged),
-      avgFilesChanged: Math.max(1, avgFilesChanged),
-      contributionCount,
-      contributorCount,
-      joinPeriod: joinPeriodStr,
-    });
+    for (let week = 0; week < 12; week++) {
+      const rampFraction = week >= params.totalWeeks ? 1.0 : week / params.totalWeeks;
+      const avgLinesChanged = Math.round(params.peakLinesPerWeek * rampFraction * jitter(1, 0.1) / speedMultiplier);
+      const avgFilesChanged = Math.max(1, Math.round(avgLinesChanged / 25));
+      const contributorCount = Math.max(1, Math.round(params.totalContributors * 0.3 * jitter(1, 0.1)));
+      const contributionCount = Math.round(contributorCount * 3 * jitter(1, 0.15));
+
+      buckets.push({
+        weekIndex: week,
+        avgLinesChanged: Math.max(0, avgLinesChanged),
+        avgFilesChanged: Math.max(1, avgFilesChanged),
+        contributionCount,
+        contributorCount,
+        joinPeriod: joinPeriodStr,
+      });
+    }
   }
 
   return buckets;
