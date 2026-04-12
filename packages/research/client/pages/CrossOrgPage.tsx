@@ -138,7 +138,6 @@ export default function CrossOrgPage() {
                   <thead>
                     <tr className="border-b">
                       <th className="text-left py-2 px-3 font-medium">Label</th>
-                      <th className="text-left py-2 px-3 font-medium">Size</th>
                       <th className="text-right py-2 px-3 font-medium">Snapshots</th>
                       <th className="text-right py-2 px-3 font-medium">Contributors</th>
                       <th className="text-right py-2 px-3 font-medium">Avg Commit Size</th>
@@ -149,7 +148,6 @@ export default function CrossOrgPage() {
                     {comparisonData.map(row => (
                       <tr key={row.id} className="border-b last:border-0 hover:bg-muted/50">
                         <td className="py-2 px-3 font-medium">{row.label}</td>
-                        <td className="py-2 px-3 text-muted-foreground">{row.sizeCategory ?? '—'}</td>
                         <td className="py-2 px-3 text-right">{row.snapshotCount}</td>
                         <td className="py-2 px-3 text-right">{row.contributorCount ?? '—'}</td>
                         <td className="py-2 px-3 text-right">{row.avgCommitSize != null ? `${Math.round(row.avgCommitSize)} lines` : '—'}</td>
