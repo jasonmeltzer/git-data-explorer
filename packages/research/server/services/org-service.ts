@@ -11,12 +11,13 @@ import {
 } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
-export function createOrg(label: string, importSource: string): number {
+export function createOrg(label: string, importSource: string, sizeCategory?: string): number {
   const result = db
     .insert(orgs)
     .values({
       label,
       importSource,
+      sizeCategory: sizeCategory ?? null,
       createdAt: Date.now(),
     })
     .returning({ id: orgs.id })

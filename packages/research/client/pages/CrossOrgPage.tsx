@@ -1,23 +1,6 @@
 import { useState } from 'react';
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-} from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@shared/components/ui/table.js';
 import { InlineCohortChart, InlineRampUpChart } from '../components/InlineCharts.js';
 import AggregationToggle from '../components/AggregationToggle.js';
 import { useOrgs } from '../hooks/useOrgs.js';
@@ -33,7 +16,6 @@ export default function CrossOrgPage() {
   const { data: orgs, isLoading: orgsLoading } = useOrgs();
   const [mode, setMode] = useState<AggregationMode>('weighted');
   const [selectedOrgIds, setSelectedOrgIds] = useState<Set<number>>(new Set());
-  const [sorting, setSorting] = useState<SortingState>([]);
 
   const orgIds = Array.from(selectedOrgIds);
   const hasEnough = orgIds.length >= 2;
@@ -51,66 +33,6 @@ export default function CrossOrgPage() {
       return next;
     });
   };
-
-  const columns: ColumnDef<OrgComparisonRow>[] = [
-    {
-      accessorKey: 'label',
-      header: ({ column }) => (
-        <button
-          className="flex items-center gap-1 text-sm font-medium hover:text-foreground"
-          onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
-        >
-          Label
-          {column.getIsSorted() === 'asc' ? (
-            <ArrowUp className="h-3 w-3" />
-          ) : column.getIsSorted() === 'desc' ? (
-            <ArrowDown className="h-3 w-3" />
-          ) : (
-            <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
-          )}
-        </button>
-      ),
-    },
-    {
-      accessorKey: 'sizeCategory',
-      header: 'Size',
-      cell: ({ getValue }) => (getValue() as string | null) ?? '—',
-    },
-    {
-      accessorKey: 'snapshotCount',
-      header: 'Snapshots',
-    },
-    {
-      accessorKey: 'contributorCount',
-      header: 'Contributors',
-      cell: ({ getValue }) => (getValue() as number | null) ?? '—',
-    },
-    {
-      accessorKey: 'avgCommitSize',
-      header: 'Avg Commit Size',
-      cell: ({ getValue }) => {
-        const v = getValue() as number | null;
-        return v != null ? `${Math.round(v)} lines` : '—';
-      },
-    },
-    {
-      accessorKey: 'rampUpWeeks',
-      header: 'Ramp-Up (wks)',
-      cell: ({ getValue }) => {
-        const v = getValue() as number | null;
-        return v != null ? String(Math.round(v)) : '—';
-      },
-    },
-  ];
-
-  const table = useReactTable({
-    data: comparisonData ?? [],
-    columns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  });
 
   return (
     <div className="max-w-5xl mx-auto px-4 pb-12 space-y-8">
@@ -208,41 +130,35 @@ export default function CrossOrgPage() {
               <div className="space-y-2">
                 {[0, 1, 2].map(i => <Skeleton key={i} className="h-8 w-full" />)}
               </div>
+            ) : !comparisonData || comparisonData.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">No comparison data available.</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  {table.getHeaderGroups().map(headerGroup => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map(header => (
-                        <TableHead key={header.id}>
-                          {header.isPlaceholder
-                            ? null
-                            : flexRender(header.column.columnDef.header, header.getContext())}
-                        </TableHead>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={columns.length} className="text-center text-muted-foreground text-sm py-6">
-                        No comparison data available.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    table.getRowModel().rows.map(row => (
-                      <TableRow key={row.id}>
-                        {row.getVisibleCells().map(cell => (
-                          <TableCell key={cell.id}>
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b">
+                      <th className="text-left py-2 px-3 font-medium">Label</th>
+                      <th className="text-left py-2 px-3 font-medium">Size</th>
+                      <th className="text-right py-2 px-3 font-medium">Snapshots</th>
+                      <th className="text-right py-2 px-3 font-medium">Contributors</th>
+                      <th className="text-right py-2 px-3 font-medium">Avg Commit Size</th>
+                      <th className="text-right py-2 px-3 font-medium">Ramp-Up (wks)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {comparisonData.map(row => (
+                      <tr key={row.id} className="border-b last:border-0 hover:bg-muted/50">
+                        <td className="py-2 px-3 font-medium">{row.label}</td>
+                        <td className="py-2 px-3 text-muted-foreground">{row.sizeCategory ?? '—'}</td>
+                        <td className="py-2 px-3 text-right">{row.snapshotCount}</td>
+                        <td className="py-2 px-3 text-right">{row.contributorCount ?? '—'}</td>
+                        <td className="py-2 px-3 text-right">{row.avgCommitSize != null ? `${Math.round(row.avgCommitSize)} lines` : '—'}</td>
+                        <td className="py-2 px-3 text-right">{row.rampUpWeeks != null ? Math.round(row.rampUpWeeks) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </CardContent>
         </Card>

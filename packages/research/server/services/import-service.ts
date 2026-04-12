@@ -87,7 +87,9 @@ export function importBundle(
       (data.metadata.repoNames.length > 0
         ? `${data.metadata.repoNames[0]}${data.metadata.repoNames.length > 1 ? ` (+${data.metadata.repoNames.length - 1} more)` : ''}`
         : `Import-${new Date().toISOString().slice(0, 10)}`);
-    orgId = createOrg(label, importSource);
+    // Infer org size from contributor count
+    const size = contributorCount <= 20 ? 'small' : contributorCount <= 100 ? 'medium' : 'large';
+    orgId = createOrg(label, importSource, size);
   }
 
   // Check for duplicate (same contentHash for this org)
