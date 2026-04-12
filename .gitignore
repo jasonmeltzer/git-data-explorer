@@ -18,3 +18,4 @@ data/test-bundles/
 .env
 .env.local
 *.tsbuildinfo
+packages/*/package-lock.json
