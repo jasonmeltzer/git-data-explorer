@@ -2,7 +2,7 @@ import { Sun, Moon } from 'lucide-react';
 import { useTheme } from '../hooks/useTheme.js';
 
 interface NavBarProps {
-  activeRoute: 'import' | 'org' | 'cross-org';
+  activeRoute: 'import' | 'orgs' | 'org' | 'cross-org';
 }
 
 export default function NavBar({ activeRoute }: NavBarProps) {
@@ -23,7 +23,7 @@ export default function NavBar({ activeRoute }: NavBarProps) {
           <a href="#/import" className={linkClass('import')}>
             Import
           </a>
-          <a href="#/org/" className={linkClass('org')}>
+          <a href="#/orgs" className={linkClass('orgs')}>
             Orgs
           </a>
           <a href="#/cross-org" className={linkClass('cross-org')}>
