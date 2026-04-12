@@ -71,12 +71,31 @@ function pastMonths(count: number, referenceDate: Date = new Date()): string[] {
 
 // ─── Base ExportMetadata builder ──────────────────────────────────────────────
 
+// Greek letters for anonymized repo names (matches main app's anonymizer)
+const GREEK_LETTERS = [
+  'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta',
+  'Iota', 'Kappa', 'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron', 'Pi',
+  'Rho', 'Sigma', 'Tau', 'Upsilon', 'Phi', 'Chi', 'Psi', 'Omega',
+];
+
+// Animal name pairs for anonymized contributor names (matches main app's anonymizer)
+const ADJECTIVES = ['Amber', 'Azure', 'Coral', 'Crimson', 'Crystal', 'Dusk', 'Emerald', 'Frost', 'Golden', 'Ivory',
+  'Jade', 'Lunar', 'Misty', 'Onyx', 'Pearl', 'Rose', 'Ruby', 'Silver', 'Steel', 'Teal'];
+const ANIMALS = ['Bear', 'Crane', 'Dolphin', 'Eagle', 'Falcon', 'Fox', 'Hawk', 'Heron', 'Jaguar', 'Lynx',
+  'Otter', 'Owl', 'Panther', 'Puma', 'Raven', 'Seal', 'Tiger', 'Viper', 'Wolf', 'Wren'];
+
+function animalName(index: number): string {
+  const adj = ADJECTIVES[index % ADJECTIVES.length];
+  const animal = ANIMALS[Math.floor(index / ADJECTIVES.length) % ANIMALS.length];
+  return `${adj} ${animal}`;
+}
+
 function buildMetadata(
   repoCount: number,
   aiMarkerDate: string | null,
   referenceDate: Date
 ): ExportMetadata {
-  const repoNames = Array.from({ length: repoCount }, (_, i) => `org/repo-${i + 1}`);
+  const repoNames = Array.from({ length: repoCount }, (_, i) => `Repo-${GREEK_LETTERS[i % GREEK_LETTERS.length]}`);
   const startDate = format(subMonths(referenceDate, 12), "yyyy-MM-dd'T'00:00:00'Z'");
   const endDate = format(referenceDate, "yyyy-MM-dd'T'23:59:59'Z'");
 
@@ -202,8 +221,10 @@ function buildContributors(
     const cohort = weightedChoice(choices);
     const firstCommitAt = new Date(Date.now() - Math.random() * 365 * 24 * 3600 * 1000 * 2).toISOString();
 
+    const login = animalName(i);
+
     const preStats: ContributorStats | null = {
-      authorLogin: `user-${i}`,
+      authorLogin: login,
       cohort,
       totalCommits: logNormal(3.5, 0.8),
       totalPrs: logNormal(2.5, 0.8),
@@ -216,7 +237,7 @@ function buildContributors(
     let postStats: ContributorStats | null = null;
     if (aiMarkerDate !== null) {
       postStats = {
-        authorLogin: `user-${i}`,
+        authorLogin: login,
         cohort,
         totalCommits: Math.round(preStats.totalCommits * jitter(1.2, 0.1)),
         totalPrs: Math.round(preStats.totalPrs * jitter(1.15, 0.1)),
@@ -228,7 +249,7 @@ function buildContributors(
     }
 
     contributors.push({
-      authorLogin: `user-${i}`,
+      authorLogin: login,
       cohort,
       firstCommitAt,
       pre: preStats,

@@ -85,8 +85,8 @@ export function importBundle(
     const label =
       orgLabel ??
       (data.metadata.repoNames.length > 0
-        ? data.metadata.repoNames.join(', ')
-        : `Org-${Date.now()}`);
+        ? `${data.metadata.repoNames[0]}${data.metadata.repoNames.length > 1 ? ` (+${data.metadata.repoNames.length - 1} more)` : ''}`
+        : `Import-${new Date().toISOString().slice(0, 10)}`);
     orgId = createOrg(label, importSource);
   }
 
