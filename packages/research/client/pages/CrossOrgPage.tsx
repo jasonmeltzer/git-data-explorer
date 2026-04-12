@@ -87,8 +87,8 @@ export default function CrossOrgPage() {
       cell: ({ getValue }) => (getValue() as number | null) ?? '—',
     },
     {
-      accessorKey: 'avgPrSize',
-      header: 'Avg PR Size',
+      accessorKey: 'avgCommitSize',
+      header: 'Avg Commit Size',
       cell: ({ getValue }) => {
         const v = getValue() as number | null;
         return v != null ? `${Math.round(v)} lines` : '—';

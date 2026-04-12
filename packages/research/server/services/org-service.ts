@@ -40,17 +40,18 @@ export function updateOrg(
 }
 
 export function deleteOrg(id: number) {
-  // Delete all snapshot data for this org (cascade manually since SQLite FK cascade not guaranteed)
-  const orgSnapshots = db
-    .select({ id: snapshots.id })
-    .from(snapshots)
-    .where(eq(snapshots.orgId, id))
-    .all();
-  for (const s of orgSnapshots) {
-    deleteSnapshotData(s.id);
-  }
-  db.delete(snapshots).where(eq(snapshots.orgId, id)).run();
-  db.delete(orgs).where(eq(orgs.id, id)).run();
+  db.transaction(() => {
+    const orgSnapshots = db
+      .select({ id: snapshots.id })
+      .from(snapshots)
+      .where(eq(snapshots.orgId, id))
+      .all();
+    for (const s of orgSnapshots) {
+      deleteSnapshotData(s.id);
+    }
+    db.delete(snapshots).where(eq(snapshots.orgId, id)).run();
+    db.delete(orgs).where(eq(orgs.id, id)).run();
+  });
 }
 
 export function deleteSnapshotData(snapshotId: number) {

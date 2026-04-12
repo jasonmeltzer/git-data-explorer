@@ -73,6 +73,10 @@ export function getAggregatedCohortMetrics(
   metricType: 'commits' | 'prs'
 ): CohortMetricsRow[] {
   if (orgIds.length === 0) return [];
+  // Defense-in-depth: validate metricType even though TypeScript constrains it
+  if (metricType !== 'commits' && metricType !== 'prs') {
+    throw new Error(`Invalid metricType: ${String(metricType)}`);
+  }
 
   const snapshotMap = getLatestSnapshotIds(orgIds);
   if (snapshotMap.size === 0) return [];

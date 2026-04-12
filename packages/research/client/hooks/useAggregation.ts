@@ -8,9 +8,11 @@ export interface OrgComparisonRow {
   label: string;
   sizeCategory: string | null;
   snapshotCount: number;
-  avgPrSize: number | null;
-  rampUpWeeks: number | null;
   contributorCount: number | null;
+  repoCount: number | null;
+  aiMarkerDate: string | null;
+  avgCommitSize: number | null;
+  rampUpWeeks: number | null;
 }
 
 function buildOrgIdsParam(orgIds: number[]) {
