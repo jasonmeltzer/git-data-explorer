@@ -4,6 +4,7 @@ import path from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { db } from '../db/client.js';
 import {
+  orgs,
   snapshots,
   cohortMetrics,
   rampUp,
@@ -12,17 +13,30 @@ import {
   prTurnaround,
   botRatio,
 } from '../db/schema.js';
-import { eq } from 'drizzle-orm';
+import { eq, and, ne } from 'drizzle-orm';
 import { validateBundle } from './validation.js';
 import { createOrg } from './org-service.js';
 
 export type ImportSource = 'file' | 'gist' | 'url' | 'batch';
+
+export interface CrossOrgDuplicate {
+  otherOrgName: string;
+  importedAt: string; // ISO date string (YYYY-MM-DD)
+}
+
+export interface FuzzyMatch {
+  otherOrgName: string;
+  overlapReason: string;
+  importedAt: string; // ISO date string (YYYY-MM-DD)
+}
 
 export interface ImportResult {
   orgId: number;
   snapshotId: number;
   warnings: string[];
   isDuplicate: boolean;
+  crossOrgDuplicate?: CrossOrgDuplicate;
+  fuzzyMatch?: FuzzyMatch;
 }
 
 /**
@@ -108,6 +122,93 @@ export function importBundle(
   });
   if (isDuplicate) {
     warnings.push('Duplicate bundle detected (same content hash) — importing as new snapshot anyway');
+  }
+
+  // Cross-org exact hash match — find ANY snapshot in a DIFFERENT org with same contentHash
+  let crossOrgDuplicate: CrossOrgDuplicate | undefined;
+  const crossOrgExact = db
+    .select({
+      orgId: snapshots.orgId,
+      importTimestamp: snapshots.importTimestamp,
+    })
+    .from(snapshots)
+    .where(
+      and(
+        eq(snapshots.contentHash, contentHash),
+        ne(snapshots.orgId, orgId as number)
+      )
+    )
+    .limit(1)
+    .get();
+
+  if (crossOrgExact) {
+    const otherOrg = db.select({ label: orgs.label }).from(orgs).where(eq(orgs.id, crossOrgExact.orgId)).get();
+    crossOrgDuplicate = {
+      otherOrgName: otherOrg?.label ?? `org ${crossOrgExact.orgId}`,
+      importedAt: new Date(crossOrgExact.importTimestamp).toISOString().split('T')[0],
+    };
+    warnings.push(`This bundle was already imported to '${crossOrgDuplicate.otherOrgName}' on ${crossOrgDuplicate.importedAt}`);
+  }
+
+  // Fuzzy match: overlapping owners + repoIds + date range in a DIFFERENT org
+  // Per D-05, both exact and fuzzy fire independently
+  let fuzzyMatch: FuzzyMatch | undefined;
+  const bundleRepoIds = new Set(data.metadata.repoIds);
+  const bundleStart = data.metadata.startDate;
+  const bundleEnd = data.metadata.endDate;
+
+  // Parse owner from repoNames for owner-based matching
+  const bundleOwners = new Set(
+    data.metadata.repoNames.map((name: string) => name.split('/')[0]).filter(Boolean)
+  );
+
+  // Get all snapshots from OTHER orgs
+  const otherSnapshots = db
+    .select({
+      id: snapshots.id,
+      orgId: snapshots.orgId,
+      metadataJson: snapshots.metadataJson,
+      importTimestamp: snapshots.importTimestamp,
+      startDate: snapshots.startDate,
+      endDate: snapshots.endDate,
+    })
+    .from(snapshots)
+    .where(ne(snapshots.orgId, orgId as number))
+    .all();
+
+  for (const snap of otherSnapshots) {
+    if (fuzzyMatch) break; // take first fuzzy match only
+    try {
+      const meta = JSON.parse(snap.metadataJson);
+      const snapRepoIds = new Set(meta.repoIds ?? []);
+      const snapOwners = new Set(
+        (meta.repoNames ?? []).map((n: string) => n.split('/')[0]).filter(Boolean)
+      );
+
+      // Check overlapping owners
+      const ownerOverlap = [...bundleOwners].some((o) => snapOwners.has(o));
+      if (!ownerOverlap) continue;
+
+      // Check overlapping repoIds
+      const repoOverlap = [...bundleRepoIds].some((id) => snapRepoIds.has(id));
+      if (!repoOverlap) continue;
+
+      // Check overlapping date range
+      const snapStart = snap.startDate ?? meta.startDate;
+      const snapEnd = snap.endDate ?? meta.endDate;
+      const dateOverlap = bundleStart <= snapEnd && bundleEnd >= snapStart;
+      if (!dateOverlap) continue;
+
+      const otherOrg = db.select({ label: orgs.label }).from(orgs).where(eq(orgs.id, snap.orgId)).get();
+      fuzzyMatch = {
+        otherOrgName: otherOrg?.label ?? `org ${snap.orgId}`,
+        overlapReason: 'Overlapping repos and date range',
+        importedAt: new Date(snap.importTimestamp).toISOString().split('T')[0],
+      };
+      warnings.push(`Similar data found in '${fuzzyMatch.otherOrgName}' (imported ${fuzzyMatch.importedAt}) — overlapping repos and date range`);
+    } catch {
+      // Skip snapshots with unparseable metadata
+    }
   }
 
   // All inserts in a single transaction
@@ -263,6 +364,8 @@ export function importBundle(
     snapshotId,
     warnings,
     isDuplicate,
+    ...(crossOrgDuplicate && { crossOrgDuplicate }),
+    ...(fuzzyMatch && { fuzzyMatch }),
   };
 }
 
