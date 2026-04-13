@@ -11,6 +11,11 @@ data/test.db-shm
 data/seed.db
 data/seed.db-wal
 data/seed.db-shm
+data/research.db
+data/research.db-wal
+data/research.db-shm
+data/test-bundles/
 .env
 .env.local
 *.tsbuildinfo
+packages/*/package-lock.json

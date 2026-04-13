@@ -10,8 +10,8 @@
     "baseUrl": ".",
     "jsx": "react-jsx",
     "paths": {
-      "@shared/*": ["packages/shared/*"]
+      "@shared/*": ["../shared/*"]
     }
   },
-  "include": ["packages/**/*.ts", "packages/**/*.tsx"]
+  "include": ["server/**/*.ts", "client/**/*.ts", "client/**/*.tsx"]
 }
