@@ -100,17 +100,11 @@ export default function SnapshotHistory({
               <TableCell className="text-sm">{snapshot.repoCount ?? '—'}</TableCell>
               <TableCell>
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      onClick={e => e.stopPropagation()}
-                      aria-label={`Remove snapshot from ${importedAt}`}
-                      disabled={deletingId === snapshot.id}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                  <AlertDialogTrigger
+                    render={<Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive" aria-label={`Remove snapshot from ${importedAt}`} disabled={deletingId === snapshot.id} />}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>

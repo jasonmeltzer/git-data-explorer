@@ -53,11 +53,9 @@ export default function OrgMetadataForm({ org }: OrgMetadataFormProps) {
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger asChild>
-        <Button variant="ghost" size="sm" className="flex items-center gap-1 text-muted-foreground">
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          Edit org metadata
-        </Button>
+      <CollapsibleTrigger render={<Button variant="ghost" size="sm" className="flex items-center gap-1 text-muted-foreground" />}>
+        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        Edit org metadata
       </CollapsibleTrigger>
       <CollapsibleContent>
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 p-4 rounded-lg border bg-muted/30">

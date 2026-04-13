@@ -224,8 +224,8 @@ export default function FilterBar({
           Cohort mode
           <TooltipProvider>
             <Tooltip>
-              <TooltipTrigger asChild>
-                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60 cursor-help" />
+              <TooltipTrigger render={<button type="button" aria-label="Cohort mode help" className="inline-flex cursor-help" />}>
+                <HelpCircle className="h-3.5 w-3.5 text-muted-foreground/60" />
               </TooltipTrigger>
               <TooltipContent side="bottom" className="block max-w-sm text-left leading-relaxed bg-popover text-popover-foreground border shadow-md">
                 <p><strong>Global:</strong> Tenure is measured from each contributor's first commit across all repos. A senior contributor is senior everywhere.</p>

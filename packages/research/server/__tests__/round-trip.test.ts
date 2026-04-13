@@ -133,6 +133,7 @@ function makeFullBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       },
       toolVersion: '1.0.0',
       rollingGranularity: 'month',
+      orgName: 'org',
     },
     cohortCommits: [
       { cohort: 'new', period: 'before', periodMonth: '2025-06', avgLinesAdded: 42.5, avgLinesDeleted: 12.3, avgFilesChanged: 3.1, totalCount: 15, contributorCount: 3 },

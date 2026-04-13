@@ -69,6 +69,7 @@ export interface ExportMetadata {
   cohortConfig: CohortConfig;
   toolVersion: string;            // from package.json "version" field
   rollingGranularity: RollingGranularity;
+  orgName: string | null;         // D-06: nullable for backward compat + opt-out
 }
 
 export interface ExportBundle {

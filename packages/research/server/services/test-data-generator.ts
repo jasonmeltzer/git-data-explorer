@@ -110,6 +110,7 @@ function buildMetadata(
     cohortConfig: DEFAULT_COHORT_CONFIG,
     toolVersion: '1.0.0',
     rollingGranularity: 'month',
+    orgName: null,  // Generated test data uses Repo-Alpha names (no org owner)
   };
 }
 

@@ -149,6 +149,7 @@ function createAndDownloadZip(
 export default function ExportModal({ open, onOpenChange, filters, onExportComplete }: ExportModalProps) {
   const [format, setFormat] = useState<'csv' | 'json'>('csv');
   const [anonymize, setAnonymize] = useState(true);
+  const [includeOrgName, setIncludeOrgName] = useState(true);
 
   const exportMutation = useExport();
   const incrementExportMutation = useIncrementExport();
@@ -165,6 +166,20 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
   // Eagerly fetch preview data when modal opens
   const previewQuery = useExportPreview(exportRequest, open);
   const previewBundle = previewQuery.data;
+
+  // Infer org name from preview data for display next to checkbox
+  const inferredOrgName = useMemo(() => {
+    if (!previewBundle) return null;
+    const owners = previewBundle.metadata.repoNames
+      .map(name => {
+        const slash = name.indexOf('/');
+        return slash > 0 ? name.slice(0, slash) : null;
+      })
+      .filter((o): o is string => o !== null && o.length > 0);
+    if (owners.length === 0) return null;
+    const unique = [...new Set(owners)].sort();
+    return unique.join('+');
+  }, [previewBundle]);
 
   // Build preview rows from the bundle
   // Apply anonymization live based on the toggle — build maps once per bundle
@@ -187,6 +202,10 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
 
     exportMutation.mutate(exportRequest, {
       onSuccess: (bundle) => {
+        // Null out orgName if user opted out per D-08
+        if (!includeOrgName) {
+          bundle.metadata.orgName = null;
+        }
         createAndDownloadZip(bundle, format, anonymize);
         // Always anonymize the bundle passed to the sharing prompt —
         // sharing should never expose real contributor logins
@@ -254,6 +273,18 @@ export default function ExportModal({ open, onOpenChange, filters, onExportCompl
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
+          </div>
+
+          {/* Org name inclusion toggle — per D-08 */}
+          <div className="flex items-center gap-3 min-h-[44px]">
+            <Switch
+              id="orgname-toggle"
+              checked={includeOrgName}
+              onCheckedChange={setIncludeOrgName}
+            />
+            <label htmlFor="orgname-toggle" className="text-sm font-medium cursor-pointer">
+              Include org name in export{inferredOrgName ? ` (${inferredOrgName})` : ''}
+            </label>
           </div>
 
           {/* Amber warning when anonymization is OFF */}

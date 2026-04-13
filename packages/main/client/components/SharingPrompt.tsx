@@ -68,7 +68,6 @@ export default function SharingPrompt({ open, onOpenChange, exportBundle }: Shar
       .catch(() => {
         setHttpReachable(false);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Reset state when dialog closes

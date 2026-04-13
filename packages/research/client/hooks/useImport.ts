@@ -7,6 +7,8 @@ export interface ImportResult {
   orgLabel?: string;
   warnings?: string[];
   isDuplicate?: boolean;
+  crossOrgDuplicate?: { otherOrgName: string; importedAt: string };
+  fuzzyMatch?: { otherOrgName: string; overlapReason: string; importedAt: string };
   errors?: string[];
 }
 

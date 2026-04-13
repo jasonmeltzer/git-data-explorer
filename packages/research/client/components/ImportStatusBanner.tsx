@@ -101,19 +101,37 @@ export default function ImportStatusBanner({ result, batchResults }: ImportStatu
 
   const label = result.orgLabel ?? `org ${result.orgId}`;
   const sectionCount = 1; // we don't have section-level info from the API, use a generic message
+  const hasCrossOrgWarning = !!result.crossOrgDuplicate || !!result.fuzzyMatch;
+
+  const borderColor = hasCrossOrgWarning ? 'border-amber-500/40 bg-amber-500/10' : 'border-green-500/40 bg-green-500/10';
+  const Icon = hasCrossOrgWarning ? AlertTriangle : CheckCircle2;
+  const iconColor = hasCrossOrgWarning ? 'text-amber-600' : 'text-green-600';
+
   return (
     <div
       role="status"
       aria-live="polite"
-      className="flex items-start gap-3 rounded-lg border border-green-500/40 bg-green-500/10 p-4"
+      className={`flex items-start gap-3 rounded-lg border ${borderColor} p-4`}
     >
-      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
-      <p className="text-sm">
-        Bundle imported. {sectionCount > 0 ? 'All sections loaded' : 'Data loaded'} from <span className="font-medium">{label}</span>.
-        {result.isDuplicate && (
-          <span className="ml-1 text-muted-foreground">(Duplicate — saved as new snapshot.)</span>
+      <Icon className={`mt-0.5 h-4 w-4 shrink-0 ${iconColor}`} />
+      <div className="text-sm">
+        <p>
+          Bundle imported. {sectionCount > 0 ? 'All sections loaded' : 'Data loaded'} from <span className="font-medium">{label}</span>.
+          {result.isDuplicate && (
+            <span className="ml-1 text-muted-foreground">(Duplicate — saved as new snapshot.)</span>
+          )}
+        </p>
+        {result.crossOrgDuplicate && (
+          <span className="block mt-1 text-amber-600 dark:text-amber-400">
+            This bundle was already imported to &apos;{result.crossOrgDuplicate.otherOrgName}&apos; on {result.crossOrgDuplicate.importedAt}.
+          </span>
         )}
-      </p>
+        {result.fuzzyMatch && (
+          <span className="block mt-1 text-amber-600 dark:text-amber-400">
+            Similar data found in &apos;{result.fuzzyMatch.otherOrgName}&apos; (imported {result.fuzzyMatch.importedAt}) — {result.fuzzyMatch.overlapReason.toLowerCase()}.
+          </span>
+        )}
+      </div>
     </div>
   );
 }

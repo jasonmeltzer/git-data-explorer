@@ -119,7 +119,6 @@ export function BeforeAfterComparison({ repoIds, aiMarkerDate }: BeforeAfterComp
       { metric: 'New dev ramp-up (weeks)', before: formatRampUp(data.before.rampUpSpeed), after: formatRampUp(data.after.rampUpSpeed), change: rampUpDelta.str, changePositive: rampUpDelta.positive },
       { metric: 'Active Contributors', before: formatNum(data.before.activeContributors), after: formatNum(data.after.activeContributors), change: contributorsDelta.str, changePositive: contributorsDelta.positive },
     ];
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data]);
 
   const tableInstance = useReactTable({

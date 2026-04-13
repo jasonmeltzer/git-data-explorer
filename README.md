@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 9 complete** — Import & Explore Research Tool (monorepo migration + cross-org analysis)
+**Phase 9.1 complete** — Research Tool Polish (asChild warnings, cross-org duplicate detection, orgName in exports)
 
 What works today:
 
@@ -55,7 +55,7 @@ What works today:
 - **8-section dashboard** — Executive Summary KPI tiles, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
 - **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle with anonymization
 - **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download
-- **410 passing tests** across 34 test files
+- **454 passing tests** across 37 test files
 
 ### Research Tool (`packages/research/`)
 A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
@@ -66,6 +66,8 @@ A personal research tool for cross-org AI adoption analysis. No GitHub token req
 - **Cross-org comparison** — select 2+ orgs, compare aggregated metrics side-by-side
 - **Two aggregation modes** — Weighted (larger orgs count more) and Equal Weight (each org counts once)
 - **No GitHub token required** — works entirely from imported export bundles
+- **Cross-org duplicate detection** — warns when the same bundle (exact hash match) or similar data (fuzzy match on overlapping owners, repos, and date ranges) is imported across different orgs
+- **orgName in exports** — org name automatically inferred from GitHub repo owners at export time, used as default org label on import; opt-out checkbox in ExportModal
 
 ### Monorepo Structure
 The project is organized as an npm workspaces monorepo:
@@ -73,7 +75,12 @@ The project is organized as an npm workspaces monorepo:
 - `packages/shared/` — shared types, UI components (shadcn/ui), chart components, utilities
 - `packages/research/` — research tool (Hono server + Vite SPA, port 3002/5174)
 
+### Code Quality
+- **ESLint configured** — flat config with typescript-eslint parser; includes `no-restricted-syntax` rule banning `asChild` prop on `@base-ui/react` components (prevents regression of resolved console warnings)
+- **454 passing tests** across 37 test files
+
 What's next:
+- **Phase 9.2: Research Dashboard Parity** — label AI marker line on cohort charts, add Chart|Table toggles and HelpPanel + insights to research tool
 - **Settings UI for AI marker** — currently API-only; a date picker in Settings would make it more discoverable
 
 ## Tech Stack
@@ -160,7 +167,7 @@ Open http://localhost:5173 — all dashboard views populated with synthetic data
 ### Run Tests
 
 ```bash
-npm run test        # Run all tests across workspaces (410 tests, 34 files)
+npm run test        # Run all tests across workspaces (454 tests, 37 files)
 ```
 
 ### First Use (main app, with real data)
