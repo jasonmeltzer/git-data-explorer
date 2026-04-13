@@ -82,7 +82,7 @@ export default function RampUpLineChart({ data, isFetching }: RampUpLineChartPro
       role="img"
       aria-label="Line chart showing new developer ramp-up curves by join period"
     >
-      <ChartContainer config={chartConfig} className="h-[350px] w-full aspect-auto">
+      <ChartContainer config={chartConfig} className="h-[350px] w-full">
         <LineChart accessibilityLayer data={chartData} margin={{ bottom: 30 }}>
           <CartesianGrid vertical={false} />
           <XAxis

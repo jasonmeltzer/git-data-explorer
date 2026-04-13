@@ -97,7 +97,7 @@ export default function CohortAreaChart({
       role="img"
       aria-label={`Stacked area chart: ${title}`}
     >
-      <ChartContainer config={chartConfig} className="h-[350px] w-full aspect-auto">
+      <ChartContainer config={chartConfig} className="h-[350px] w-full">
         <AreaChart accessibilityLayer data={chartData}>
           <CartesianGrid vertical={false} />
           <XAxis
