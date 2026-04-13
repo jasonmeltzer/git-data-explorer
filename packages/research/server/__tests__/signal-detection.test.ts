@@ -19,8 +19,6 @@ function createSignalTestDb() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       label TEXT NOT NULL,
       size_category TEXT,
-      industry TEXT,
-      ai_tool TEXT,
       import_source TEXT,
       created_at INTEGER NOT NULL
     );
