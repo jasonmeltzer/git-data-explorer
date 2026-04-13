@@ -22,6 +22,7 @@ const ExportMetadataSchema = z.object({
   cohortConfig: CohortConfigSchema,
   toolVersion: z.string(),
   rollingGranularity: z.enum(['month', 'quarter']),
+  orgName: z.string().nullable().optional(),  // D-06: nullable, optional for backward compat
 });
 
 const CohortMetricsRowSchema = z.object({

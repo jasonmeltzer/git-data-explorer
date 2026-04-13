@@ -27,6 +27,24 @@ import { getTrackedRepos } from './repo-management.js';
 const require = createRequire(import.meta.url);
 
 /**
+ * Infer orgName from repo fullNames per D-07.
+ * Single owner => that owner. Multiple => joined with '+' alphabetically. Empty/malformed => null.
+ */
+export function inferOrgName(repoNames: string[]): string | null {
+  const owners = repoNames
+    .map(name => {
+      const slash = name.indexOf('/');
+      return slash > 0 ? name.slice(0, slash) : null;
+    })
+    .filter((o): o is string => o !== null && o.length > 0);
+
+  if (owners.length === 0) return null;
+
+  const unique = [...new Set(owners)].sort();
+  return unique.join('+');
+}
+
+/**
  * Aggregates all dashboard analytics sections into a single exportable bundle.
  *
  * @param req - ExportRequest with date range, repo filter, and display preferences
@@ -227,6 +245,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     cohortConfig,
     toolVersion,
     rollingGranularity: req.rollingGranularity,
+    orgName: inferOrgName(filteredRepos.map(r => r.fullName)),
   };
 
   // ── Return assembled bundle ───────────────────────────────────────────────

@@ -102,6 +102,7 @@ export function importBundle(
   if (orgId === null) {
     const label =
       orgLabel ??
+      data.metadata.orgName ??   // D-11: prefer orgName from metadata
       (repoCount > 0
         ? `${data.metadata.repoNames[0]}${repoCount > 1 ? ` (+${repoCount - 1} more)` : ''}`
         : `Import-${new Date().toISOString().slice(0, 10)}`);
