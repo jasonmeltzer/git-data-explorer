@@ -1,5 +1,5 @@
 import { TrendingUp, TrendingDown } from 'lucide-react';
-import { Skeleton } from '@shared/components/ui/skeleton';
+import { Skeleton } from '@shared/components/ui/skeleton.js';
 
 export interface StatCalloutBoxProps {
   label: string;

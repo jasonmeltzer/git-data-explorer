@@ -1,4 +1,4 @@
-import { FilterScopeBadge } from './FilterScopeBadge';
+import { FilterScopeBadge } from './FilterScopeBadge.js';
 
 export interface SectionHeaderProps {
   title: string;

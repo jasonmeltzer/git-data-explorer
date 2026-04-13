@@ -13,9 +13,9 @@ import {
   CardHeader,
   CardTitle,
   CardContent,
-} from '@shared/components/ui/card';
-import { Skeleton } from '@shared/components/ui/skeleton';
-import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs';
+} from '@shared/components/ui/card.js';
+import { Skeleton } from '@shared/components/ui/skeleton.js';
+import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
 import {
   Table,
   TableHeader,
@@ -23,7 +23,7 @@ import {
   TableRow,
   TableHead,
   TableCell,
-} from '@shared/components/ui/table';
+} from '@shared/components/ui/table.js';
 import type { RollingComparisonResult } from '@shared/types.js';
 
 interface RollingCardsProps {

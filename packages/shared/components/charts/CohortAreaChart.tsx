@@ -13,12 +13,12 @@ import {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
-} from '@shared/components/ui/chart';
-import { Skeleton } from '@shared/components/ui/skeleton';
-import { cohortRowsToChartData } from '../../lib/chartTransforms';
+} from '@shared/components/ui/chart.js';
+import { Skeleton } from '@shared/components/ui/skeleton.js';
+import { cohortRowsToChartData } from '../../lib/chartTransforms.js';
 import type { CohortMetricsRow } from '@shared/types.js';
 import { cohortChartConfig as defaultChartConfig } from '@shared/cohort-config.js';
-import type { ChartConfig } from '@shared/components/ui/chart';
+import type { ChartConfig } from '@shared/components/ui/chart.js';
 
 type Metric = 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged' | 'totalCount';
 

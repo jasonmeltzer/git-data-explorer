@@ -80,14 +80,17 @@ export function importBundle(
   // Compute content hash for dedup detection
   const contentHash = createHash('sha256').update(JSON.stringify(bundle)).digest('hex');
 
+  // Derived counts (computed early for org size inference)
+  const contributorCount = new Set(data.contributors.map((c) => c.authorLogin)).size;
+  const repoCount = data.metadata.repoNames.length;
+
   // Auto-create org if needed
   if (orgId === null) {
     const label =
       orgLabel ??
-      (data.metadata.repoNames.length > 0
-        ? `${data.metadata.repoNames[0]}${data.metadata.repoNames.length > 1 ? ` (+${data.metadata.repoNames.length - 1} more)` : ''}`
+      (repoCount > 0
+        ? `${data.metadata.repoNames[0]}${repoCount > 1 ? ` (+${repoCount - 1} more)` : ''}`
         : `Import-${new Date().toISOString().slice(0, 10)}`);
-    // Infer org size from contributor count
     const size = contributorCount <= 20 ? 'small' : contributorCount <= 100 ? 'medium' : 'large';
     orgId = createOrg(label, importSource, size);
   }
@@ -106,10 +109,6 @@ export function importBundle(
   if (isDuplicate) {
     warnings.push('Duplicate bundle detected (same content hash) — importing as new snapshot anyway');
   }
-
-  // Derived counts
-  const contributorCount = new Set(data.contributors.map((c) => c.authorLogin)).size;
-  const repoCount = data.metadata.repoNames.length;
 
   // All inserts in a single transaction
   const snapshotId = db.transaction(() => {

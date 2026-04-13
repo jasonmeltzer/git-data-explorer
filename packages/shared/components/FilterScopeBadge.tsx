@@ -1,5 +1,5 @@
-import { Badge } from '@shared/components/ui/badge';
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@shared/components/ui/tooltip';
+import { Badge } from '@shared/components/ui/badge.js';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@shared/components/ui/tooltip.js';
 
 export interface FilterScopeBadgeProps {
   scope: 'filtered' | 'independent';

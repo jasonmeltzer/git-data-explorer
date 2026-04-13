@@ -11,10 +11,10 @@ import {
   ChartTooltipContent,
   ChartLegend,
   ChartLegendContent,
-} from '@shared/components/ui/chart';
-import { Skeleton } from '@shared/components/ui/skeleton';
+} from '@shared/components/ui/chart.js';
+import { Skeleton } from '@shared/components/ui/skeleton.js';
 import type { RampUpBucket } from '@shared/types.js';
-import type { ChartConfig } from '@shared/components/ui/chart';
+import type { ChartConfig } from '@shared/components/ui/chart.js';
 
 interface RampUpLineChartProps {
   data: RampUpBucket[];
