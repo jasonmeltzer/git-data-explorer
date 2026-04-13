@@ -35,7 +35,7 @@ export function getOrg(id: number) {
 
 export function updateOrg(
   id: number,
-  data: { label?: string; sizeCategory?: string; industry?: string; aiTool?: string }
+  data: { label?: string; sizeCategory?: string }
 ) {
   db.update(orgs).set(data).where(eq(orgs.id, id)).run();
 }

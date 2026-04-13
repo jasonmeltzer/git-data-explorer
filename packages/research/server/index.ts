@@ -12,8 +12,6 @@ sqlite.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     label TEXT NOT NULL,
     size_category TEXT,
-    industry TEXT,
-    ai_tool TEXT,
     import_source TEXT,
     created_at INTEGER NOT NULL
   );
@@ -104,6 +102,10 @@ sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_pr_turnaround_org ON pr_turnaround(org_id);
   CREATE INDEX IF NOT EXISTS idx_bot_ratio_org ON bot_ratio(org_id);
 `);
+
+// Drop deprecated columns from existing databases (no-op on fresh DBs)
+try { sqlite.exec('ALTER TABLE orgs DROP COLUMN industry'); } catch { /* column already gone */ }
+try { sqlite.exec('ALTER TABLE orgs DROP COLUMN ai_tool'); } catch { /* column already gone */ }
 
 const app = new Hono();
 app.use('/api/*', cors({ origin: 'http://localhost:5174' }));

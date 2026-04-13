@@ -4,8 +4,6 @@ export interface OrgSummary {
   id: number;
   label: string;
   sizeCategory: string | null;
-  industry: string | null;
-  aiTool: string | null;
   importSource: string;
   createdAt: string;
   snapshotCount: number;
@@ -58,8 +56,6 @@ export function useUpdateOrg() {
       data: {
         label?: string;
         sizeCategory?: string;
-        industry?: string;
-        aiTool?: string;
       };
     }) =>
       fetch(`/api/orgs/${orgId}`, {

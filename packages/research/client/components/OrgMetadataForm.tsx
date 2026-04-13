@@ -25,8 +25,6 @@ export default function OrgMetadataForm({ org }: OrgMetadataFormProps) {
   const [open, setOpen] = useState(false);
   const [label, setLabel] = useState(org.label);
   const [sizeCategory, setSizeCategory] = useState(org.sizeCategory ?? '');
-  const [industry, setIndustry] = useState(org.industry ?? '');
-  const [aiTool, setAiTool] = useState(org.aiTool ?? '');
 
   const updateOrg = useUpdateOrg();
 
@@ -36,8 +34,6 @@ export default function OrgMetadataForm({ org }: OrgMetadataFormProps) {
       data: {
         label: label || undefined,
         sizeCategory: sizeCategory || undefined,
-        industry: industry || undefined,
-        aiTool: aiTool || undefined,
       },
     });
     setOpen(false);
@@ -46,8 +42,6 @@ export default function OrgMetadataForm({ org }: OrgMetadataFormProps) {
   const handleDiscard = () => {
     setLabel(org.label);
     setSizeCategory(org.sizeCategory ?? '');
-    setIndustry(org.industry ?? '');
-    setAiTool(org.aiTool ?? '');
     setOpen(false);
   };
 
@@ -80,24 +74,6 @@ export default function OrgMetadataForm({ org }: OrgMetadataFormProps) {
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
             </select>
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="org-industry" className="text-xs text-muted-foreground">Industry</label>
-            <Input
-              id="org-industry"
-              value={industry}
-              onChange={e => setIndustry(e.target.value)}
-              placeholder="e.g. SaaS, Fintech"
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="org-ai-tool" className="text-xs text-muted-foreground">AI Tool</label>
-            <Input
-              id="org-ai-tool"
-              value={aiTool}
-              onChange={e => setAiTool(e.target.value)}
-              placeholder="e.g. GitHub Copilot"
-            />
           </div>
           <div className="col-span-full flex gap-2 pt-1">
             <Button
