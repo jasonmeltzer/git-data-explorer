@@ -137,6 +137,7 @@ function makeBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       },
       toolVersion: '1.0.0',
       rollingGranularity: 'month',
+      orgName: 'acme',
     },
     cohortCommits: [
       { cohort: 'new', period: 'before', periodMonth: '2025-02', avgLinesAdded: 40, avgLinesDeleted: 10, avgFilesChanged: 3, totalCount: 15, contributorCount: 3 },
@@ -181,6 +182,7 @@ function makeFuzzyBundle(): ExportBundle {
       },
       toolVersion: '1.0.0',
       rollingGranularity: 'month',
+      orgName: 'acme',
     },
     cohortCommits: [
       { cohort: 'mid', period: 'after', periodMonth: '2025-07', avgLinesAdded: 60, avgLinesDeleted: 20, avgFilesChanged: 4, totalCount: 20, contributorCount: 5 },
@@ -217,6 +219,7 @@ function makeUniqueBundle(): ExportBundle {
       },
       toolVersion: '1.0.0',
       rollingGranularity: 'month',
+      orgName: 'zeta',
     },
     cohortCommits: [
       { cohort: 'senior', period: 'all', periodMonth: '2024-03', avgLinesAdded: 100, avgLinesDeleted: 50, avgFilesChanged: 8, totalCount: 30, contributorCount: 6 },

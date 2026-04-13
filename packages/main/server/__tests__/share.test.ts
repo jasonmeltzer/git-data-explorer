@@ -60,6 +60,7 @@ const stubBundle = {
     cohortConfig: { thresholds: [] },
     toolVersion: '1.0.0',
     rollingGranularity: 'month',
+    orgName: null,
   },
   cohortCommits: [],
   cohortPrs: [],

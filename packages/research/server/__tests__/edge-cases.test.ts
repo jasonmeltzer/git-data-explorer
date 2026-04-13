@@ -148,6 +148,7 @@ function makeMinimalBundle(overrides: Partial<ExportBundle> = {}): ExportBundle 
       cohortConfig: DEFAULT_COHORT_CONFIG,
       toolVersion: '1.0.0',
       rollingGranularity: 'month',
+      orgName: null,
     },
     cohortCommits: [{
       cohort: 'new',
@@ -255,6 +256,7 @@ describe('Edge case tests (D-11-4)', () => {
           cohortConfig: DEFAULT_COHORT_CONFIG,
           toolVersion: '1.0.0',
           rollingGranularity: 'month',
+          orgName: null,
         },
       });
       const result = validateBundle(bundle);
@@ -275,6 +277,7 @@ describe('Edge case tests (D-11-4)', () => {
           cohortConfig: DEFAULT_COHORT_CONFIG,
           toolVersion: '1.0.0',
           rollingGranularity: 'month',
+          orgName: null,
         },
       });
       expect(() => {
@@ -297,6 +300,7 @@ describe('Edge case tests (D-11-4)', () => {
           cohortConfig: DEFAULT_COHORT_CONFIG,
           toolVersion: '1.0.0',
           rollingGranularity: 'month',
+          orgName: null,
         },
       });
 
@@ -405,6 +409,7 @@ describe('Edge case tests (D-11-4)', () => {
           cohortConfig: DEFAULT_COHORT_CONFIG,
           toolVersion: '0.1.0',  // old version
           rollingGranularity: 'month',
+          orgName: null,
         },
       });
       const result = validateBundle(bundle);
@@ -424,6 +429,7 @@ describe('Edge case tests (D-11-4)', () => {
           cohortConfig: DEFAULT_COHORT_CONFIG,
           toolVersion: '0.0.1',
           rollingGranularity: 'month',
+          orgName: null,
         },
       });
 
