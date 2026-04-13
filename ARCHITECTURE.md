@@ -10,6 +10,7 @@ git-data-explorer/
 │   ├── main/        # Main app — GitHub API collection, SQLite, dashboard UI
 │   ├── shared/      # Shared types, UI components, utilities (used by both main + research)
 │   └── research/    # Research tool — import bundles, cross-org analysis
+├── eslint.config.js   # ESLint flat config (typescript-eslint, asChild ban)
 ├── package.json     # Workspace root (npm workspaces)
 └── drizzle.config.ts  # Drizzle config for main app migrations
 ```
@@ -120,7 +121,7 @@ Hono HTTP server. No GitHub API dependency — all data from imported ExportBund
 - `analytics.ts` — `GET /api/analytics/cross-org/cohort-metrics`, `GET /api/analytics/cross-org/ramp-up`, `GET /api/analytics/cross-org/comparison`
 
 **Services** (`server/services/`):
-- `import-service.ts` — ZIP parsing (fflate), bundle validation, org auto-creation, DB insertion, duplicate detection by SHA-256 content hash
+- `import-service.ts` — ZIP parsing (fflate), bundle validation, org auto-creation, DB insertion, duplicate detection by SHA-256 content hash, cross-org duplicate detection (exact hash match + fuzzy match on overlapping owners/repos/dates)
 - `validation.ts` — Zod schema for ExportBundle; validates shape, warns on null/empty optional sections; backward-compatible with old toolVersion bundles
 - `org-service.ts` — Org and snapshot CRUD (create, list, get, update, delete with cascade)
 - `aggregation.ts` — Cross-org aggregation engine: `getAggregatedCohortMetrics`, `getAggregatedRampUp`, `getOrgComparisonTable`; uses latest snapshot per org
@@ -130,7 +131,7 @@ Hono HTTP server. No GitHub API dependency — all data from imported ExportBund
 
 Code imported by both main and research frontends:
 - `types.ts` — TypeScript interfaces (GitHubRepo, TrackedRepo, CohortMetricsRow, RampUpBucket, ContributorBeforeAfterStats, etc.)
-- `export-types.ts` — ExportBundle, ExportMetadata, PrTurnaroundRow, BotRatioRow, ExecutiveSummary, BeforeAfterComparison
+- `export-types.ts` — ExportBundle, ExportMetadata (includes `orgName: string | null` inferred from repo owners), PrTurnaroundRow, BotRatioRow, ExecutiveSummary, BeforeAfterComparison
 - `cohort-config.ts` — Single source of truth for cohort boundary definitions: `CohortThreshold`, `CohortConfig`, `DEFAULT_COHORT_CONFIG` (3mo/12mo thresholds), `getThresholdSeconds()` for SQL CASE WHEN generation
 - `components/ui/` — shadcn/ui primitives (used only by frontend, but placed in shared for the `@shared/*` path alias)
 - `lib/utils.ts` — `cn()` helper for Tailwind class merging
@@ -207,10 +208,20 @@ User provides source (file/URL/Gist/batch)
                   → INSERT INTO contributors (N rows)
                   → INSERT INTO pr_turnaround (N rows)
                   → INSERT INTO bot_ratio (N rows)
-              → Return { orgId, snapshotId, warnings, isDuplicate }
+              → Cross-org duplicate detection:
+                  → Exact hash match against snapshots in other orgs
+                  → Fuzzy match (overlapping owners, repoIds, date ranges)
+              → Return { orgId, snapshotId, warnings, isDuplicate, crossOrgDuplicate?, fuzzyMatch? }
 ```
 
 **Dedup behavior:** If the same content hash is imported twice for the same org, `isDuplicate=true` is returned with a warning, but the import proceeds and creates a new snapshot. This preserves history while flagging the duplicate.
+
+**Cross-org duplicate detection (Phase 9.1):** On every import, two additional checks run against snapshots in *other* orgs:
+1. **Exact match** — same SHA-256 `contentHash` found in another org's snapshot. Returns `crossOrgDuplicate: { otherOrgName, importedAt }`.
+2. **Fuzzy match** — different hash but overlapping GitHub owners AND repoIds AND date ranges. Returns `fuzzyMatch: { otherOrgName, overlapReason, importedAt }`.
+Both signals fire independently. Import proceeds regardless (warn-but-allow). The `ImportStatusBanner` shows an amber warning for cross-org duplicates.
+
+**orgName in exports (Phase 9.1):** `ExportMetadata.orgName` is inferred from the `owner/repo` segments of `repoNames` at export time. Single owner becomes the orgName; multiple owners are joined alphabetically with `+`. An opt-out checkbox in ExportModal lets the user exclude it. On import, `orgName` is used as the default org label (replacing the previous first-repo-name fallback).
 
 ## Export & Sharing Layer (Main App)
 
@@ -246,6 +257,13 @@ The analytics layer is a set of pure query services that read from the SQLite da
 **Only complete repos** — all analytics queries filter to repos where both commits and PRs have `collection_state.status = 'complete'`. The shared `getCompleteRepoIds()` in `analytics-utils.ts` is the single canonical implementation (SEC-01 integer guard included).
 
 **SQL injection prevention** — all `sql.raw()` interpolation sites validate IDs are positive integers before interpolation (SEC-01). Route-level Zod schemas validate date string inputs (BUG-06).
+
+## ESLint Configuration
+
+ESLint flat config (`eslint.config.js`) with `typescript-eslint` parser for JSX/TSX support. Key rules:
+- `no-restricted-syntax` — bans `asChild` prop on `@base-ui/react` components (prevents regression of console warnings from using the Radix-style API on Base-UI components that use `render` prop instead)
+
+Run with `npm run lint`.
 
 ## What's Not Built Yet
 
@@ -345,8 +363,8 @@ packages/
         ├── routes/
         │   ├── health.ts / import.ts / orgs.ts / analytics.ts
         └── services/
-            ├── import-service.ts     # ZIP/JSON ingestion, validation, DB write
-            ├── validation.ts         # Zod ExportBundle schema
+            ├── import-service.ts     # ZIP/JSON ingestion, validation, DB write, cross-org dup detection
+            ├── validation.ts         # Zod ExportBundle schema (orgName optional for backward compat)
             ├── org-service.ts        # Org/snapshot CRUD
             ├── aggregation.ts        # Weighted/normalized cross-org aggregation
             └── test-data-generator.ts  # Synthetic org bundle generator
