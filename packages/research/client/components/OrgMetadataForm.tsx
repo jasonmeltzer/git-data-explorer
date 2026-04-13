@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button } from '@shared/components/ui/button.js';
 import { Input } from '@shared/components/ui/input.js';
@@ -7,6 +7,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@shared/components/ui/collapsible.js';
+import { toast } from 'sonner';
 import { useUpdateOrg } from '../hooks/useOrgs.js';
 import type { OrgDetail } from '../hooks/useOrgs.js';
 
@@ -28,15 +29,25 @@ export default function OrgMetadataForm({ org }: OrgMetadataFormProps) {
 
   const updateOrg = useUpdateOrg();
 
+  useEffect(() => {
+    setLabel(org.label);
+    setSizeCategory(org.sizeCategory ?? '');
+  }, [org.label, org.sizeCategory]);
+
   const handleSave = async () => {
-    await updateOrg.mutateAsync({
-      orgId: org.id,
-      data: {
-        label: label || undefined,
-        sizeCategory: sizeCategory || undefined,
-      },
-    });
-    setOpen(false);
+    try {
+      await updateOrg.mutateAsync({
+        orgId: org.id,
+        data: {
+          label: label || undefined,
+          sizeCategory: sizeCategory || undefined,
+        },
+      });
+      toast.success('Org metadata saved');
+      setOpen(false);
+    } catch {
+      toast.error('Failed to save org metadata');
+    }
   };
 
   const handleDiscard = () => {

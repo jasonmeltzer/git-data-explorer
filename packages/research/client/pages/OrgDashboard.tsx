@@ -6,6 +6,7 @@ import { StatCalloutBox } from '@shared/components/charts/StatCalloutBox.js';
 import { InlineCohortChart, InlineRampUpChart } from '../components/InlineCharts.js';
 import SnapshotHistory from '../components/SnapshotHistory.js';
 import { useOrg } from '../hooks/useOrgs.js';
+import OrgMetadataForm from '../components/OrgMetadataForm.js';
 import { useSnapshotData } from '../hooks/useSnapshotData.js';
 
 interface OrgDashboardProps {
@@ -36,6 +37,8 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
           </div>
         )}
       </div>
+
+      {!orgLoading && org && <OrgMetadataForm org={org} />}
 
       {/* Snapshot selector */}
       {snapshots.length > 0 && (
