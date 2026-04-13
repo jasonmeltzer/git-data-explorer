@@ -317,7 +317,29 @@ describe('Cross-org duplicate detection', () => {
     expect(resultB.snapshotId).toBeGreaterThan(0);
   });
 
-  it('Test 5: unique bundle to new org has no cross-org signals', () => {
+  it('Test 5: bundles with missing vs explicit empty optional arrays hash identically (WR-02)', () => {
+    // Bundle A has cohortPrs explicitly set to []
+    const bundleA = makeBundle({ cohortPrs: [] });
+
+    // Bundle B omits cohortPrs entirely — Zod .default([]) will normalize it to []
+    const { cohortPrs: _removed, ...bundleBRaw } = makeBundle() as Record<string, unknown>;
+    // Manually delete the key so it's truly absent
+    const bundleB = { ...bundleBRaw };
+    delete (bundleB as Record<string, unknown>)['cohortPrs'];
+
+    const orgA = createOrg('Org A', 'file', 'small');
+
+    // Import bundle A first
+    const resultA = importBundle(bundleA, orgA, 'file');
+    expect(resultA.isDuplicate).toBe(false);
+
+    // Import bundle B (missing cohortPrs) to same org — should be detected as duplicate
+    // because after Zod normalization, both bundles have identical data
+    const resultB = importBundle(bundleB, orgA, 'file');
+    expect(resultB.isDuplicate).toBe(true);
+  });
+
+  it('Test 6: unique bundle to new org has no cross-org signals', () => {
     const uniqueBundle = makeUniqueBundle();
     const orgC = createOrg('Org C', 'file', 'small');
 

@@ -91,8 +91,9 @@ export function importBundle(
   const data = validation.data;
   const warnings = [...validation.warnings];
 
-  // Compute content hash for dedup detection
-  const contentHash = createHash('sha256').update(JSON.stringify(bundle)).digest('hex');
+  // Compute content hash for dedup detection (use Zod-normalized data, not raw bundle,
+  // so bundles with missing-but-defaulted optional arrays hash consistently — WR-02)
+  const contentHash = createHash('sha256').update(JSON.stringify(data)).digest('hex');
 
   // Derived counts (computed early for org size inference)
   const contributorCount = new Set(data.contributors.map((c) => c.authorLogin)).size;
@@ -110,17 +111,14 @@ export function importBundle(
     orgId = createOrg(label, importSource, size);
   }
 
-  // Check for duplicate (same contentHash for this org)
-  let isDuplicate = false;
-  const existing = db
+  // Check for duplicate (same contentHash for this org) — single indexed query (WR-01)
+  const sameOrgMatch = db
     .select({ id: snapshots.id })
     .from(snapshots)
-    .where(eq(snapshots.orgId, orgId))
-    .all();
-  isDuplicate = existing.some((s) => {
-    const snap = db.select().from(snapshots).where(eq(snapshots.id, s.id)).get();
-    return snap?.contentHash === contentHash;
-  });
+    .where(and(eq(snapshots.orgId, orgId), eq(snapshots.contentHash, contentHash)))
+    .limit(1)
+    .get();
+  const isDuplicate = !!sameOrgMatch;
   if (isDuplicate) {
     warnings.push('Duplicate bundle detected (same content hash) — importing as new snapshot anyway');
   }
@@ -194,10 +192,14 @@ export function importBundle(
       const repoOverlap = [...bundleRepoIds].some((id) => snapRepoIds.has(id));
       if (!repoOverlap) continue;
 
-      // Check overlapping date range
-      const snapStart = snap.startDate ?? meta.startDate;
-      const snapEnd = snap.endDate ?? meta.endDate;
-      const dateOverlap = bundleStart <= snapEnd && bundleEnd >= snapStart;
+      // Check overlapping date range — numeric comparison for format safety (WR-03)
+      const toMs = (s: string) => new Date(s).getTime();
+      const snapStartMs = toMs(snap.startDate ?? meta.startDate);
+      const snapEndMs = toMs(snap.endDate ?? meta.endDate);
+      const bundleStartMs = toMs(bundleStart);
+      const bundleEndMs = toMs(bundleEnd);
+      const allValid = [snapStartMs, snapEndMs, bundleStartMs, bundleEndMs].every(n => !Number.isNaN(n));
+      const dateOverlap = allValid && bundleStartMs <= snapEndMs && bundleEndMs >= snapStartMs;
       if (!dateOverlap) continue;
 
       const otherOrg = db.select({ label: orgs.label }).from(orgs).where(eq(orgs.id, snap.orgId)).get();
