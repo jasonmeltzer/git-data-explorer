@@ -389,7 +389,7 @@ export default function DashboardPage() {
 
   const trackedRepos = trackedData?.repos ?? [];
   const isSeedDb = healthData?.isSeedDb ?? false;
-  const hasToken = tokenData?.configured ?? true; // assume configured until we know
+  const hasToken = isSeedDb || (tokenData?.configured ?? true); // seed DB doesn't need a real token
   const anyFetching = prFetching || commitFetching || rampUpFetching || rollingFetching;
   const anyError = prError || commitError || rampUpError || rollingError;
 
