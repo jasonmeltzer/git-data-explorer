@@ -19,8 +19,7 @@ import {
   TableCell,
 } from '@shared/components/ui/table.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-
-export type MetricOption = 'totalCount' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
+import type { MetricOption } from '@shared/lib/narratives.js';
 
 interface CohortDataTableProps {
   data: CohortMetricsRow[];

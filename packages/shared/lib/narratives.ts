@@ -1,5 +1,5 @@
 import type { RollingComparisonResult, CohortMetricsRow } from '@shared/types.js';
-import { COHORT_LABELS } from '@shared/cohort-config.js';
+import { COHORT_LABELS, COHORT_KEYS } from '@shared/cohort-config.js';
 
 export type MetricOption = 'totalCount' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
 
@@ -48,7 +48,7 @@ export function cohortTrendNarrative(
 
   const cohorts = [...new Set(rows.map(r => r.cohort))];
   const parts: string[] = [];
-  for (const cohort of ['0-3mo', '3-12mo', '1yr+']) {
+  for (const cohort of COHORT_KEYS) {
     if (!cohorts.includes(cohort)) continue;
     const firstVal = rows.find(r => r.periodMonth === first && r.cohort === cohort)?.[metric] ?? 0;
     const lastVal = rows.find(r => r.periodMonth === last && r.cohort === cohort)?.[metric] ?? 0;
