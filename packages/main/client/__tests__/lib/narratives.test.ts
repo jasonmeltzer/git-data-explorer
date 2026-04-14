@@ -84,8 +84,8 @@ describe('rollingNarrative', () => {
 describe('cohortTrendNarrative', () => {
   it('returns "up" direction string when totalCount increases over time', () => {
     const rows: CohortMetricsRow[] = [
-      makeRow('0-3mo', '2025-01', 10),
-      makeRow('0-3mo', '2025-06', 20),
+      makeRow('new', '2025-01', 10),
+      makeRow('new', '2025-06', 20),
     ];
     const narrative = cohortTrendNarrative(rows, 'totalCount', 'New contributor volume');
     expect(narrative).toContain('up');
@@ -93,8 +93,8 @@ describe('cohortTrendNarrative', () => {
 
   it('returns "down" direction string when totalCount decreases over time', () => {
     const rows: CohortMetricsRow[] = [
-      makeRow('0-3mo', '2025-01', 100),
-      makeRow('0-3mo', '2025-06', 50),
+      makeRow('new', '2025-01', 100),
+      makeRow('new', '2025-06', 50),
     ];
     const narrative = cohortTrendNarrative(rows, 'totalCount', 'New contributor volume');
     expect(narrative).toContain('down');

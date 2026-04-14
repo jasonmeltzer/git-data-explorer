@@ -1,15 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import {
-  useReactTable,
-  getCoreRowModel,
-  getSortedRowModel,
-  flexRender,
-  type ColumnDef,
-  type SortingState,
-  type Header,
-} from '@tanstack/react-table';
-import { ArrowUpDown, ArrowUp, ArrowDown, BarChart3, TableProperties } from 'lucide-react';
+import { BarChart3, TableProperties } from 'lucide-react';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
 import { useAiMarker } from '../hooks/useAiMarker.js';
 import { useCohortConfig } from '../hooks/useCohortConfig.js';
@@ -17,14 +8,16 @@ import { useCohortPrs } from '../hooks/useCohortPrs.js';
 import { useCohortCommits } from '../hooks/useCohortCommits.js';
 import { useRampUp } from '../hooks/useRampUp.js';
 import { useRolling } from '../hooks/useRolling.js';
-import { cohortTrendNarrative, rollingNarrative } from '../lib/narratives.js';
+import { cohortTrendNarrative, rollingNarrative, METRIC_OPTIONS, METRIC_NARRATIVE_LABELS } from '@shared/lib/narratives.js';
+import type { MetricOption } from '@shared/lib/narratives.js';
 import { computeCohortInsights, computeRampUpInsights, computeRollingInsights } from '@shared/lib/insights.js';
-import { formatNum } from '@shared/lib/deltaFormat.js';
 import FilterBar from '../components/FilterBar.js';
 import SharingPrompt from '../components/SharingPrompt.js';
 import { useSharingEligibility } from '../hooks/useSharingStatus.js';
 import CohortAreaChart from '@shared/components/charts/CohortAreaChart.js';
+import { CohortDataTable } from '@shared/components/charts/CohortDataTable.js';
 import RampUpLineChart from '@shared/components/charts/RampUpLineChart.js';
+import { RampUpDataTable } from '@shared/components/charts/RampUpDataTable.js';
 import RollingCards from '@shared/components/charts/RollingCards.js';
 import NarrativeCard from '@shared/components/charts/NarrativeCard.js';
 import { ContributorTable } from '../components/ContributorTable.js';
@@ -39,284 +32,8 @@ import { StatCalloutBox } from '@shared/components/charts/StatCalloutBox.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@shared/components/ui/table.js';
-import type { TrackedRepo, CohortMetricsRow, RampUpBucket } from '@shared/types.js';
+import type { TrackedRepo } from '@shared/types.js';
 import type { ExportBundle } from '@shared/export-types.js';
-
-type MetricOption = 'totalCount' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
-
-// Helper to render a sortable table header button
-function SortableHeader({
-  header,
-  isRightAligned,
-}: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  header: Header<any, any>;
-  isRightAligned: boolean;
-}) {
-  const sorted = header.column.getIsSorted();
-  if (!header.column.getCanSort()) {
-    return <>{flexRender(header.column.columnDef.header, header.getContext())}</>;
-  }
-  return (
-    <button
-      className="flex items-center gap-1 hover:text-foreground transition-colors"
-      style={isRightAligned ? { marginLeft: 'auto' } : undefined}
-      onClick={header.column.getToggleSortingHandler()}
-    >
-      {flexRender(header.column.columnDef.header, header.getContext())}
-      {sorted === 'asc' ? (
-        <ArrowUp className="h-3 w-3" />
-      ) : sorted === 'desc' ? (
-        <ArrowDown className="h-3 w-3" />
-      ) : (
-        <ArrowUpDown className="h-3 w-3 opacity-50" />
-      )}
-    </button>
-  );
-}
-
-// Inline CohortDataTable: pivots CohortMetricsRow[] by periodMonth, one column per cohort
-function CohortDataTable({
-  data,
-  metric,
-  isFetching,
-  chartConfig,
-}: {
-  data: CohortMetricsRow[];
-  metric: MetricOption;
-  isFetching: boolean;
-  chartConfig: Record<string, { label: string; color: string }> | undefined;
-}) {
-  const [sorting, setSorting] = useState<SortingState>([]);
-
-  const cohortKeys = useMemo(() => [...new Set(data.map((r) => r.cohort))], [data]);
-
-  const pivoted = useMemo(() => {
-    const byMonth = new Map<string, Record<string, unknown>>();
-    for (const row of data) {
-      if (!byMonth.has(row.periodMonth)) {
-        byMonth.set(row.periodMonth, { periodMonth: row.periodMonth });
-      }
-      (byMonth.get(row.periodMonth) as Record<string, unknown>)[row.cohort] = row[metric];
-    }
-    return [...byMonth.values()].sort((a, b) =>
-      String(a.periodMonth).localeCompare(String(b.periodMonth)),
-    );
-  }, [data, metric]);
-
-  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(
-    () => [
-      { accessorKey: 'periodMonth', header: 'Period', enableSorting: true },
-      ...cohortKeys.map((key) => ({
-        accessorKey: key,
-        header: chartConfig?.[key]?.label ?? key,
-        enableSorting: true,
-        meta: { align: 'right' as const },
-        cell: ({ getValue }: { getValue: () => unknown }) => {
-          const val = getValue() as number | undefined;
-          return (
-            <span className="tabular-nums">
-              {val != null ? formatNum(val) : '—'}
-            </span>
-          );
-        },
-      })),
-    ],
-    [cohortKeys, chartConfig],
-  );
-
-  const table = useReactTable({
-    data: pivoted,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    state: { sorting },
-    onSortingChange: setSorting,
-  });
-
-  if (isFetching && data.length === 0) return <Skeleton className="h-[300px] w-full" />;
-
-  if (data.length === 0) {
-    return (
-      <div className="min-h-[120px] flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">No data for selected filters.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto mt-2">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                const isRightAligned =
-                  (header.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
-                return (
-                  <TableHead key={header.id} className={isRightAligned ? 'text-right' : ''}>
-                    <SortableHeader header={header} isRightAligned={isRightAligned} />
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
-              {row.getVisibleCells().map((cell) => {
-                const isRightAligned =
-                  (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
-                return (
-                  <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-// Inline RampUpDataTable: pivots RampUpBucket[] by weekIndex, one column per joinPeriod
-function RampUpDataTable({
-  data,
-  isFetching,
-}: {
-  data: RampUpBucket[];
-  isFetching: boolean;
-}) {
-  const [sorting, setSorting] = useState<SortingState>([]);
-
-  const joinPeriods = useMemo(
-    () => [...new Set(data.map((r) => r.joinPeriod))].sort(),
-    [data],
-  );
-
-  const pivoted = useMemo(() => {
-    const byWeek = new Map<number, Record<string, unknown>>();
-    for (const row of data) {
-      if (!byWeek.has(row.weekIndex)) {
-        byWeek.set(row.weekIndex, { weekIndex: row.weekIndex });
-      }
-      (byWeek.get(row.weekIndex) as Record<string, unknown>)[row.joinPeriod] = row.avgLinesChanged;
-    }
-    return [...byWeek.values()].sort(
-      (a, b) => (a.weekIndex as number) - (b.weekIndex as number),
-    );
-  }, [data]);
-
-  const columns = useMemo<ColumnDef<Record<string, unknown>>[]>(
-    () => [
-      {
-        accessorKey: 'weekIndex',
-        header: 'Week #',
-        enableSorting: true,
-        meta: { align: 'right' as const },
-        cell: ({ getValue }: { getValue: () => unknown }) => (
-          <span className="tabular-nums">{String(getValue())}</span>
-        ),
-      },
-      ...joinPeriods.map((jp) => ({
-        accessorKey: jp,
-        header: jp,
-        enableSorting: true,
-        meta: { align: 'right' as const },
-        cell: ({ getValue }: { getValue: () => unknown }) => {
-          const val = getValue() as number | undefined;
-          return (
-            <span className="tabular-nums">
-              {val != null ? formatNum(val) : '—'}
-            </span>
-          );
-        },
-      })),
-    ],
-    [joinPeriods],
-  );
-
-  const table = useReactTable({
-    data: pivoted,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    state: { sorting },
-    onSortingChange: setSorting,
-  });
-
-  if (isFetching && data.length === 0) return <Skeleton className="h-[300px] w-full" />;
-
-  if (data.length === 0) {
-    return (
-      <div className="min-h-[120px] flex items-center justify-center">
-        <p className="text-sm text-muted-foreground">No ramp-up data for selected filters.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-x-auto mt-2">
-      <Table>
-        <TableHeader>
-          {table.getHeaderGroups().map((headerGroup) => (
-            <TableRow key={headerGroup.id}>
-              {headerGroup.headers.map((header) => {
-                const isRightAligned =
-                  (header.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
-                return (
-                  <TableHead key={header.id} className={isRightAligned ? 'text-right' : ''}>
-                    <SortableHeader header={header} isRightAligned={isRightAligned} />
-                  </TableHead>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.map((row) => (
-            <TableRow key={row.id}>
-              {row.getVisibleCells().map((cell) => {
-                const isRightAligned =
-                  (cell.column.columnDef.meta as { align?: string } | undefined)?.align === 'right';
-                return (
-                  <TableCell key={cell.id} className={isRightAligned ? 'text-right' : ''}>
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </TableCell>
-                );
-              })}
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
-  );
-}
-
-const METRIC_OPTIONS: { label: string; value: MetricOption }[] = [
-  { label: 'Count', value: 'totalCount' },
-  { label: 'Lines Added', value: 'avgLinesAdded' },
-  { label: 'Lines Deleted', value: 'avgLinesDeleted' },
-  { label: 'Files Changed', value: 'avgFilesChanged' },
-];
-
-const METRIC_NARRATIVE_LABELS: Record<MetricOption, { pr: string; commit: string }> = {
-  totalCount: { pr: 'PR volume', commit: 'Commit volume' },
-  avgLinesAdded: { pr: 'Avg lines added per PR', commit: 'Avg lines added per commit' },
-  avgLinesDeleted: { pr: 'Avg lines deleted per PR', commit: 'Avg lines deleted per commit' },
-  avgFilesChanged: { pr: 'Avg files changed per PR', commit: 'Avg files changed per commit' },
-};
 
 export default function DashboardPage() {
   const {
