@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-import { InlineCohortChart, InlineRampUpChart } from '../components/InlineCharts.js';
+import CohortAreaChart from '@shared/components/charts/CohortAreaChart.js';
+import RampUpLineChart from '@shared/components/charts/RampUpLineChart.js';
 import AggregationToggle from '../components/AggregationToggle.js';
 import { useOrgs } from '../hooks/useOrgs.js';
 import {
@@ -90,7 +91,7 @@ export default function CrossOrgPage() {
             <CardTitle>Aggregated Cohort Commits</CardTitle>
           </CardHeader>
           <CardContent>
-            <InlineCohortChart data={commitMetrics ?? []} metric="avgLinesAdded" aiMarkerDate={null} />
+            <CohortAreaChart data={commitMetrics ?? []} metric="avgLinesAdded" title="Aggregated Cohort Commits" aiMarkerDate={null} isFetching={commitsFetching && !commitMetrics} />
           </CardContent>
         </Card>
       )}
@@ -102,7 +103,7 @@ export default function CrossOrgPage() {
             <CardTitle>Aggregated Cohort Pull Requests</CardTitle>
           </CardHeader>
           <CardContent>
-            <InlineCohortChart data={prMetrics ?? []} metric="totalCount" aiMarkerDate={null} />
+            <CohortAreaChart data={prMetrics ?? []} metric="totalCount" title="Aggregated Cohort Pull Requests" aiMarkerDate={null} isFetching={prsFetching && !prMetrics} />
           </CardContent>
         </Card>
       )}
@@ -114,7 +115,7 @@ export default function CrossOrgPage() {
             <CardTitle>Aggregated Ramp-Up Speed</CardTitle>
           </CardHeader>
           <CardContent>
-            <InlineRampUpChart data={rampUpData ?? []} />
+            <RampUpLineChart data={rampUpData ?? []} isFetching={rampUpFetching && !rampUpData} />
           </CardContent>
         </Card>
       )}
