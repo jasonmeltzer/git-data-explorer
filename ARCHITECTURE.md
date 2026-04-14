@@ -106,8 +106,8 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 
 Single-page React app using hash-based routing. Three pages:
 
-- **ImportPage** (`#/import`) — 4-tab import source selector: Local File (ZIP/JSON drag-drop), GitHub Gist URL, HTTP/Cloud URL, Batch Directory path
-- **OrgDashboard** (`#/org/:orgId`) — Per-org trend charts using imported snapshot data; sidebar shows all imported orgs with snapshot counts; "Imported" badge on data sections
+- **ImportPage** (`#/import`) — 4-tab import source selector: Local File (ZIP/JSON drag-drop), GitHub Gist URL, HTTP/Cloud URL, Batch Directory path; cross-org duplicate warnings shown in unified banner with "Continue to dashboard" button (auto-redirect suppressed when warnings present)
+- **OrgDashboard** (`#/org/:orgId`) — Per-org trend charts using imported snapshot data; sidebar shows all imported orgs with snapshot counts; "Imported" badge on data sections; collapsible OrgMetadataForm for editing label and sizeCategory with sonner toast feedback
 - **CrossOrgPage** (`#/cross-org`) — Checkbox org selector, aggregated charts across selected orgs, Weighted vs Equal Weight mode toggle
 
 ### Research Tool Backend (`packages/research/server/`)
@@ -157,7 +157,7 @@ Separate SQLite database. 8 tables.
 
 | Table | Purpose |
 |-------|---------|
-| `orgs` | One row per imported org. `label`, `size_category`, `industry`, `ai_tool`, `import_source` |
+| `orgs` | One row per imported org. `label`, `size_category`, `import_source` |
 | `snapshots` | One row per imported bundle. Links to `orgs`. Stores `metadata_json`, `content_hash` (SHA-256 for dedup), `contributor_count`, `repo_count`, `ai_marker_date` |
 | `cohort_metrics` | Per-cohort, per-period, per-month metrics rows. `metric_type` = 'commits' or 'prs'. Linked to snapshot + org |
 | `ramp_up` | New developer ramp-up data: `week_index`, `avg_lines_changed`, `join_period`. Per snapshot |

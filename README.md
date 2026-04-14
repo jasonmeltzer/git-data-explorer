@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 9.1 complete** — Research Tool Polish (asChild warnings, cross-org duplicate detection, orgName in exports)
+**Phase 9.1.1 complete** — OrgMetadataForm wire-up, schema cleanup, import banner fix
 
 What works today:
 
@@ -61,13 +61,14 @@ What works today:
 A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
 
 - **Import pipeline** — 4 sources: Local File (ZIP/JSON), GitHub Gist URL, HTTP/Cloud URL, Batch Directory
-- **Org management** — each imported bundle creates an org entry; name and categorize orgs
+- **Org management** — each imported bundle creates an org entry; rename and set size category from OrgDashboard via collapsible metadata form with toast feedback
 - **Snapshot history** — multiple imports per org tracked as snapshots; compare over time
 - **Cross-org comparison** — select 2+ orgs, compare aggregated metrics side-by-side
 - **Two aggregation modes** — Weighted (larger orgs count more) and Equal Weight (each org counts once)
 - **No GitHub token required** — works entirely from imported export bundles
-- **Cross-org duplicate detection** — warns when the same bundle (exact hash match) or similar data (fuzzy match on overlapping owners, repos, and date ranges) is imported across different orgs
+- **Cross-org duplicate detection** — warns when the same bundle (exact hash match) or similar data (fuzzy match on overlapping owners, repos, and date ranges) is imported across different orgs; unified warning banner with conditional redirect and "Continue to dashboard" button
 - **orgName in exports** — org name automatically inferred from GitHub repo owners at export time, used as default org label on import; opt-out checkbox in ExportModal
+- **Simplified schema** — orgs table stores only label and sizeCategory (dropped unused industry/aiTool columns)
 
 ### Monorepo Structure
 The project is organized as an npm workspaces monorepo:
@@ -81,6 +82,7 @@ The project is organized as an npm workspaces monorepo:
 
 What's next:
 - **Phase 9.2: Research Dashboard Parity** — label AI marker line on cohort charts, add Chart|Table toggles and HelpPanel + insights to research tool
+- **Phase 9.3: Research Tool Critical Review** — evaluate whether research tool meets original objectives before further investment
 - **Settings UI for AI marker** — currently API-only; a date picker in Settings would make it more discoverable
 
 ## Tech Stack
