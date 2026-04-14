@@ -63,7 +63,7 @@ export default function ImportStatusBanner({ result, batchResults }: ImportStatu
 
   if (!result) return null;
 
-  const warnings = result.warnings ?? [];
+  const allWarnings = result.warnings ?? [];
   const errors = result.errors ?? [];
 
   if (!result.success || errors.length > 0) {
@@ -81,6 +81,10 @@ export default function ImportStatusBanner({ result, batchResults }: ImportStatu
 
   const label = result.orgLabel ?? `org ${result.orgId}`;
   const hasCrossOrgWarning = !!result.crossOrgDuplicate || !!result.fuzzyMatch;
+  // Filter out warnings that duplicate the structured crossOrgDuplicate/fuzzyMatch fields
+  const warnings = hasCrossOrgWarning
+    ? allWarnings.filter(w => !w.includes('already imported') && !w.includes('Similar data found'))
+    : allWarnings;
   const hasAnyWarning = warnings.length > 0 || hasCrossOrgWarning;
 
   const borderColor = hasAnyWarning ? 'border-amber-500/40 bg-amber-500/10' : 'border-green-500/40 bg-green-500/10';
