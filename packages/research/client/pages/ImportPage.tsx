@@ -7,6 +7,15 @@ import { useImportFile, useImportUrl, useImportBatch } from '../hooks/useImport.
 import type { ImportResult } from '../hooks/useImport.js';
 import ImportStatusBanner from '../components/ImportStatusBanner.js';
 
+/** Check whether an import result contains any cross-org or fuzzy-match warnings */
+function hasWarnings(result: ImportResult): boolean {
+  if (!result.success) return false;
+  if (result.crossOrgDuplicate) return true;
+  if (result.fuzzyMatch) return true;
+  if (result.warnings && result.warnings.length > 0) return true;
+  return false;
+}
+
 export default function ImportPage() {
   const [lastResult, setLastResult] = useState<ImportResult | null>(null);
   const [batchResults, setBatchResults] = useState<ImportResult[] | null>(null);
@@ -28,7 +37,7 @@ export default function ImportPage() {
       errors: [err.message ?? 'Upload failed'],
     }));
     setLastResult(result);
-    if (result.success && result.orgId) {
+    if (result.success && result.orgId && !hasWarnings(result)) {
       window.location.hash = `#/org/${result.orgId}`;
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -49,7 +58,7 @@ export default function ImportPage() {
       errors: [err.message ?? 'URL import failed'],
     }));
     setLastResult(result);
-    if (result.success && result.orgId) {
+    if (result.success && result.orgId && !hasWarnings(result)) {
       window.location.hash = `#/org/${result.orgId}`;
     }
   };
@@ -83,6 +92,16 @@ export default function ImportPage() {
       {hasResults && (
         <div className="mb-8">
           <ImportStatusBanner result={lastResult} batchResults={batchResults} />
+          {lastResult?.success && lastResult.orgId && hasWarnings(lastResult) && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={() => { window.location.hash = `#/org/${lastResult.orgId}`; }}
+            >
+              Continue to dashboard
+            </Button>
+          )}
         </div>
       )}
 

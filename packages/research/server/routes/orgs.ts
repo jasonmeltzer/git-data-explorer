@@ -32,8 +32,6 @@ orgRoutes.get('/api/orgs', (c) => {
       id: orgs.id,
       label: orgs.label,
       sizeCategory: orgs.sizeCategory,
-      industry: orgs.industry,
-      aiTool: orgs.aiTool,
       importSource: orgs.importSource,
       createdAt: orgs.createdAt,
       snapshotCount: sql<number>`COUNT(${snapshots.id})`,
@@ -78,8 +76,6 @@ orgRoutes.patch('/api/orgs/:id', async (c) => {
   updateOrg(id, {
     label: typeof body.label === 'string' ? body.label : undefined,
     sizeCategory: typeof body.sizeCategory === 'string' ? body.sizeCategory : undefined,
-    industry: typeof body.industry === 'string' ? body.industry : undefined,
-    aiTool: typeof body.aiTool === 'string' ? body.aiTool : undefined,
   });
   return c.json({ success: true });
 });

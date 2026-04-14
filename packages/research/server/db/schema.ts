@@ -4,8 +4,6 @@ export const orgs = sqliteTable('orgs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   label: text('label').notNull(),
   sizeCategory: text('size_category'),           // 'small' | 'medium' | 'large'
-  industry: text('industry'),
-  aiTool: text('ai_tool'),
   importSource: text('import_source'),            // 'file' | 'gist' | 'url' | 'batch'
   createdAt: integer('created_at').notNull(),
 });
