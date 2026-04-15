@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 9.1.1 complete** — OrgMetadataForm wire-up, schema cleanup, import banner fix
+**Phase 9.3 complete** — Critical review of research tool against LDX3 and D.Eng benchmarks. Gap catalog (13 gaps), architectural decisions (period-array, privacy framing, seed ownership), and phase roadmap (9.4-9.8) documented.
 
 What works today:
 
@@ -81,9 +81,12 @@ The project is organized as an npm workspaces monorepo:
 - **454 passing tests** across 37 test files
 
 What's next:
-- **Phase 9.2: Research Dashboard Parity** — label AI marker line on cohort charts, add Chart|Table toggles and HelpPanel + insights to research tool
-- **Phase 9.3: Research Tool Critical Review** — evaluate whether research tool meets original objectives before further investment
-- **Settings UI for AI marker** — currently API-only; a date picker in Settings would make it more discoverable
+- **Phase 9.4: Team Dynamics** — concentration risk, headcount-normalized output, period-array data model
+- **Phase 9.5: Contribution Patterns** — per-developer monthly time series with privacy framing
+- **Phase 9.6: Cycle Time Correction** — first-commit-to-merge analytics
+- **Phase 9.7: Research Tool Enhancements** — cross-org before/after splits, CrossOrg parity
+- **Phase 9.8: Individual Onboarding Profiles** — per-new-hire first-N-weeks breakdown
+- **Phase 10: Multi-Marker AI Timeline** — multiple AI tool adoption events (now thin migration)
 
 ## Tech Stack
 

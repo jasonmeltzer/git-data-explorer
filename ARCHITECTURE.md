@@ -269,6 +269,13 @@ Run with `npm run lint`.
 
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
 - **Research tool: persisted org charts** — OrgDashboard renders aggregated data from the latest snapshot; time-series comparison across snapshots not yet implemented
+- **Concentration risk metrics** — top-N contributor share, HHI/Gini distribution (Phase 9.4)
+- **Headcount-normalized output** — PRs/dev/month, commits/dev/month (Phase 9.4)
+- **Period-array data model** — replaces single aiMarkerDate for multi-marker readiness (Phase 9.4)
+- **Per-developer monthly time series** — individual contribution patterns, privacy-framed (Phase 9.5)
+- **Cycle time correction** — firstCommitAt on PRs for first-commit-to-merge measurement (Phase 9.6)
+- **Cross-org period-aware splits** — research tool before/after with period-array (Phase 9.7)
+- **Individual onboarding profiles** — per-new-hire first-N-weeks breakdown (Phase 9.8)
 
 ## File Map
 
