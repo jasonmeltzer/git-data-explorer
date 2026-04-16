@@ -69,7 +69,9 @@ export function parseZipBundle(buffer: Buffer): unknown {
     prTurnaround: readJson('pr-turnaround.json') ?? [],
     botRatio: readJson('bot-ratio.json') ?? [],
     executiveSummary: readJson('executive-summary.json') ?? null,
-    beforeAfter: readJson('before-after.json') ?? null,
+    periodMetrics: readJson('period-metrics.json') ?? null,
+    concentrationMonthly: readJson('concentration-monthly.json') ?? [],
+    headcountMonthly: readJson('headcount-monthly.json') ?? [],
   };
 }
 
@@ -232,7 +234,7 @@ export function importBundle(
         executiveSummaryJson: data.executiveSummary
           ? JSON.stringify(data.executiveSummary)
           : null,
-        beforeAfterJson: data.beforeAfter ? JSON.stringify(data.beforeAfter) : null,
+        beforeAfterJson: null, // beforeAfter removed from ExportBundle in Phase 9.4 (D-13)
       })
       .returning({ id: snapshots.id })
       .get();

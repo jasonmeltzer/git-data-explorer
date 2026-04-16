@@ -13,11 +13,12 @@ import { format, subMonths, addMonths } from 'date-fns';
 import type {
   ExportBundle,
   ExportMetadata,
-  BeforeAfterComparison,
-  BeforeAfterMetrics,
   ExecutiveSummary,
   PrTurnaroundRow,
   BotRatioRow,
+  PeriodMetric,
+  ConcentrationMonthlyRow,
+  HeadcountMonthlyRow,
 } from '@shared/export-types.js';
 import type {
   CohortMetricsRow,
@@ -419,23 +420,19 @@ export function generateSmallStartup(): ExportBundle {
   const totalCommits = cohortCommits.reduce((s, r) => s + r.totalCount, 0);
   const executiveSummary = buildExecutiveSummary(totalCommits, contributorCount, true);
 
-  const beforeMetrics: BeforeAfterMetrics = {
-    avgCommitSize: 150,
-    prFrequency: 4,
-    rampUpSpeed: 4,
-    activeContributors: contributorCount,
-  };
-  const afterMetrics: BeforeAfterMetrics = {
-    avgCommitSize: 180,
-    prFrequency: 5,
-    rampUpSpeed: 3,
-    activeContributors: contributorCount,
-  };
-  const beforeAfter: BeforeAfterComparison = {
-    before: beforeMetrics,
-    after: afterMetrics,
-    markerDate: aiMarkerDate,
-  };
+  const periodMetrics: PeriodMetric[] = [
+    {
+      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Before AI' },
+      metrics: { avgCommitSize: 150, prFrequency: 4, rampUpSpeed: 4, activeContributors: contributorCount },
+    },
+    {
+      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'After AI', markerDate: aiMarkerDate },
+      metrics: { avgCommitSize: 180, prFrequency: 5, rampUpSpeed: 3, activeContributors: contributorCount },
+    },
+  ];
+
+  const concentrationMonthly: ConcentrationMonthlyRow[] = [];
+  const headcountMonthly: HeadcountMonthlyRow[] = [];
 
   return {
     metadata: buildMetadata(repoCount, aiMarkerDate, referenceDate),
@@ -447,7 +444,9 @@ export function generateSmallStartup(): ExportBundle {
     prTurnaround,
     botRatio,
     executiveSummary,
-    beforeAfter,
+    periodMetrics,
+    concentrationMonthly,
+    headcountMonthly,
   };
 }
 
@@ -512,23 +511,19 @@ export function generateMidSizeCompany(): ExportBundle {
   const totalCommits = cohortCommits.reduce((s, r) => s + r.totalCount, 0);
   const executiveSummary = buildExecutiveSummary(totalCommits, contributorCount, true);
 
-  const beforeMetrics: BeforeAfterMetrics = {
-    avgCommitSize: 120,
-    prFrequency: 3,
-    rampUpSpeed: 9,
-    activeContributors: contributorCount,
-  };
-  const afterMetrics: BeforeAfterMetrics = {
-    avgCommitSize: 132,
-    prFrequency: 3.5,
-    rampUpSpeed: 7,
-    activeContributors: contributorCount,
-  };
-  const beforeAfter: BeforeAfterComparison = {
-    before: beforeMetrics,
-    after: afterMetrics,
-    markerDate: aiMarkerDate,
-  };
+  const periodMetrics: PeriodMetric[] = [
+    {
+      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Before AI' },
+      metrics: { avgCommitSize: 120, prFrequency: 3, rampUpSpeed: 9, activeContributors: contributorCount },
+    },
+    {
+      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'After AI', markerDate: aiMarkerDate },
+      metrics: { avgCommitSize: 132, prFrequency: 3.5, rampUpSpeed: 7, activeContributors: contributorCount },
+    },
+  ];
+
+  const concentrationMonthly: ConcentrationMonthlyRow[] = [];
+  const headcountMonthly: HeadcountMonthlyRow[] = [];
 
   return {
     metadata: buildMetadata(repoCount, aiMarkerDate, referenceDate),
@@ -540,7 +535,9 @@ export function generateMidSizeCompany(): ExportBundle {
     prTurnaround,
     botRatio,
     executiveSummary,
-    beforeAfter,
+    periodMetrics,
+    concentrationMonthly,
+    headcountMonthly,
   };
 }
 
@@ -615,7 +612,9 @@ export function generatePreAiBaseline(): ExportBundle {
     prTurnaround,
     botRatio,
     executiveSummary,
-    beforeAfter: null,  // CRITICAL: null because no AI marker
+    periodMetrics: null,        // CRITICAL: null because no AI marker
+    concentrationMonthly: [],
+    headcountMonthly: [],
   };
 }
 
