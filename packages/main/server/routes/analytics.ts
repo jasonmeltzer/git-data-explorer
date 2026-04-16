@@ -9,7 +9,10 @@ import { getCohortConfig, setCohortConfig } from '../services/cohort-config-serv
 import { getPrTurnaroundTrend } from '../services/analytics-pr-turnaround.js';
 import { getBotRatioTrend } from '../services/analytics-bot-ratio.js';
 import { getExecutiveSummary } from '../services/analytics-summary.js';
-import { getBeforeAfterComparison } from '../services/analytics-before-after.js';
+import { getConcentrationMonthly } from '../services/analytics-concentration.js';
+import { getHeadcountMonthly } from '../services/analytics-headcount.js';
+import { getPeriodMetrics } from '../services/analytics-period-metrics.js';
+import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 
 const analytics = new Hono();
 
@@ -352,10 +355,10 @@ analytics.get('/api/analytics/summary', (c) => {
   }
 });
 
-// ─── Before/after comparison endpoint ────────────────────────────────────────
+// ─── Period-metrics endpoint ──────────────────────────────────────────────────
 
-// GET /api/analytics/before-after — metrics split at AI marker date
-analytics.get('/api/analytics/before-after', (c) => {
+// GET /api/analytics/period-metrics — metrics per period (replaces before-after)
+analytics.get('/api/analytics/period-metrics', (c) => {
   try {
     const schema = z.object({ repoIds: z.string().optional() });
     const parsed = schema.safeParse(c.req.query());
@@ -366,11 +369,71 @@ analytics.get('/api/analytics/before-after', (c) => {
     const { repoIds } = parsed.data;
     const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
 
-    const result = getBeforeAfterComparison({ repoIds: repoIdsParsed });
+    const aiMarkerDate = getAiMarkerDate();
+    const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
+    // Use a wide default range if no date context available — consumers should pass explicit dates
+    const now = new Date().toISOString().slice(0, 10);
+    const periods = buildPeriodsFromMarker('2020-01-01', now, markerDateStr);
+
+    const result = getPeriodMetrics(repoIdsParsed, periods);
     return c.json(result);
   } catch (err) {
-    console.error('GET /api/analytics/before-after error:', err);
-    return c.json({ error: 'Failed to fetch before/after comparison' }, 500);
+    console.error('GET /api/analytics/period-metrics error:', err);
+    return c.json({ error: 'Failed to fetch period metrics' }, 500);
+  }
+});
+
+// ─── Concentration endpoint ───────────────────────────────────────────────────
+
+// GET /api/analytics/concentration — monthly concentration metrics (top-N, HHI, Gini, bus factor)
+analytics.get('/api/analytics/concentration', (c) => {
+  try {
+    const schema = z.object({ repoIds: z.string().optional() });
+    const parsed = schema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const aiMarkerDate = getAiMarkerDate();
+    const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
+    const now = new Date().toISOString().slice(0, 10);
+    const periods = buildPeriodsFromMarker('2020-01-01', now, markerDateStr);
+
+    const result = getConcentrationMonthly(repoIdsParsed, periods);
+    return c.json(result);
+  } catch (err) {
+    console.error('GET /api/analytics/concentration error:', err);
+    return c.json({ error: 'Failed to fetch concentration metrics' }, 500);
+  }
+});
+
+// ─── Headcount endpoint ───────────────────────────────────────────────────────
+
+// GET /api/analytics/headcount — monthly active headcount and output per dev
+analytics.get('/api/analytics/headcount', (c) => {
+  try {
+    const schema = z.object({ repoIds: z.string().optional() });
+    const parsed = schema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const aiMarkerDate = getAiMarkerDate();
+    const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
+    const now = new Date().toISOString().slice(0, 10);
+    const periods = buildPeriodsFromMarker('2020-01-01', now, markerDateStr);
+
+    const result = getHeadcountMonthly(repoIdsParsed, periods);
+    return c.json(result);
+  } catch (err) {
+    console.error('GET /api/analytics/headcount error:', err);
+    return c.json({ error: 'Failed to fetch headcount metrics' }, 500);
   }
 });
 

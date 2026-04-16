@@ -19,8 +19,11 @@ import { getContributorStats, getContributorBeforeAfterStats } from './analytics
 import { getPrTurnaroundTrend } from './analytics-pr-turnaround.js';
 import { getBotRatioTrend } from './analytics-bot-ratio.js';
 import { getExecutiveSummary } from './analytics-summary.js';
-import { getBeforeAfterComparison } from './analytics-before-after.js';
 import { getAiMarkerDate } from './analytics-config.js';
+import { getConcentrationMonthly } from './analytics-concentration.js';
+import { getHeadcountMonthly } from './analytics-headcount.js';
+import { getPeriodMetrics } from './analytics-period-metrics.js';
+import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 import { getCohortConfig } from './cohort-config-service.js';
 import { getTrackedRepos } from './repo-management.js';
 
@@ -201,31 +204,31 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     console.error('[export-service] executiveSummary failed:', err);
   }
 
-  let beforeAfter: ExportBundle['beforeAfter'] = null;
+  // ── Build Period[] for new Phase 9.4 services ────────────────────────────
+  const markerDateStr = aiMarkerDate
+    ? aiMarkerDate.toISOString().slice(0, 10)
+    : null;
+  const periods = buildPeriodsFromMarker(req.startDate.slice(0, 10), req.endDate.slice(0, 10), markerDateStr);
+
+  let periodMetrics: ExportBundle['periodMetrics'] = null;
   try {
-    if (aiMarkerDate) {
-      const result = getBeforeAfterComparison({ repoIds });
-      if (result) {
-        // Map from analytics-before-after.BeforeAfterComparison to export-types.BeforeAfterComparison
-        beforeAfter = {
-          before: {
-            avgCommitSize: result.before.avgCommitSize,
-            prFrequency: result.before.prFrequency,
-            rampUpSpeed: result.before.rampUpSpeed,
-            activeContributors: result.before.activeContributors,
-          },
-          after: {
-            avgCommitSize: result.after.avgCommitSize,
-            prFrequency: result.after.prFrequency,
-            rampUpSpeed: result.after.rampUpSpeed,
-            activeContributors: result.after.activeContributors,
-          },
-          markerDate: result.markerDate,
-        };
-      }
-    }
+    periodMetrics = getPeriodMetrics(repoIds, periods);
   } catch (err) {
-    console.error('[export-service] beforeAfter failed:', err);
+    console.error('[export-service] periodMetrics failed:', err);
+  }
+
+  let concentrationMonthly: ExportBundle['concentrationMonthly'] = [];
+  try {
+    concentrationMonthly = getConcentrationMonthly(repoIds, periods);
+  } catch (err) {
+    console.error('[export-service] concentrationMonthly failed:', err);
+  }
+
+  let headcountMonthly: ExportBundle['headcountMonthly'] = [];
+  try {
+    headcountMonthly = getHeadcountMonthly(repoIds, periods);
+  } catch (err) {
+    console.error('[export-service] headcountMonthly failed:', err);
   }
 
   // ── Build metadata ────────────────────────────────────────────────────────
@@ -260,6 +263,8 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     prTurnaround,
     botRatio,
     executiveSummary,
-    beforeAfter,
+    periodMetrics,
+    concentrationMonthly,
+    headcountMonthly,
   };
 }
