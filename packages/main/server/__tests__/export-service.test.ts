@@ -182,3 +182,15 @@ describe('buildExportBundle', () => {
     expect(bundle.metadata.cohortConfig.thresholds).toHaveLength(3);
   });
 });
+
+// ── 9.4 bundle shape assertions ───────────────────────────────────────────────
+// These become real assertions in Plan 04a (hub wiring) and Plan 04b (sweep).
+// They verify the new sections added by Phase 9.4: periodMetrics replaces
+// beforeAfter, and concentrationMonthly + headcountMonthly are added.
+
+describe('9.4 bundle shape', () => {
+  it.todo('bundle includes periodMetrics array (not null when marker date set)');
+  it.todo('bundle includes concentrationMonthly array');
+  it.todo('bundle includes headcountMonthly array');
+  it.todo('bundle does NOT include beforeAfter key');
+});
