@@ -12,6 +12,9 @@ import {
   contributors,
   prTurnaround,
   botRatio,
+  concentrationMonthly,
+  headcountMonthly,
+  periodMetrics,
 } from '../db/schema.js';
 import { eq, and, ne } from 'drizzle-orm';
 import { validateBundle } from './validation.js';
@@ -234,7 +237,6 @@ export function importBundle(
         executiveSummaryJson: data.executiveSummary
           ? JSON.stringify(data.executiveSummary)
           : null,
-        beforeAfterJson: null, // beforeAfter removed from ExportBundle in Phase 9.4 (D-13)
       })
       .returning({ id: snapshots.id })
       .get();
@@ -359,6 +361,51 @@ export function importBundle(
           }))
         )
         .run();
+    }
+
+    // Insert concentration_monthly rows
+    if (data.concentrationMonthly?.length) {
+      for (const row of data.concentrationMonthly) {
+        db.insert(concentrationMonthly).values({
+          snapshotId: snapId,
+          orgId: orgId as number,
+          basis: row.basis,
+          periodMonth: row.month,
+          top1Share: row.top1Share ?? null,
+          top3Share: row.top3Share ?? null,
+          top5Share: row.top5Share ?? null,
+          hhi: row.hhi ?? null,
+          gini: row.gini ?? null,
+          busFactor: row.busFactor ?? null,
+          activeDevs: row.activeDevs,
+          topContributor: row.topContributor ?? null,
+        }).run();
+      }
+    }
+
+    // Insert headcount_monthly rows
+    if (data.headcountMonthly?.length) {
+      for (const row of data.headcountMonthly) {
+        db.insert(headcountMonthly).values({
+          snapshotId: snapId,
+          orgId: orgId as number,
+          periodMonth: row.month,
+          activeDevs: row.activeDevs,
+          totalPrs: row.totalPrs,
+          totalCommits: row.totalCommits,
+          prsPerDev: row.prsPerDev ?? null,
+          commitsPerDev: row.commitsPerDev ?? null,
+        }).run();
+      }
+    }
+
+    // Insert period_metrics row (single JSON blob per snapshot)
+    if (data.periodMetrics?.length) {
+      db.insert(periodMetrics).values({
+        snapshotId: snapId,
+        orgId: orgId as number,
+        dataJson: JSON.stringify(data.periodMetrics),
+      }).run();
     }
 
     return snapId;

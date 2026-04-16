@@ -110,6 +110,41 @@ function createTestDb() {
       total_commits INTEGER NOT NULL,
       bot_percentage REAL NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS concentration_monthly (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+      org_id INTEGER NOT NULL REFERENCES orgs(id),
+      basis TEXT NOT NULL,
+      period_month TEXT NOT NULL,
+      top1_share REAL,
+      top3_share REAL,
+      top5_share REAL,
+      hhi REAL,
+      gini REAL,
+      bus_factor INTEGER,
+      active_devs INTEGER NOT NULL,
+      top_contributor TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS headcount_monthly (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+      org_id INTEGER NOT NULL REFERENCES orgs(id),
+      period_month TEXT NOT NULL,
+      active_devs INTEGER NOT NULL,
+      total_prs INTEGER NOT NULL,
+      total_commits INTEGER NOT NULL,
+      prs_per_dev REAL,
+      commits_per_dev REAL
+    );
+
+    CREATE TABLE IF NOT EXISTS period_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+      org_id INTEGER NOT NULL REFERENCES orgs(id),
+      data_json TEXT NOT NULL
+    );
   `);
 
   return drizzle(sqlite, { schema });

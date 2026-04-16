@@ -206,7 +206,6 @@ function importBundleWith(
         repoCount,
         contentHash,
         executiveSummaryJson: data.executiveSummary ? JSON.stringify(data.executiveSummary) : null,
-        beforeAfterJson: null, // beforeAfter removed from ExportBundle in Phase 9.4 (D-13)
       })
       .returning({ id: schema.snapshots.id })
       .get();

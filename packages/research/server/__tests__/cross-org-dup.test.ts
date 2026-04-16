@@ -322,7 +322,7 @@ describe('Cross-org duplicate detection', () => {
     const bundleA = makeBundle({ cohortPrs: [] });
 
     // Bundle B omits cohortPrs entirely — Zod .default([]) will normalize it to []
-    const { cohortPrs: _removed, ...bundleBRaw } = makeBundle() as Record<string, unknown>;
+    const { cohortPrs: _removed, ...bundleBRaw } = makeBundle() as unknown as Record<string, unknown>;
     // Manually delete the key so it's truly absent
     const bundleB = { ...bundleBRaw };
     delete (bundleB as Record<string, unknown>)['cohortPrs'];
