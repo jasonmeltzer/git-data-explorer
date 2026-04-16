@@ -186,7 +186,9 @@ orgRoutes.get('/api/orgs/:orgId/snapshots/:snapshotId/data', (c) => {
     executiveSummary: snapshot.executiveSummaryJson
       ? JSON.parse(snapshot.executiveSummaryJson)
       : null,
-    beforeAfter: snapshot.beforeAfterJson ? JSON.parse(snapshot.beforeAfterJson) : null,
+    periodMetrics: null,        // not persisted in snapshots table (Phase 9.4 D-13)
+    concentrationMonthly: [],
+    headcountMonthly: [],
   };
 
   return c.json(bundle);

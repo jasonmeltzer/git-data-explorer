@@ -41,7 +41,9 @@ const validBundle = {
   prTurnaround: [],
   botRatio: [],
   executiveSummary: null,
-  beforeAfter: null,
+  periodMetrics: null,
+  concentrationMonthly: [],
+  headcountMonthly: [],
 };
 
 describe('validateBundle', () => {
@@ -65,18 +67,18 @@ describe('validateBundle', () => {
     expect(hasExportTimestampError).toBe(true);
   });
 
-  it('bundle with null rolling/executiveSummary/beforeAfter passes (nullable sections)', () => {
+  it('bundle with null rolling/executiveSummary/periodMetrics passes (nullable sections)', () => {
     const bundle = {
       ...validBundle,
       rolling: null,
       executiveSummary: null,
-      beforeAfter: null,
+      periodMetrics: null,
     };
     const result = validateBundle(bundle);
     expect(result.valid).toBe(true);
     expect(result.data?.rolling).toBeNull();
     expect(result.data?.executiveSummary).toBeNull();
-    expect(result.data?.beforeAfter).toBeNull();
+    expect(result.data?.periodMetrics).toBeNull();
   });
 
   it('bundle with empty cohortCommits array passes with warning', () => {
@@ -115,9 +117,9 @@ describe('validateBundle', () => {
     expect(result.warnings).toContain('executiveSummary section is null');
   });
 
-  it('warns for null beforeAfter section', () => {
-    const result = validateBundle({ ...validBundle, beforeAfter: null });
-    expect(result.warnings).toContain('beforeAfter section is null');
+  it('warns for null periodMetrics section', () => {
+    const result = validateBundle({ ...validBundle, periodMetrics: null });
+    expect(result.warnings).toContain('periodMetrics section is null');
   });
 
   it('ExportBundleSchema is exported and usable directly', () => {

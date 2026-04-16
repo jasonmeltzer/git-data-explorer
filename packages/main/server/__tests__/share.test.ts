@@ -54,7 +54,7 @@ const stubBundle = {
     startDate: '2024-01-01',
     endDate: '2024-12-31',
     aiMarkerDate: null,
-    tenureMode: 'global',
+    tenureMode: 'global' as const,
     repoIds: [],
     repoNames: [],
     cohortConfig: { thresholds: [] },
@@ -70,7 +70,9 @@ const stubBundle = {
   prTurnaround: [],
   botRatio: [],
   executiveSummary: null,
-  beforeAfter: null,
+  periodMetrics: null,
+  concentrationMonthly: [],
+  headcountMonthly: [],
 };
 
 vi.mock('../services/export-service.js', () => ({

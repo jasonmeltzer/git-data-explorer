@@ -206,7 +206,7 @@ function importBundleWith(
         repoCount,
         contentHash,
         executiveSummaryJson: data.executiveSummary ? JSON.stringify(data.executiveSummary) : null,
-        beforeAfterJson: data.beforeAfter ? JSON.stringify(data.beforeAfter) : null,
+        beforeAfterJson: null, // beforeAfter removed from ExportBundle in Phase 9.4 (D-13)
       })
       .returning({ id: schema.snapshots.id })
       .get();
@@ -455,7 +455,9 @@ const sampleBundle = {
     rampUpTrend: 'improving',
     aiAdoptionDelta: '+15%',
   },
-  beforeAfter: null,
+  periodMetrics: null,
+  concentrationMonthly: [],
+  headcountMonthly: [],
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

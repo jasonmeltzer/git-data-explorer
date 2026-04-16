@@ -155,7 +155,9 @@ function makeBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
     prTurnaround: [],
     botRatio: [],
     executiveSummary: null,
-    beforeAfter: null,
+    periodMetrics: null,
+    concentrationMonthly: [],
+    headcountMonthly: [],
     ...overrides,
   };
 }

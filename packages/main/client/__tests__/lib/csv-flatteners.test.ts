@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { rollingToCsv, beforeAfterToCsv, executiveSummaryToCsv } from '../../lib/csv-flatteners.js';
+import { rollingToCsv, periodMetricsToCsv, concentrationMonthlyToCsv, headcountMonthlyToCsv, executiveSummaryToCsv } from '../../lib/csv-flatteners.js';
 import type { RollingComparisonResult } from '@shared/types.js';
-import type { BeforeAfterComparison, ExecutiveSummary } from '@shared/export-types.js';
+import type { ExecutiveSummary, PeriodMetric, ConcentrationMonthlyRow, HeadcountMonthlyRow } from '@shared/export-types.js';
 
 // ─── Test data fixtures ────────────────────────────────────────────────────────
 
@@ -45,21 +45,81 @@ const minimalRolling: RollingComparisonResult = {
   },
 };
 
-const minimalBeforeAfter: BeforeAfterComparison = {
-  before: {
-    avgCommitSize: 80,
-    prFrequency: 5.2,
-    rampUpSpeed: null,
-    activeContributors: 8,
+const minimalPeriodMetrics: PeriodMetric[] = [
+  {
+    period: {
+      startDate: '2025-04-01',
+      endDate: '2025-10-01',
+      label: 'Before AI',
+    },
+    metrics: {
+      avgCommitSize: 80,
+      prFrequency: 5.2,
+      rampUpSpeed: null,
+      activeContributors: 8,
+    },
   },
-  after: {
-    avgCommitSize: 145,
-    prFrequency: 9.8,
-    rampUpSpeed: 3.5,
-    activeContributors: 12,
+  {
+    period: {
+      startDate: '2025-10-01',
+      endDate: '2026-04-01',
+      label: 'After AI',
+      markerDate: '2025-10-01',
+    },
+    metrics: {
+      avgCommitSize: 145,
+      prFrequency: 9.8,
+      rampUpSpeed: 3.5,
+      activeContributors: 12,
+    },
   },
-  markerDate: '2025-10-01',
-};
+];
+
+const minimalConcentration: ConcentrationMonthlyRow[] = [
+  {
+    month: '2026-01',
+    basis: 'commits',
+    top1Share: 45.2,
+    top3Share: 72.1,
+    top5Share: 88.3,
+    hhi: 0.23,
+    gini: 0.61,
+    busFactor: 2,
+    activeDevs: 10,
+    topContributor: 'alice',
+  },
+  {
+    month: '2026-02',
+    basis: 'commits',
+    top1Share: 38.0,
+    top3Share: 65.5,
+    top5Share: 80.0,
+    hhi: 0.18,
+    gini: 0.55,
+    busFactor: 3,
+    activeDevs: 12,
+    topContributor: 'bob',
+  },
+];
+
+const minimalHeadcount: HeadcountMonthlyRow[] = [
+  {
+    month: '2026-01',
+    activeDevs: 10,
+    totalPrs: 35,
+    totalCommits: 120,
+    prsPerDev: 3.5,
+    commitsPerDev: 12.0,
+  },
+  {
+    month: '2026-02',
+    activeDevs: 12,
+    totalPrs: 48,
+    totalCommits: 150,
+    prsPerDev: 4.0,
+    commitsPerDev: 12.5,
+  },
+];
 
 const minimalExecutiveSummary: ExecutiveSummary = {
   totalCommits: 450,
@@ -145,55 +205,126 @@ describe('rollingToCsv', () => {
   });
 });
 
-// ─── beforeAfterToCsv ─────────────────────────────────────────────────────────
+// ─── periodMetricsToCsv ───────────────────────────────────────────────────────
 
-describe('beforeAfterToCsv', () => {
-  it('produces exactly 2 data rows plus a header row', () => {
-    const csv = beforeAfterToCsv(minimalBeforeAfter);
+describe('periodMetricsToCsv', () => {
+  it('produces exactly 2 data rows plus a header row for 2 periods', () => {
+    const csv = periodMetricsToCsv(minimalPeriodMetrics);
     const lines = csv.split('\n');
     // 1 header + 2 data rows = 3 lines
     expect(lines).toHaveLength(3);
-    expect(lines[1]).toMatch(/^before,/);
-    expect(lines[2]).toMatch(/^after,/);
   });
 
   it('includes all expected column headers', () => {
-    const csv = beforeAfterToCsv(minimalBeforeAfter);
+    const csv = periodMetricsToCsv(minimalPeriodMetrics);
     const header = csv.split('\n')[0];
-    expect(header).toContain('period');
+    expect(header).toContain('label');
+    expect(header).toContain('startDate');
+    expect(header).toContain('endDate');
+    expect(header).toContain('markerDate');
     expect(header).toContain('avgCommitSize');
     expect(header).toContain('prFrequency');
     expect(header).toContain('rampUpSpeed');
     expect(header).toContain('activeContributors');
-    expect(header).toContain('markerDate');
   });
 
-  it('includes before and after metric values', () => {
-    const csv = beforeAfterToCsv(minimalBeforeAfter);
-    const lines = csv.split('\n');
-    expect(lines[1]).toContain('80');
-    expect(lines[1]).toContain('5.2');
-    expect(lines[2]).toContain('145');
-    expect(lines[2]).toContain('9.8');
-    expect(lines[2]).toContain('3.5');
+  it('includes period labels in data rows', () => {
+    const csv = periodMetricsToCsv(minimalPeriodMetrics);
+    expect(csv).toContain('Before AI');
+    expect(csv).toContain('After AI');
   });
 
-  it('includes markerDate in both rows', () => {
-    const csv = beforeAfterToCsv(minimalBeforeAfter);
-    const lines = csv.split('\n');
-    expect(lines[1]).toContain('2025-10-01');
-    expect(lines[2]).toContain('2025-10-01');
+  it('includes metric values in data rows', () => {
+    const csv = periodMetricsToCsv(minimalPeriodMetrics);
+    expect(csv).toContain('80');
+    expect(csv).toContain('5.2');
+    expect(csv).toContain('145');
+    expect(csv).toContain('9.8');
+    expect(csv).toContain('3.5');
   });
 
-  it('serializes null rampUpSpeed as empty string, not "null"', () => {
-    const csv = beforeAfterToCsv(minimalBeforeAfter);
-    // before.rampUpSpeed is null — should appear as empty, not "null"
+  it('serializes null metric values as empty strings', () => {
+    const csv = periodMetricsToCsv(minimalPeriodMetrics);
+    // before period rampUpSpeed is null — should appear as empty, not "null"
     expect(csv).not.toContain('null');
-    const beforeLine = csv.split('\n')[1];
-    // The rampUpSpeed field (4th field after "before") should be empty
-    const fields = beforeLine.split(',');
-    // fields: [period, avgCommitSize, prFrequency, rampUpSpeed, activeContributors, markerDate]
-    expect(fields[3]).toBe('');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(periodMetricsToCsv([])).toBe('');
+  });
+});
+
+// ─── concentrationMonthlyToCsv ────────────────────────────────────────────────
+
+describe('concentrationMonthlyToCsv', () => {
+  it('produces exactly 2 data rows plus a header row', () => {
+    const csv = concentrationMonthlyToCsv(minimalConcentration);
+    const lines = csv.split('\n');
+    expect(lines).toHaveLength(3);
+  });
+
+  it('includes all expected column headers', () => {
+    const csv = concentrationMonthlyToCsv(minimalConcentration);
+    const header = csv.split('\n')[0];
+    expect(header).toContain('month');
+    expect(header).toContain('basis');
+    expect(header).toContain('top1Share');
+    expect(header).toContain('top3Share');
+    expect(header).toContain('top5Share');
+    expect(header).toContain('hhi');
+    expect(header).toContain('gini');
+    expect(header).toContain('busFactor');
+    expect(header).toContain('activeDevs');
+    expect(header).toContain('topContributor');
+  });
+
+  it('includes month and metric values', () => {
+    const csv = concentrationMonthlyToCsv(minimalConcentration);
+    expect(csv).toContain('2026-01');
+    expect(csv).toContain('45.2');
+    expect(csv).toContain('alice');
+    expect(csv).toContain('2026-02');
+    expect(csv).toContain('38');
+    expect(csv).toContain('bob');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(concentrationMonthlyToCsv([])).toBe('');
+  });
+});
+
+// ─── headcountMonthlyToCsv ────────────────────────────────────────────────────
+
+describe('headcountMonthlyToCsv', () => {
+  it('produces exactly 2 data rows plus a header row', () => {
+    const csv = headcountMonthlyToCsv(minimalHeadcount);
+    const lines = csv.split('\n');
+    expect(lines).toHaveLength(3);
+  });
+
+  it('includes all expected column headers', () => {
+    const csv = headcountMonthlyToCsv(minimalHeadcount);
+    const header = csv.split('\n')[0];
+    expect(header).toContain('month');
+    expect(header).toContain('activeDevs');
+    expect(header).toContain('totalPrs');
+    expect(header).toContain('totalCommits');
+    expect(header).toContain('prsPerDev');
+    expect(header).toContain('commitsPerDev');
+  });
+
+  it('includes month and metric values', () => {
+    const csv = headcountMonthlyToCsv(minimalHeadcount);
+    expect(csv).toContain('2026-01');
+    expect(csv).toContain('10');
+    expect(csv).toContain('35');
+    expect(csv).toContain('120');
+    expect(csv).toContain('2026-02');
+    expect(csv).toContain('12');
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(headcountMonthlyToCsv([])).toBe('');
   });
 });
 

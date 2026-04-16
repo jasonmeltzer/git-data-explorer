@@ -190,11 +190,18 @@ function makeFullBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       rampUpTrend: 'faster',
       aiAdoptionDelta: '+23% commit velocity',
     },
-    beforeAfter: {
-      before: { avgCommitSize: 55.2, prFrequency: 3.1, rampUpSpeed: 4.5, activeContributors: 8 },
-      after: { avgCommitSize: 72.8, prFrequency: 4.8, rampUpSpeed: 2.8, activeContributors: 12 },
-      markerDate: '2025-10-15',
-    },
+    periodMetrics: [
+      {
+        period: { startDate: '2025-04-01', endDate: '2025-10-15', label: 'Before AI' },
+        metrics: { avgCommitSize: 55.2, prFrequency: 3.1, rampUpSpeed: 4.5, activeContributors: 8 },
+      },
+      {
+        period: { startDate: '2025-10-15', endDate: '2026-04-01', label: 'After AI', markerDate: '2025-10-15' },
+        metrics: { avgCommitSize: 72.8, prFrequency: 4.8, rampUpSpeed: 2.8, activeContributors: 12 },
+      },
+    ],
+    concentrationMonthly: [],
+    headcountMonthly: [],
     ...overrides,
   };
 }
@@ -213,7 +220,9 @@ function bundleToZip(bundle: ExportBundle): Buffer {
   };
   if (bundle.rolling) files['rolling-comparison.json'] = json(bundle.rolling);
   if (bundle.executiveSummary) files['executive-summary.json'] = json(bundle.executiveSummary);
-  if (bundle.beforeAfter) files['before-after.json'] = json(bundle.beforeAfter);
+  if (bundle.periodMetrics) files['period-metrics.json'] = json(bundle.periodMetrics);
+  if (bundle.concentrationMonthly.length > 0) files['concentration-monthly.json'] = json(bundle.concentrationMonthly);
+  if (bundle.headcountMonthly.length > 0) files['headcount-monthly.json'] = json(bundle.headcountMonthly);
   return Buffer.from(zipSync(files));
 }
 
@@ -247,7 +256,7 @@ function importBundleIntoDb(
       repoCount: bundle.metadata.repoNames.length,
       contentHash: 'test-hash',
       executiveSummaryJson: bundle.executiveSummary ? JSON.stringify(bundle.executiveSummary) : null,
-      beforeAfterJson: bundle.beforeAfter ? JSON.stringify(bundle.beforeAfter) : null,
+      beforeAfterJson: null, // beforeAfter removed from ExportBundle in Phase 9.4 (D-13)
     }).returning({ id: schema.snapshots.id }).get();
 
     const snapId = snap.id;
@@ -360,7 +369,9 @@ function readBackBundle(
     prTurnaround: prTurnaroundRows.map(({ id: _id, snapshotId: _s, orgId: _o, ...rest }) => rest),
     botRatio: botRatioRows.map(({ id: _id, snapshotId: _s, orgId: _o, ...rest }) => rest),
     executiveSummary: snapshot.executiveSummaryJson ? JSON.parse(snapshot.executiveSummaryJson) : null,
-    beforeAfter: snapshot.beforeAfterJson ? JSON.parse(snapshot.beforeAfterJson) : null,
+    periodMetrics: null,        // not persisted in snapshots table (Phase 9.4 D-13)
+    concentrationMonthly: [],
+    headcountMonthly: [],
   };
 }
 
@@ -543,15 +554,13 @@ describe('full round-trip: bundle → import → read back', () => {
     expect(es.aiAdoptionDelta).toBe('+23% commit velocity');
   });
 
-  it('preserves before/after comparison JSON', () => {
+  it('preserves periodMetrics (null — not persisted in snapshots table)', () => {
     const bundle = makeFullBundle();
     const { snapshotId } = importBundleIntoDb(testDb, bundle, 'Test Org');
     const result = readBackBundle(testDb, snapshotId);
 
-    const ba = result.beforeAfter as Record<string, Record<string, unknown>>;
-    expect(ba.before.avgCommitSize).toBeCloseTo(55.2);
-    expect(ba.after.prFrequency).toBeCloseTo(4.8);
-    expect(ba.markerDate).toBe('2025-10-15');
+    // periodMetrics is not persisted in the snapshots table (Phase 9.4 D-13)
+    expect(result.periodMetrics).toBeNull();
   });
 
   it('preserves metadata including all fields', () => {
@@ -610,7 +619,9 @@ describe('ZIP round-trip: bundle → ZIP → parse → import → read back', ()
       prTurnaround: readJson('pr-turnaround.json') ?? [],
       botRatio: readJson('bot-ratio.json') ?? [],
       executiveSummary: readJson('executive-summary.json') ?? null,
-      beforeAfter: readJson('before-after.json') ?? null,
+      periodMetrics: readJson('period-metrics.json') ?? null,
+      concentrationMonthly: readJson('concentration-monthly.json') ?? [],
+      headcountMonthly: readJson('headcount-monthly.json') ?? [],
     } as ExportBundle;
 
     // Import parsed bundle
@@ -627,7 +638,8 @@ describe('ZIP round-trip: bundle → ZIP → parse → import → read back', ()
     expect(result.prTurnaround).toHaveLength(original.prTurnaround.length);
     expect(result.botRatio).toHaveLength(original.botRatio.length);
     expect(result.executiveSummary).toEqual(original.executiveSummary);
-    expect(result.beforeAfter).toEqual(original.beforeAfter);
+    // periodMetrics not persisted in snapshots table (Phase 9.4 D-13)
+    expect(result.periodMetrics).toBeNull();
   });
 });
 
@@ -643,14 +655,14 @@ describe('edge cases', () => {
     const bundle = makeFullBundle({
       rolling: null,
       executiveSummary: null,
-      beforeAfter: null,
+      periodMetrics: null,
     });
     const { snapshotId } = importBundleIntoDb(testDb, bundle, 'Null Optionals');
     const result = readBackBundle(testDb, snapshotId);
 
     expect(result.rolling).toBeNull();
     expect(result.executiveSummary).toBeNull();
-    expect(result.beforeAfter).toBeNull();
+    expect(result.periodMetrics).toBeNull();
     // Other sections still intact
     expect(result.cohortCommits).toHaveLength(3);
     expect(result.contributors).toHaveLength(3);
@@ -676,7 +688,8 @@ describe('edge cases', () => {
     expect(result.botRatio).toEqual([]);
     // Optional JSONs still present
     expect(result.executiveSummary).not.toBeNull();
-    expect(result.beforeAfter).not.toBeNull();
+    // periodMetrics not persisted to DB (Phase 9.4 D-13), returns null from readBackBundle
+    expect(result.periodMetrics).toBeNull();
   });
 
   it('handles bundle with null aiMarkerDate (pre-AI control group)', () => {
@@ -815,7 +828,7 @@ describe('test data generator round-trip', () => {
 
     expect(snap.aiMarkerDate).toBeNull();
     expect(result.cohortCommits).toHaveLength(bundle.cohortCommits.length);
-    expect(result.beforeAfter).toBeNull(); // pre-AI has no before/after
+    expect(result.periodMetrics).toBeNull(); // pre-AI has no periodMetrics
   });
 
   it('all 3 test org bundles can coexist in one database', async () => {
