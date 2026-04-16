@@ -1,4 +1,4 @@
-import type { RollingComparisonResult, CohortMetricsRow } from '@shared/types.js';
+import type { RollingComparisonResult, CohortMetricsRow, ConcentrationBasis } from '@shared/types.js';
 import { COHORT_LABELS, COHORT_KEYS } from '@shared/cohort-config.js';
 
 export type MetricOption = 'totalCount' | 'avgLinesAdded' | 'avgLinesDeleted' | 'avgFilesChanged';
@@ -8,6 +8,12 @@ export const METRIC_OPTIONS: { label: string; value: MetricOption }[] = [
   { label: 'Lines Added', value: 'avgLinesAdded' },
   { label: 'Lines Deleted', value: 'avgLinesDeleted' },
   { label: 'Files Changed', value: 'avgFilesChanged' },
+];
+
+export const CONCENTRATION_BASIS_OPTIONS: { label: string; value: ConcentrationBasis }[] = [
+  { label: 'PRs', value: 'prs' },
+  { label: 'Commits', value: 'commits' },
+  { label: 'Lines', value: 'lines' },
 ];
 
 export const METRIC_NARRATIVE_LABELS: Record<MetricOption, { pr: string; commit: string }> = {
