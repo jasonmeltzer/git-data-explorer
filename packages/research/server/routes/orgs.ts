@@ -9,8 +9,11 @@ import {
   contributors,
   prTurnaround,
   botRatio,
+  concentrationMonthly,
+  headcountMonthly,
+  periodMetrics,
 } from '../db/schema.js';
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and, desc } from 'drizzle-orm';
 import {
   listOrgs,
   getOrg,
@@ -192,6 +195,115 @@ orgRoutes.get('/api/orgs/:orgId/snapshots/:snapshotId/data', (c) => {
   };
 
   return c.json(bundle);
+});
+
+/**
+ * Helper: get the most recent snapshot ID for an org, or null if none exists.
+ */
+function getLatestSnapshotId(orgId: number): number | null {
+  const row = db
+    .select({ id: snapshots.id })
+    .from(snapshots)
+    .where(eq(snapshots.orgId, orgId))
+    .orderBy(desc(snapshots.importTimestamp))
+    .limit(1)
+    .get();
+  return row?.id ?? null;
+}
+
+/**
+ * GET /api/orgs/:orgId/concentration
+ * Returns concentration_monthly rows for the latest snapshot of the given org.
+ * Maps DB column names to ConcentrationMonthlyRow field names.
+ */
+orgRoutes.get('/api/orgs/:orgId/concentration', (c) => {
+  const orgId = parseInt(c.req.param('orgId'), 10);
+  if (isNaN(orgId)) {
+    return c.json({ error: 'Invalid org id' }, 400);
+  }
+  const snapshotId = getLatestSnapshotId(orgId);
+  if (!snapshotId) return c.json([]);
+
+  const rows = db
+    .select()
+    .from(concentrationMonthly)
+    .where(and(
+      eq(concentrationMonthly.snapshotId, snapshotId),
+      eq(concentrationMonthly.orgId, orgId),
+    ))
+    .orderBy(concentrationMonthly.periodMonth)
+    .all();
+
+  return c.json(rows.map(r => ({
+    month: r.periodMonth,
+    basis: r.basis,
+    top1Share: r.top1Share,
+    top3Share: r.top3Share,
+    top5Share: r.top5Share,
+    hhi: r.hhi,
+    gini: r.gini,
+    busFactor: r.busFactor,
+    activeDevs: r.activeDevs,
+    topContributor: r.topContributor,
+  })));
+});
+
+/**
+ * GET /api/orgs/:orgId/headcount
+ * Returns headcount_monthly rows for the latest snapshot of the given org.
+ * Maps DB column names to HeadcountMonthlyRow field names.
+ */
+orgRoutes.get('/api/orgs/:orgId/headcount', (c) => {
+  const orgId = parseInt(c.req.param('orgId'), 10);
+  if (isNaN(orgId)) {
+    return c.json({ error: 'Invalid org id' }, 400);
+  }
+  const snapshotId = getLatestSnapshotId(orgId);
+  if (!snapshotId) return c.json([]);
+
+  const rows = db
+    .select()
+    .from(headcountMonthly)
+    .where(and(
+      eq(headcountMonthly.snapshotId, snapshotId),
+      eq(headcountMonthly.orgId, orgId),
+    ))
+    .orderBy(headcountMonthly.periodMonth)
+    .all();
+
+  return c.json(rows.map(r => ({
+    month: r.periodMonth,
+    activeDevs: r.activeDevs,
+    totalPrs: r.totalPrs,
+    totalCommits: r.totalCommits,
+    prsPerDev: r.prsPerDev,
+    commitsPerDev: r.commitsPerDev,
+  })));
+});
+
+/**
+ * GET /api/orgs/:orgId/period-metrics
+ * Returns the PeriodMetric[] JSON blob for the latest snapshot of the given org.
+ */
+orgRoutes.get('/api/orgs/:orgId/period-metrics', (c) => {
+  const orgId = parseInt(c.req.param('orgId'), 10);
+  if (isNaN(orgId)) {
+    return c.json({ error: 'Invalid org id' }, 400);
+  }
+  const snapshotId = getLatestSnapshotId(orgId);
+  if (!snapshotId) return c.json(null);
+
+  const row = db
+    .select()
+    .from(periodMetrics)
+    .where(and(
+      eq(periodMetrics.snapshotId, snapshotId),
+      eq(periodMetrics.orgId, orgId),
+    ))
+    .get();
+
+  if (!row) return c.json(null);
+  return c.json(JSON.parse(row.dataJson));
 });
 
 export default orgRoutes;

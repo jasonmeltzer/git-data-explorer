@@ -377,10 +377,35 @@ export default function DashboardPage() {
                 : <TeamDistributionTable data={filteredConcentration} />
               }
               <HelpPanel>
-                Team Distribution shows how code contributions are spread across your team over time.
-                The concentration chart tracks what percentage of monthly output comes from your most
-                active contributors. High concentration (one person doing 40–50%+ of PRs) signals bus
-                factor risk.
+                <p>
+                  Team Distribution shows how code contributions are spread across your team over time.
+                  The concentration chart tracks what percentage of monthly output comes from your most
+                  active contributors. High concentration (one person doing 40-50%+ of PRs) signals bus
+                  factor risk -- if that person leaves, the team may struggle to absorb the gap.
+                </p>
+                <p className="mt-2">
+                  The HHI (Herfindahl-Hirschman Index) overlay line measures overall concentration on a
+                  0-1 scale. Values above 0.25 indicate significant concentration. The table view also
+                  includes the Gini coefficient, which captures the full inequality spread across all
+                  contributors.
+                </p>
+                <p className="mt-2">
+                  Bus Factor shows the minimum number of developers whose combined contributions reach
+                  50% of monthly output. A bus factor of 1 means a single person accounts for half the
+                  work -- a clear resilience risk.
+                </p>
+                <p className="mt-2">
+                  The PRs/Commits/Lines tabs show concentration computed over different contribution
+                  measures. PRs reflect review-based workflows. Commits reflect direct code changes.
+                  Lines of code should be interpreted with caution: large refactors, generated code,
+                  vendored dependencies, and auto-formatting can dominate the lines signal without
+                  reflecting meaningful development effort. Lines are useful for spotting refactor waves
+                  but misleading as a measure of who did more work.
+                </p>
+                <p className="mt-2">
+                  Use Settings to configure the AI adoption marker date. The vertical marker line on
+                  charts lets you visually compare concentration patterns before and after tool adoption.
+                </p>
               </HelpPanel>
             </div>
 
@@ -389,9 +414,22 @@ export default function DashboardPage() {
               <h3 className="text-base font-medium mb-3">Output per Developer</h3>
               <ScaryRealPanel data={headcountData ?? []} aiMarkerDate={markerDate} isLoading={headcountLoading} />
               <HelpPanel>
-                This panel shows the same PR volume data from two perspectives. The left chart shows
-                total PRs per month. The right chart normalizes by team size, showing PRs per active
-                developer alongside the number of active contributors.
+                <p>
+                  This panel shows the same PR volume data from two perspectives. The left chart shows
+                  total PRs per month, which can look alarming during team changes -- losing contributors
+                  naturally reduces total output. The right chart normalizes by team size, showing PRs per
+                  active developer alongside the number of active contributors.
+                </p>
+                <p className="mt-2">
+                  When the team shrinks but PRs-per-developer stays flat (or rises), it means the
+                  remaining team absorbed the workload. When the team grows and PRs-per-developer holds
+                  steady, it means new contributors are productive, not just present.
+                </p>
+                <p className="mt-2">
+                  An active developer is anyone with at least one commit or PR (created or merged) in a
+                  given month, excluding bots. This is the most inclusive definition -- it captures both
+                  commit-to-main workflows and PR-based review workflows.
+                </p>
               </HelpPanel>
             </div>
 
