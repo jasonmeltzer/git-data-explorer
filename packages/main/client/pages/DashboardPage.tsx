@@ -100,17 +100,29 @@ export default function DashboardPage() {
   const teamDistributionParams = { startDate, endDate, repoIds: repoIds.join(',') };
   const { data: concentrationData, isLoading: concentrationLoading, isError: concentrationError } = useQuery<ConcentrationMonthlyRow[]>({
     queryKey: ['analytics', 'concentration', startDate, endDate, repoIds],
-    queryFn: () => fetch('/api/analytics/concentration?' + new URLSearchParams(teamDistributionParams)).then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/concentration?' + new URLSearchParams(teamDistributionParams));
+      if (!res.ok) throw new Error('Failed to fetch concentration metrics');
+      return res.json();
+    },
     enabled: repoIds.length > 0,
   });
   const { data: headcountData, isLoading: headcountLoading, isError: headcountError } = useQuery<HeadcountMonthlyRow[]>({
     queryKey: ['analytics', 'headcount', startDate, endDate, repoIds],
-    queryFn: () => fetch('/api/analytics/headcount?' + new URLSearchParams(teamDistributionParams)).then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/headcount?' + new URLSearchParams(teamDistributionParams));
+      if (!res.ok) throw new Error('Failed to fetch headcount metrics');
+      return res.json();
+    },
     enabled: repoIds.length > 0,
   });
   const { data: periodMetricsData, isLoading: periodMetricsLoading, isError: periodMetricsError } = useQuery<PeriodMetric[]>({
     queryKey: ['analytics', 'period-metrics', startDate, endDate, repoIds],
-    queryFn: () => fetch('/api/analytics/period-metrics?' + new URLSearchParams(teamDistributionParams)).then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/period-metrics?' + new URLSearchParams(teamDistributionParams));
+      if (!res.ok) throw new Error('Failed to fetch period metrics');
+      return res.json();
+    },
     enabled: repoIds.length > 0,
   });
 

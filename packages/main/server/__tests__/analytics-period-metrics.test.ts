@@ -92,7 +92,9 @@ vi.mock('../db/client.js', () => ({
 const { getPeriodMetrics } = await import('../services/analytics-period-metrics.js');
 
 // ── Time constants (UTC epochs, seconds) ─────────────────────────────────────
+const DEC_2024 = Math.floor(Date.UTC(2024, 11, 1) / 1000);
 const JAN_2025 = Math.floor(Date.UTC(2025, 0, 15) / 1000);
+const FEB_2025 = Math.floor(Date.UTC(2025, 1, 15) / 1000);
 const APR_2025 = Math.floor(Date.UTC(2025, 3, 15) / 1000);
 const JUN_2025 = Math.floor(Date.UTC(2025, 5, 15) / 1000);
 const JUL_2025 = Math.floor(Date.UTC(2025, 6, 15) / 1000);
@@ -161,12 +163,21 @@ describe('getPeriodMetrics', () => {
 
   test('computes avgCommitSize, prFrequency, rampUpSpeed, activeContributors per period', () => {
     const raw = testDb.$client;
-    // 2 humans with commits, PRs, and a second-commit-then-large-PR pattern for rampUpSpeed
+    // 3 humans. anchor exists in Dec 2024 to establish the collection floor at DEC_2024;
+    // dataFloor (earliest + 4 weeks) lands in Dec 2024, so alice (first commit Jan 15) and
+    // bob (first commit Apr 15) are both past the floor and eligible for ramp-up.
     raw.prepare(`
       INSERT INTO authors (id, github_login, is_bot, first_commit_at) VALUES
-        (1, 'alice', 0, ?),
-        (2, 'bob',   0, ?)
-    `).run(JAN_2025, APR_2025);
+        (1, 'alice',  0, ?),
+        (2, 'bob',    0, ?),
+        (3, 'anchor', 0, ?)
+    `).run(JAN_2025, APR_2025, DEC_2024);
+
+    // Anchor commit 6 weeks before the period so dataFloor is still earlier than alice/bob
+    raw.prepare(`
+      INSERT INTO commits (sha, repo_id, author_id, message, committed_at, lines_added, lines_deleted) VALUES
+        ('a0', 1, 3, 'anchor', ?, 5, 0)
+    `).run(DEC_2024);
 
     // 4 commits in Pre-AI (lines_added+deleted: 30, 30, 40, 20 → avg 30)
     raw.prepare(`
@@ -187,13 +198,35 @@ describe('getPeriodMetrics', () => {
     const rows = getPeriodMetrics([1], [PRE_AI_PERIOD]);
     expect(rows).toHaveLength(1);
     const m = rows[0].metrics;
+    // avg only counts commits inside the period window (anchor's Dec 2024 commit
+    // is outside). 4 alice/bob commits at 30/30/40/20 → avg = 30.
     expect(m.avgCommitSize).toBeCloseTo(30, 1);
+    // anchor's only commit is outside [startEpoch, endEpoch] so they're not counted
+    // in activeContributors.
     expect(m.activeContributors).toBe(2);
     expect(m.prFrequency).toBeGreaterThanOrEqual(0);
     // rampUpSpeed: alice first_commit Jan 15, first large PR Apr 15 ≈ 13 weeks
     expect(m.rampUpSpeed).not.toBeNull();
     expect(m.rampUpSpeed as number).toBeGreaterThan(10);
     expect(m.rampUpSpeed as number).toBeLessThan(16);
+  });
+
+  test('rampUpSpeed excludes data-sparsity-clamped authors (ported guard from analytics-before-after.ts)', () => {
+    const raw = testDb.$client;
+    // Only commits are Jan 15 2025. Earliest = Jan 15. dataFloor = Jan 15 + 28 days ≈ Feb 12.
+    // alice's first_commit_at = JAN_2025 is BEFORE dataFloor → she must be filtered
+    // out of ramp-up because her first_commit_at is likely clamped by the collection
+    // window (true first work may have been before data collection).
+    raw.prepare(`INSERT INTO authors (id, github_login, is_bot, first_commit_at) VALUES (1, 'alice', 0, ?)`).run(JAN_2025);
+    raw.prepare(`INSERT INTO commits (sha, repo_id, author_id, message, committed_at, lines_added, lines_deleted) VALUES ('c1', 1, 1, 'msg', ?, 20, 10)`).run(JAN_2025);
+    raw.prepare(`
+      INSERT INTO pull_requests (github_id, repo_id, author_id, number, title, state, created_at, updated_at, lines_added) VALUES
+        (1, 1, 1, 1, 'alice PR large', 'merged', ?, ?, 100)
+    `).run(APR_2025, APR_2025);
+
+    const rows = getPeriodMetrics([1], [PRE_AI_PERIOD]);
+    // alice is filtered by the data-sparsity floor → no ramp-up data → null
+    expect(rows[0].metrics.rampUpSpeed).toBeNull();
   });
 
   test('returns empty array when no complete repos exist', () => {

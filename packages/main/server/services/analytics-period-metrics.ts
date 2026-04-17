@@ -31,6 +31,18 @@ export function getPeriodMetrics(
   // SAFETY: completeRepoIds come from DB query + integer guard (SEC-01).
   const repoIdList = completeRepoIds.join(',');
 
+  // Data-sparsity guard: authors whose `first_commit_at` is clamped by the
+  // collection window (not their true first commit) would produce artificially
+  // low ramp-up weeks when the analysis window starts at the data boundary.
+  // Only authors whose first_commit_at is at least 4 weeks past the earliest
+  // observed commit in the repo set are eligible for ramp-up — ported from the
+  // deleted analytics-before-after.ts.
+  const earliestCommit = db.get(sql.raw(`
+    SELECT MIN(CAST(c.committed_at AS INTEGER)) AS earliest
+    FROM commits c WHERE c.repo_id IN (${repoIdList})
+  `)) as { earliest: number | null } | undefined;
+  const dataFloor = (earliestCommit?.earliest ?? 0) + 4 * 7 * 86400;
+
   return periods.map(period => {
     const startEpoch = Math.floor(new Date(period.startDate).getTime() / 1000);
     const endEpoch = Math.floor(new Date(period.endDate).getTime() / 1000);
@@ -91,9 +103,12 @@ export function getPeriodMetrics(
 
     // ── Ramp-up speed: median weeks to first PR >= 50 lines ──────────────────
     //
-    // Only includes authors whose first_commit_at falls within the period.
-    // Filters out long-tenured devs whose true first commit predates the window
-    // (they would show artificially high ramp-up times due to data sparsity).
+    // Only includes authors whose first_commit_at falls within the period AND
+    // past the data-sparsity floor (earliest commit + 4 weeks). Devs whose
+    // first_commit_at is clamped by data collection (not actual first work)
+    // would produce artificially short ramp-up times — the floor is the same
+    // protection analytics-before-after.ts carried (see dataFloor above).
+    const rampFloor = Math.max(startEpoch, dataFloor);
 
     const rampUpRows = db.all(sql.raw(`
       SELECT
@@ -104,7 +119,7 @@ export function getPeriodMetrics(
       INNER JOIN pull_requests pr ON pr.author_id = a.id
       WHERE a.is_bot = 0
         AND a.first_commit_at IS NOT NULL
-        AND CAST(a.first_commit_at AS INTEGER) >= ${startEpoch}
+        AND CAST(a.first_commit_at AS INTEGER) >= ${rampFloor}
         AND CAST(a.first_commit_at AS INTEGER) <= ${endEpoch}
         AND pr.lines_added >= 50
         AND pr.repo_id IN (${repoIdList})

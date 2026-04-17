@@ -53,12 +53,20 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   // cross-org aggregation.
   const { data: concentrationData, isLoading: concentrationLoading } = useQuery<ConcentrationMonthlyRow[]>({
     queryKey: ['research', 'concentration', orgId],
-    queryFn: () => fetch(`/api/orgs/${orgId}/concentration`).then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/orgs/${orgId}/concentration`);
+      if (!res.ok) throw new Error('Failed to fetch concentration metrics');
+      return res.json();
+    },
     enabled: orgId != null,
   });
   const { data: periodMetricsData, isLoading: periodMetricsLoading } = useQuery<PeriodMetric[] | null>({
     queryKey: ['research', 'period-metrics', orgId],
-    queryFn: () => fetch(`/api/orgs/${orgId}/period-metrics`).then(r => r.json()),
+    queryFn: async () => {
+      const res = await fetch(`/api/orgs/${orgId}/period-metrics`);
+      if (!res.ok) throw new Error('Failed to fetch period metrics');
+      return res.json();
+    },
     enabled: orgId != null,
   });
   const snapshots = org?.snapshots ?? [];
