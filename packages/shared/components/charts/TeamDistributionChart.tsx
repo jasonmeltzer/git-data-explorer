@@ -109,6 +109,10 @@ export function TeamDistributionChart({ data, aiMarkerDate, isLoading }: TeamDis
               strokeDasharray="4 4"
               strokeWidth={2}
               label={({ viewBox }) => {
+                // Recharts 3.x can invoke this render function with an undefined
+                // viewBox during early mount cycles. Skip rendering the label
+                // rather than throwing on a missing x coordinate.
+                if (!viewBox || typeof (viewBox as { x?: number }).x !== 'number') return null;
                 const { x: cx } = viewBox as { x: number };
                 return (
                   <text x={cx + 4} y={16} fontSize={11} fill="var(--muted-foreground)">

@@ -268,12 +268,22 @@ describe('normalized output', () => {
   });
 });
 
-// ── division by zero guard ────────────────────────────────────────────────────
+// ── bot-only month produces no row (null guard via absence) ──────────────────
 
-describe('division by zero guard', () => {
+describe('bot-only month guard', () => {
   /**
-   * When activeDevs = 0 (all authors are bots, or no activity), prsPerDev and
-   * commitsPerDev must be null — not NaN, Infinity, or 0.
+   * The service's SQL filters `is_bot = 0` inline, so a month with only bot
+   * activity produces no rows in any of the three underlying queries (commit
+   * authors, PR-created authors, PR-merged authors). The monthMap never gets
+   * an entry for that month, and no HeadcountMonthlyRow is emitted — this is
+   * the null-guard strategy: row absence rather than explicit null fields.
+   *
+   * The `activeDevs > 0 ? ... : null` ternary in analytics-headcount.ts is
+   * defensive: unreachable through real data but kept in case the SQL guards
+   * are ever loosened. The previous version of this test paired a bot-only
+   * fixture with `if (jan) { ... }` guards that never fired, producing a
+   * vacuously-passing test. This version directly asserts the correct
+   * behavior: a bot-only month emits no row.
    */
   beforeAll(() => {
     clearAndSeedBase();
@@ -284,31 +294,12 @@ describe('division by zero guard', () => {
       INSERT INTO commits (sha, repo_id, author_id, message, committed_at, lines_added) VALUES
         ('sha01', 1, 4, 'bot commit', ${JAN_2025}, 5)
     `).run();
-    // No human PRs or human commits
   });
 
-  test('activeDevs=0 returns null for prsPerDev (not NaN or Infinity)', () => {
+  test('bot-only month emits no HeadcountMonthlyRow (no NaN, no Infinity)', () => {
     const rows = getHeadcountMonthly([1], TEST_PERIODS);
     const jan = rows.find(r => r.month === '2025-01');
-    // Jan has only bot activity — no human rows → either no row or a row with null
-    // If activeDevs=0, prsPerDev must be null
-    if (jan) {
-      expect(jan.activeDevs).toBe(0);
-      expect(jan.prsPerDev).toBeNull();
-      expect(jan.prsPerDev).not.toBe(NaN);
-      expect(jan.prsPerDev).not.toBe(Infinity);
-    }
-    // If no row at all for that month, that is also acceptable
-  });
-
-  test('activeDevs=0 returns null for commitsPerDev (not NaN or Infinity)', () => {
-    const rows = getHeadcountMonthly([1], TEST_PERIODS);
-    const jan = rows.find(r => r.month === '2025-01');
-    if (jan) {
-      expect(jan.commitsPerDev).toBeNull();
-      expect(jan.commitsPerDev).not.toBe(NaN);
-      expect(jan.commitsPerDev).not.toBe(Infinity);
-    }
+    expect(jan).toBeUndefined();
   });
 });
 

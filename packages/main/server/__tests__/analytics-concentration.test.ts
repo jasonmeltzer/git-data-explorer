@@ -319,15 +319,14 @@ describe('zero-PR month null guard', () => {
     expect(febCommits!.topContributor).toBe('bob');
   });
 
-  test('topContributor is null when no activity for the basis in that month', () => {
+  test('zero-PR month produces no PR basis row (null guard via row absence)', () => {
     const rows = getConcentrationMonthly([1], TEST_PERIODS);
-    // Any null-guarded PR row for Feb should have null topContributor
+    // Feb 2025: commits exist for all 3 humans but zero PRs were created in Feb.
+    // The null-guard strategy is row absence rather than explicit null fields:
+    // the PR basis query only returns rows for months with PR activity. Commit
+    // basis rows for Feb remain populated (verified in the previous test).
     const febPrs = rows.find(r => r.month === '2025-02' && r.basis === 'prs');
-    if (febPrs) {
-      expect(febPrs.topContributor).toBeNull();
-    }
-    // This passes trivially if no Feb PR row exists (correct: no null topContributor on real rows)
-    expect(true).toBe(true);
+    expect(febPrs).toBeUndefined();
   });
 });
 
