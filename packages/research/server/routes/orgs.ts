@@ -166,6 +166,28 @@ orgRoutes.get('/api/orgs/:orgId/snapshots/:snapshotId/data', (c) => {
     .where(eq(botRatio.snapshotId, snapshotId))
     .all();
 
+  // Phase 9.4 sections: concentration, headcount, period-metrics (D-13).
+  // Previously hardcoded as empty / null — silently dropped imported data.
+  const concentrationRows = db
+    .select()
+    .from(concentrationMonthly)
+    .where(eq(concentrationMonthly.snapshotId, snapshotId))
+    .orderBy(concentrationMonthly.periodMonth)
+    .all();
+
+  const headcountRows = db
+    .select()
+    .from(headcountMonthly)
+    .where(eq(headcountMonthly.snapshotId, snapshotId))
+    .orderBy(headcountMonthly.periodMonth)
+    .all();
+
+  const periodMetricsRow = db
+    .select()
+    .from(periodMetrics)
+    .where(eq(periodMetrics.snapshotId, snapshotId))
+    .get();
+
   // Reconstruct ExportBundle-like object
   const bundle = {
     metadata: JSON.parse(snapshot.metadataJson),
@@ -189,9 +211,27 @@ orgRoutes.get('/api/orgs/:orgId/snapshots/:snapshotId/data', (c) => {
     executiveSummary: snapshot.executiveSummaryJson
       ? JSON.parse(snapshot.executiveSummaryJson)
       : null,
-    periodMetrics: null,        // not persisted in snapshots table (Phase 9.4 D-13)
-    concentrationMonthly: [],
-    headcountMonthly: [],
+    periodMetrics: periodMetricsRow ? JSON.parse(periodMetricsRow.dataJson) : null,
+    concentrationMonthly: concentrationRows.map(r => ({
+      month: r.periodMonth,
+      basis: r.basis,
+      top1Share: r.top1Share,
+      top3Share: r.top3Share,
+      top5Share: r.top5Share,
+      hhi: r.hhi,
+      gini: r.gini,
+      busFactor: r.busFactor,
+      activeDevs: r.activeDevs,
+      topContributor: r.topContributor,
+    })),
+    headcountMonthly: headcountRows.map(r => ({
+      month: r.periodMonth,
+      activeDevs: r.activeDevs,
+      totalPrs: r.totalPrs,
+      totalCommits: r.totalCommits,
+      prsPerDev: r.prsPerDev,
+      commitsPerDev: r.commitsPerDev,
+    })),
   };
 
   return c.json(bundle);
