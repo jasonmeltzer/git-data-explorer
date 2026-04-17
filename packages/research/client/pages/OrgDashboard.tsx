@@ -147,7 +147,7 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
         <div className="mt-4 space-y-6">
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-base font-semibold">Team Distribution</h3>
+              <h2 className="text-base font-semibold">Team Distribution</h2>
               <div className="flex items-center gap-2">
                 <Tabs value={concentrationBasis} onValueChange={(v) => setConcentrationBasis(v as ConcentrationBasis)}>
                   <TabsList className="h-8 gap-1">

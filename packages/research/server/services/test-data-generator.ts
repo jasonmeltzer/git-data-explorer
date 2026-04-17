@@ -513,11 +513,11 @@ export function generateSmallStartup(): ExportBundle {
 
   const periodMetrics: PeriodMetric[] = [
     {
-      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Before AI' },
+      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Pre-AI' },
       metrics: { avgCommitSize: 150, prFrequency: 4, rampUpSpeed: 4, activeContributors: contributorCount },
     },
     {
-      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'After AI', markerDate: aiMarkerDate },
+      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'Post-AI', markerDate: aiMarkerDate },
       metrics: { avgCommitSize: 180, prFrequency: 5, rampUpSpeed: 3, activeContributors: contributorCount },
     },
   ];
@@ -604,11 +604,11 @@ export function generateMidSizeCompany(): ExportBundle {
 
   const periodMetrics: PeriodMetric[] = [
     {
-      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Before AI' },
+      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Pre-AI' },
       metrics: { avgCommitSize: 120, prFrequency: 3, rampUpSpeed: 9, activeContributors: contributorCount },
     },
     {
-      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'After AI', markerDate: aiMarkerDate },
+      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'Post-AI', markerDate: aiMarkerDate },
       metrics: { avgCommitSize: 132, prFrequency: 3.5, rampUpSpeed: 7, activeContributors: contributorCount },
     },
   ];
@@ -704,8 +704,11 @@ export function generatePreAiBaseline(): ExportBundle {
     botRatio,
     executiveSummary,
     periodMetrics: null,        // CRITICAL: null because no AI marker
-    concentrationMonthly: buildConcentrationMonthly(months, 'large'),
-    headcountMonthly: buildHeadcountMonthly(months, 'large'),
+    // generatePreAiBaseline produces a mid-size org (30 contributors, 8 repos);
+    // use the 'mid' profile so cross-org analysis in Phase 9.7 sees consistent
+    // concentration characteristics per sizeCategory.
+    concentrationMonthly: buildConcentrationMonthly(months, 'mid'),
+    headcountMonthly: buildHeadcountMonthly(months, 'mid'),
   };
 }
 

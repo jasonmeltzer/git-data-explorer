@@ -27,7 +27,7 @@ export const hhi = computeHhi;
  * Formula: G = (2 * Σ(i * x_i)) / (n * Σ(x_i)) - (n+1)/n
  * where x_i are sorted ascending, i is 1-based index.
  *
- * Also exported as `computeGini` for test compatibility and `giniCoefficient` per PLAN.
+ * Also exported as `giniCoefficient` alias per PLAN acceptance criteria.
  */
 export function computeGini(values: number[]): number {
   if (values.length <= 1) return 0;
@@ -119,8 +119,9 @@ function computeMonthlyConcentration(
     // Percentage shares (0-100)
     const pctShares = fractionalShares.map(s => s * 100);
 
-    // Top-N shares (percentage, 0-100)
-    const top1Share = pctShares[0] ?? null;
+    // Top-N shares (percentage, 0-100). This branch is only reached when
+    // active.length > 0, so pctShares[0] is always defined.
+    const top1Share = pctShares[0];
     const top3Share = pctShares.slice(0, 3).reduce((sum, s) => sum + s, 0);
     const top5Share = pctShares.slice(0, 5).reduce((sum, s) => sum + s, 0);
 
