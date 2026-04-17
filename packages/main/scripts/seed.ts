@@ -192,11 +192,24 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'amüller', name: 'Anna Müller', type: 'regular', repos: [1, 2], joinWeekOffset: 3, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
 
   // --- D-16 Dominant contributor (active weeks 6-22: 3 full months at 45-55% top-1 share) ---
-  // powerdev-alex commits at 50/week. Other active devs produce ~230 commits/month total.
-  //   200 / (200 + 230) ≈ 46-48% — within D-16 target of 45-55%.
+  // alexpower commits only in repo 0. The concentration query runs across ALL selected
+  // repos (default view = all 3), so the denominator is monthly commits from every
+  // persona in every repo, NOT just platform-repo activity. Accounting for:
+  //   - 5 seniors × 3.57 cross-repo commits/week = ~72/mo
+  //   - 5 regulars [0,1] × 5.14 commits/week ≈ 103/mo
+  //   - 3 regulars [0] × 4.0 commits/week = 48/mo
+  //   - 2 regulars [1,2] × 6.0 commits/week ≈ 48/mo
+  //   - pre-AI new devs (mixed repos): ~50-60/mo
+  //   - part-timer: ~2/mo
+  //  → Other human commits ~325/month across all 3 repos.
+  //
+  // alex at 90 commits/week × 4.33 = ~390/mo:
+  //   390 / (390 + 325) ≈ 54% — centered in D-16 target of 45-55%.
+  //
   // Weeks 6-22 span from early month 2 to late month 5, ensuring months 3, 4, 5 are fully
-  // covered and produce 3 consecutive dominant months.
-  { login: 'alexpower', name: 'Alex Power', type: 'regular', repos: [0], joinWeekOffset: 6, leaveWeekOffset: 22, commitsPerWeek: 50, sizeMu: 4.5, sizeSigma: 0.8, isBot: false },
+  // covered and produce 3 consecutive dominant months. Verified by the seed.test.ts
+  // dominant-contributor assertion after running `npm run seed`.
+  { login: 'alexpower', name: 'Alex Power', type: 'regular', repos: [0], joinWeekOffset: 6, leaveWeekOffset: 22, commitsPerWeek: 90, sizeMu: 4.5, sizeSigma: 0.8, isBot: false },
 
   // --- 5 Pre-AI new devs (join months 2-5 = weeks 4-20, some churn out) ---
   { login: 'rookie-alice', name: 'Alice Thornton', type: 'new-pre-ai', repos: [0], joinWeekOffset: 4, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },

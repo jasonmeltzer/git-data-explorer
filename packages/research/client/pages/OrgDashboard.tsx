@@ -43,7 +43,14 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   const snapshotId = selectedSnapshotId ?? (org?.snapshots?.[0]?.id ?? null);
   const { data: bundle, isFetching: dataFetching } = useSnapshotData(orgId, snapshotId);
 
-  // Concentration, headcount, and period-metrics from research API (Phase 9.4)
+  // Concentration and period-metrics from research API (Phase 9.4).
+  //
+  // The sibling `/api/orgs/:orgId/headcount` route also exists (see
+  // packages/research/server/routes/orgs.ts) but is intentionally NOT consumed
+  // here: D-15 holds the research-tool Team Distribution section to a minimal
+  // spec (no ScaryRealPanel, no StatCalloutRow), so there is no current UI
+  // surface that would render headcount. The route is available for Phase 9.7
+  // cross-org aggregation.
   const { data: concentrationData, isLoading: concentrationLoading } = useQuery<ConcentrationMonthlyRow[]>({
     queryKey: ['research', 'concentration', orgId],
     queryFn: () => fetch(`/api/orgs/${orgId}/concentration`).then(r => r.json()),

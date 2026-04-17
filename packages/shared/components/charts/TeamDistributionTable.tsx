@@ -91,9 +91,10 @@ const TABLE_COLUMNS: ColumnDef<ConcentrationMonthlyRow>[] = [
     header: 'Active Devs',
     enableSorting: true,
     meta: { align: 'right' as const },
-    cell: ({ getValue }) => (
-      <span className="tabular-nums">{String(getValue<number>())}</span>
-    ),
+    cell: ({ getValue }) => {
+      const v = getValue<number | null>();
+      return <span className="tabular-nums">{v == null ? '---' : String(v)}</span>;
+    },
   },
 ];
 
