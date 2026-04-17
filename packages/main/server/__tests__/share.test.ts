@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../db/schema.js';
+import { DEFAULT_COHORT_CONFIG } from '@shared/cohort-config.js';
 
 // ─── In-memory test DB ────────────────────────────────────────────────────────
 
@@ -57,9 +58,9 @@ const stubBundle = {
     tenureMode: 'global' as const,
     repoIds: [],
     repoNames: [],
-    cohortConfig: { thresholds: [] },
+    cohortConfig: DEFAULT_COHORT_CONFIG,
     toolVersion: '1.0.0',
-    rollingGranularity: 'month',
+    rollingGranularity: 'month' as const,
     orgName: null,
   },
   cohortCommits: [],
