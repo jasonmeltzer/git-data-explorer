@@ -98,8 +98,8 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 - `settings.ts` — `GET/POST /api/settings/token`, `GET/PUT /api/settings`, sharing consent endpoints
 - `repositories.ts` — 7 endpoints for repo CRUD, GitHub browsing, stop/delete
 - `collection.ts` — `POST /api/collection/start`, `POST /api/collection/stop`, `GET /api/collection/status`, `GET /api/collection/progress` (SSE)
-- `analytics.ts` — 13 analytics endpoints: marker, cohorts, rampup, rolling, contributors, contributors/before-after, pr-turnaround, bot-ratio, summary, before-after, cohort-config
-- `export.ts` — `POST /api/export` → builds ExportBundle (all 8 analytics sections)
+- `analytics.ts` — 15 analytics endpoints: marker, cohort-config, cohorts (commits+prs), rampup, rolling, contributors, contributors/before-after, pr-turnaround, bot-ratio, summary, period-metrics (replaces before-after), concentration, headcount
+- `export.ts` — `POST /api/export` → builds ExportBundle (11 analytics sections including the 3 Phase 9.4 additions)
 - `share.ts` — `POST /api/share/gist`, `POST /api/share/http`, `GET /api/share/reachability`
 
 ### Research Tool Frontend (`packages/research/client/`)
@@ -117,7 +117,7 @@ Hono HTTP server. No GitHub API dependency — all data from imported ExportBund
 **Routes** (`server/routes/`):
 - `health.ts` — `GET /api/health`
 - `import.ts` — `POST /api/import/file`, `POST /api/import/url`, `POST /api/import/batch`
-- `orgs.ts` — `GET /api/orgs`, `GET /api/orgs/:id`, `PATCH /api/orgs/:id`, `DELETE /api/orgs/:id`, `DELETE /api/orgs/:orgId/snapshots/:snapshotId`, `GET /api/orgs/:orgId/snapshots/:snapshotId/data`
+- `orgs.ts` — `GET /api/orgs`, `GET /api/orgs/:id`, `PATCH /api/orgs/:id`, `DELETE /api/orgs/:id`, `DELETE /api/orgs/:orgId/snapshots/:snapshotId`, `GET /api/orgs/:orgId/snapshots/:snapshotId/data`, `GET /api/orgs/:orgId/concentration`, `GET /api/orgs/:orgId/headcount`, `GET /api/orgs/:orgId/period-metrics`
 - `analytics.ts` — `GET /api/analytics/cross-org/cohort-metrics`, `GET /api/analytics/cross-org/ramp-up`, `GET /api/analytics/cross-org/comparison`
 
 **Services** (`server/services/`):
@@ -130,9 +130,12 @@ Hono HTTP server. No GitHub API dependency — all data from imported ExportBund
 ### Shared Package (`packages/shared/`)
 
 Code imported by both main and research frontends:
-- `types.ts` — TypeScript interfaces (GitHubRepo, TrackedRepo, CohortMetricsRow, RampUpBucket, ContributorBeforeAfterStats, etc.)
-- `export-types.ts` — ExportBundle, ExportMetadata (includes `orgName: string | null` inferred from repo owners), PrTurnaroundRow, BotRatioRow, ExecutiveSummary, BeforeAfterComparison
+- `types.ts` — TypeScript interfaces (GitHubRepo, TrackedRepo, CohortMetricsRow, RampUpBucket, ContributorBeforeAfterStats, and the Phase 9.4 additions: `Period`, `PeriodMetric`, `ConcentrationBasis`, `ConcentrationMonthlyRow`, `HeadcountMonthlyRow`)
+- `export-types.ts` — ExportBundle, ExportMetadata (includes `orgName: string | null` inferred from repo owners), PrTurnaroundRow, BotRatioRow, ExecutiveSummary. Phase 9.4: `beforeAfter` field removed, replaced by `periodMetrics: PeriodMetric[] | null`, `concentrationMonthly: ConcentrationMonthlyRow[]`, `headcountMonthly: HeadcountMonthlyRow[]`. The analytics row types are inlined here (not imported from server) to keep shared free of server-only imports.
 - `cohort-config.ts` — Single source of truth for cohort boundary definitions: `CohortThreshold`, `CohortConfig`, `DEFAULT_COHORT_CONFIG` (3mo/12mo thresholds), `getThresholdSeconds()` for SQL CASE WHEN generation
+- `lib/periods.ts` — `buildPeriodsFromMarker(startDate, endDate, markerDate)` produces `Period[]`. No marker → length-1 All-time; single marker → length-2 Pre-AI/Post-AI. Phase 10 will add multi-marker paths via the same signature.
+- `lib/narratives.ts` — `MetricOption`, `METRIC_OPTIONS`, and `CONCENTRATION_BASIS_OPTIONS` (PRs / Commits / Lines) for metric-selector tabs
+- `components/charts/` — shared chart components: `CohortAreaChart`, `RampUpLineChart`, `RollingCards`, `BeforeAfterComparison` (Phase 9.4: rewired to `PeriodMetric[]`, handles length 0/1/2/>2), `TeamDistributionChart` (Recharts ComposedChart with dual Y-axis), `TeamDistributionTable` (TanStack Table with 8 columns), `ScaryRealPanel` (side-by-side total PRs + PRs/dev)
 - `components/ui/` — shadcn/ui primitives (used only by frontend, but placed in shared for the `@shared/*` path alias)
 - `lib/utils.ts` — `cn()` helper for Tailwind class merging
 
@@ -153,18 +156,21 @@ SQLite via better-sqlite3. Drizzle ORM schema.
 
 ### Research DB (`data/research.db`)
 
-Separate SQLite database. 8 tables.
+Separate SQLite database. 11 tables (Phase 9.4 adds 3 new, drops `before_after_json` from `snapshots`).
 
 | Table | Purpose |
 |-------|---------|
 | `orgs` | One row per imported org. `label`, `size_category`, `import_source` |
-| `snapshots` | One row per imported bundle. Links to `orgs`. Stores `metadata_json`, `content_hash` (SHA-256 for dedup), `contributor_count`, `repo_count`, `ai_marker_date` |
+| `snapshots` | One row per imported bundle. Links to `orgs`. Stores `metadata_json`, `content_hash` (SHA-256 for dedup), `contributor_count`, `repo_count`, `ai_marker_date`, `executive_summary_json`. The `before_after_json` column was dropped in Phase 9.4 (D-13); the section is now stored in `period_metrics`. |
 | `cohort_metrics` | Per-cohort, per-period, per-month metrics rows. `metric_type` = 'commits' or 'prs'. Linked to snapshot + org |
 | `ramp_up` | New developer ramp-up data: `week_index`, `avg_lines_changed`, `join_period`. Per snapshot |
 | `rolling_comparisons` | Rolling window comparison JSON blob (MoM/QoQ). One row per snapshot |
 | `contributors` | Per-contributor before/after stats. `pre_json` and `post_json` store ContributorStats as JSON |
 | `pr_turnaround` | Monthly PR merge time data. `avg_hours_to_merge`, `median_hours_to_merge`, `pr_count` |
 | `bot_ratio` | Monthly bot vs human commit ratio data |
+| `concentration_monthly` | **Phase 9.4.** One row per (snapshot, org, month, basis). Per-basis top-N share, HHI, Gini, bus factor, active devs, top contributor. Nullable share columns handle zero-activity months. |
+| `headcount_monthly` | **Phase 9.4.** One row per (snapshot, org, month). Active dev count + normalized output (PRs/dev, commits/dev). |
+| `period_metrics` | **Phase 9.4.** JSON blob column storing the `PeriodMetric[]` for a snapshot (same pattern as `rolling_comparisons`). Replaces the old `snapshots.before_after_json` column. |
 
 ## Cross-Org Aggregation Engine
 
@@ -269,13 +275,11 @@ Run with `npm run lint`.
 
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
 - **Research tool: persisted org charts** — OrgDashboard renders aggregated data from the latest snapshot; time-series comparison across snapshots not yet implemented
-- **Concentration risk metrics** — top-N contributor share, HHI/Gini distribution (Phase 9.4)
-- **Headcount-normalized output** — PRs/dev/month, commits/dev/month (Phase 9.4)
-- **Period-array data model** — replaces single aiMarkerDate for multi-marker readiness (Phase 9.4)
 - **Per-developer monthly time series** — individual contribution patterns, privacy-framed (Phase 9.5)
 - **Cycle time correction** — firstCommitAt on PRs for first-commit-to-merge measurement (Phase 9.6)
-- **Cross-org period-aware splits** — research tool before/after with period-array (Phase 9.7)
+- **Cross-org Team Distribution aggregation** — Phase 9.4 added per-org concentration/headcount routes and tables; the CrossOrgPage aggregation path for these new sections is deferred to Phase 9.7
 - **Individual onboarding profiles** — per-new-hire first-N-weeks breakdown (Phase 9.8)
+- **Multi-marker AI timeline** — Phase 10 will supply length-N `Period[]` from an `ai_markers` table; the period-array data model is already in place so this becomes a thin schema + UI change
 
 ## File Map
 
@@ -295,13 +299,9 @@ packages/
 │   │   │   │   ├── StatCalloutBox.tsx / StatCalloutRow.tsx
 │   │   │   │   ├── HelpPanel.tsx
 │   │   │   │   ├── ExecutiveSummary.tsx
-│   │   │   │   ├── BeforeAfterComparison.tsx
 │   │   │   │   ├── PrTurnaroundChart.tsx
 │   │   │   │   ├── BotRatioChart.tsx
-│   │   │   │   └── charts/
-│   │   │   │       ├── CohortAreaChart.tsx
-│   │   │   │       ├── RampUpLineChart.tsx
-│   │   │   │       └── RollingCards.tsx
+│   │   │   │   └── charts/                  (most charts live in packages/shared/components/charts/)
 │   │   │   ├── hooks/
 │   │   │   │   ├── useDashboardFilters.ts
 │   │   │   │   ├── useCohortCommits.ts / useCohortPrs.ts
@@ -336,10 +336,13 @@ packages/
 │   │           ├── analytics-cohorts.ts / analytics-rampup.ts
 │   │           ├── analytics-rolling.ts / analytics-contributors.ts
 │   │           ├── analytics-pr-turnaround.ts / analytics-bot-ratio.ts
-│   │           ├── analytics-summary.ts / analytics-before-after.ts
+│   │           ├── analytics-summary.ts
+│   │           ├── analytics-concentration.ts    # Phase 9.4: top-N share, HHI, Gini, bus factor across prs/commits/lines
+│   │           ├── analytics-headcount.ts        # Phase 9.4: active devs, PRs/dev, commits/dev
+│   │           ├── analytics-period-metrics.ts   # Phase 9.4: replaces analytics-before-after; accepts Period[]
 │   │           ├── analytics-config.ts / analytics-utils.ts
 │   │           ├── cohort-config-service.ts
-│   │           ├── export-service.ts # buildExportBundle (8 analytics sections)
+│   │           ├── export-service.ts # buildExportBundle (11 analytics sections: cohortCommits, cohortPrs, rampUp, rolling, contributors, prTurnaround, botRatio, executiveSummary, periodMetrics, concentrationMonthly, headcountMonthly)
 │   │           └── first-commit-fetcher.ts
 │   └── scripts/
 │       └── seed.ts                   # Synthetic data generator (npm run seed)
