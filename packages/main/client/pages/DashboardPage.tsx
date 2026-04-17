@@ -94,20 +94,23 @@ export default function DashboardPage() {
     granularity: rollingGranularity, repoIds,
   });
 
-  // Fetch concentration, headcount, and period metrics data (Phase 9.4)
-  const { data: concentrationData, isLoading: concentrationLoading } = useQuery<ConcentrationMonthlyRow[]>({
-    queryKey: ['analytics', 'concentration', repoIds],
-    queryFn: () => fetch('/api/analytics/concentration?' + new URLSearchParams({ repoIds: repoIds.join(',') })).then(r => r.json()),
+  // Fetch concentration, headcount, and period metrics data (Phase 9.4).
+  // Pass startDate/endDate so period boundaries reflect the user's selected range
+  // rather than the previous hardcoded '2020-01-01' fallback.
+  const teamDistributionParams = { startDate, endDate, repoIds: repoIds.join(',') };
+  const { data: concentrationData, isLoading: concentrationLoading, isError: concentrationError } = useQuery<ConcentrationMonthlyRow[]>({
+    queryKey: ['analytics', 'concentration', startDate, endDate, repoIds],
+    queryFn: () => fetch('/api/analytics/concentration?' + new URLSearchParams(teamDistributionParams)).then(r => r.json()),
     enabled: repoIds.length > 0,
   });
-  const { data: headcountData, isLoading: headcountLoading } = useQuery<HeadcountMonthlyRow[]>({
-    queryKey: ['analytics', 'headcount', repoIds],
-    queryFn: () => fetch('/api/analytics/headcount?' + new URLSearchParams({ repoIds: repoIds.join(',') })).then(r => r.json()),
+  const { data: headcountData, isLoading: headcountLoading, isError: headcountError } = useQuery<HeadcountMonthlyRow[]>({
+    queryKey: ['analytics', 'headcount', startDate, endDate, repoIds],
+    queryFn: () => fetch('/api/analytics/headcount?' + new URLSearchParams(teamDistributionParams)).then(r => r.json()),
     enabled: repoIds.length > 0,
   });
-  const { data: periodMetricsData, isLoading: periodMetricsLoading } = useQuery<PeriodMetric[]>({
-    queryKey: ['analytics', 'period-metrics', repoIds],
-    queryFn: () => fetch('/api/analytics/period-metrics?' + new URLSearchParams({ repoIds: repoIds.join(',') })).then(r => r.json()),
+  const { data: periodMetricsData, isLoading: periodMetricsLoading, isError: periodMetricsError } = useQuery<PeriodMetric[]>({
+    queryKey: ['analytics', 'period-metrics', startDate, endDate, repoIds],
+    queryFn: () => fetch('/api/analytics/period-metrics?' + new URLSearchParams(teamDistributionParams)).then(r => r.json()),
     enabled: repoIds.length > 0,
   });
 
@@ -130,7 +133,8 @@ export default function DashboardPage() {
   const isSeedDb = healthData?.isSeedDb ?? false;
   const hasToken = isSeedDb || (tokenData?.configured ?? true); // seed DB doesn't need a real token
   const anyFetching = prFetching || commitFetching || rampUpFetching || rollingFetching;
-  const anyError = prError || commitError || rampUpError || rollingError;
+  const anyError = prError || commitError || rampUpError || rollingError
+    || concentrationError || headcountError || periodMetricsError;
 
   // Compute insights for existing sections
   const prInsights = computeCohortInsights(prData, prMetric, 'pr');

@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { sql } from 'drizzle-orm';
+import { db } from '../db/client.js';
 import { getAiMarkerDate, setAiMarkerDate } from '../services/analytics-config.js';
 import { getCohortCommitMetrics, getCohortPrMetrics } from '../services/analytics-cohorts.js';
 import { getRampUpCurves } from '../services/analytics-rampup.js';
@@ -357,24 +359,45 @@ analytics.get('/api/analytics/summary', (c) => {
 
 // ─── Period-metrics endpoint ──────────────────────────────────────────────────
 
+// Earliest-commit fallback for the period-aware endpoints. Returns null when
+// there are no commits in scope (empty repo set or empty DB). Only integer
+// repoIds reach sql.raw, per the SEC-01 guard.
+function earliestCommitDate(repoIdsParsed: number[] | undefined): string | null {
+  const filter = repoIdsParsed && repoIdsParsed.length > 0
+    ? `WHERE repo_id IN (${repoIdsParsed.filter(n => Number.isInteger(n) && n > 0).join(',')})`
+    : '';
+  const row = db.all(sql.raw(
+    `SELECT MIN(CAST(committed_at AS INTEGER)) AS minEpoch FROM commits ${filter}`,
+  )) as Array<{ minEpoch: number | null }>;
+  const minEpoch = row[0]?.minEpoch ?? null;
+  if (minEpoch === null) return null;
+  return new Date(minEpoch * 1000).toISOString().slice(0, 10);
+}
+
+// Shared helper: resolve the analysis window for the 3 period-aware endpoints.
+// Accepts optional startDate/endDate from query; falls back to the repo set's
+// earliest commit (per H1 audit finding — previous hardcoded '2020-01-01' made
+// periodMetrics[0].startDate always claim 2020-01-01 regardless of actual data).
+function resolvePeriods(startDate: string | undefined, endDate: string | undefined, repoIdsParsed: number[] | undefined) {
+  const resolvedEnd = endDate ?? new Date().toISOString().slice(0, 10);
+  const resolvedStart = startDate ?? earliestCommitDate(repoIdsParsed) ?? '2020-01-01';
+  const aiMarkerDate = getAiMarkerDate();
+  const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
+  return buildPeriodsFromMarker(resolvedStart, resolvedEnd, markerDateStr);
+}
+
 // GET /api/analytics/period-metrics — metrics per period (replaces before-after)
 analytics.get('/api/analytics/period-metrics', (c) => {
   try {
-    const schema = z.object({ repoIds: z.string().optional() });
-    const parsed = schema.safeParse(c.req.query());
+    const parsed = trendQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
     }
 
-    const { repoIds } = parsed.data;
+    const { startDate, endDate, repoIds } = parsed.data;
     const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
 
-    const aiMarkerDate = getAiMarkerDate();
-    const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
-    // Use a wide default range if no date context available — consumers should pass explicit dates
-    const now = new Date().toISOString().slice(0, 10);
-    const periods = buildPeriodsFromMarker('2020-01-01', now, markerDateStr);
-
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
     const result = getPeriodMetrics(repoIdsParsed, periods);
     return c.json(result);
   } catch (err) {
@@ -388,20 +411,15 @@ analytics.get('/api/analytics/period-metrics', (c) => {
 // GET /api/analytics/concentration — monthly concentration metrics (top-N, HHI, Gini, bus factor)
 analytics.get('/api/analytics/concentration', (c) => {
   try {
-    const schema = z.object({ repoIds: z.string().optional() });
-    const parsed = schema.safeParse(c.req.query());
+    const parsed = trendQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
     }
 
-    const { repoIds } = parsed.data;
+    const { startDate, endDate, repoIds } = parsed.data;
     const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
 
-    const aiMarkerDate = getAiMarkerDate();
-    const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
-    const now = new Date().toISOString().slice(0, 10);
-    const periods = buildPeriodsFromMarker('2020-01-01', now, markerDateStr);
-
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
     const result = getConcentrationMonthly(repoIdsParsed, periods);
     return c.json(result);
   } catch (err) {
@@ -415,20 +433,15 @@ analytics.get('/api/analytics/concentration', (c) => {
 // GET /api/analytics/headcount — monthly active headcount and output per dev
 analytics.get('/api/analytics/headcount', (c) => {
   try {
-    const schema = z.object({ repoIds: z.string().optional() });
-    const parsed = schema.safeParse(c.req.query());
+    const parsed = trendQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
     }
 
-    const { repoIds } = parsed.data;
+    const { startDate, endDate, repoIds } = parsed.data;
     const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
 
-    const aiMarkerDate = getAiMarkerDate();
-    const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
-    const now = new Date().toISOString().slice(0, 10);
-    const periods = buildPeriodsFromMarker('2020-01-01', now, markerDateStr);
-
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
     const result = getHeadcountMonthly(repoIdsParsed, periods);
     return c.json(result);
   } catch (err) {
