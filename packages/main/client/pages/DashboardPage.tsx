@@ -97,6 +97,10 @@ export default function DashboardPage() {
   // Fetch concentration, headcount, and period metrics data (Phase 9.4).
   // Pass startDate/endDate so period boundaries reflect the user's selected range
   // rather than the previous hardcoded '2020-01-01' fallback.
+  // Backend treats empty repoIds as "all complete repos" — mirrors
+  // useCohortPrs / useCohortCommits / useRampUp / useRolling behavior.
+  // Don't gate on repoIds.length; otherwise the Team Distribution section
+  // stays empty until the user manually opens the repo filter.
   const teamDistributionParams = { startDate, endDate, repoIds: repoIds.join(',') };
   const { data: concentrationData, isLoading: concentrationLoading, isError: concentrationError } = useQuery<ConcentrationMonthlyRow[]>({
     queryKey: ['analytics', 'concentration', startDate, endDate, repoIds],
@@ -105,7 +109,6 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Failed to fetch concentration metrics');
       return res.json();
     },
-    enabled: repoIds.length > 0,
   });
   const { data: headcountData, isLoading: headcountLoading, isError: headcountError } = useQuery<HeadcountMonthlyRow[]>({
     queryKey: ['analytics', 'headcount', startDate, endDate, repoIds],
@@ -114,7 +117,6 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Failed to fetch headcount metrics');
       return res.json();
     },
-    enabled: repoIds.length > 0,
   });
   const { data: periodMetricsData, isLoading: periodMetricsLoading, isError: periodMetricsError } = useQuery<PeriodMetric[]>({
     queryKey: ['analytics', 'period-metrics', startDate, endDate, repoIds],
@@ -123,7 +125,6 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error('Failed to fetch period metrics');
       return res.json();
     },
-    enabled: repoIds.length > 0,
   });
 
   // Check token + repos existence + seed mode
