@@ -353,3 +353,36 @@ describe('multi-basis computation', () => {
     expect(bases).toContain('lines');
   });
 });
+
+// Locks in the contract the DashboardPage fix (commit 7d2c167) depends on:
+// when the client sends an empty repoIds (which happens on initial load
+// before any repos are explicitly selected), the service must return data
+// for all complete repos instead of []. Without this contract, the Team
+// Distribution section shows "No concentration data available" on the
+// seeded dashboard until the user manually opens the repo filter.
+describe('empty/undefined repoIds → all complete repos (D-01 default-selection contract)', () => {
+  test('undefined repoIds returns non-empty rows (all complete repos path)', () => {
+    const rows = getConcentrationMonthly(undefined, TEST_PERIODS);
+    expect(rows.length).toBeGreaterThan(0);
+    const bases = new Set(rows.map((r) => r.basis));
+    expect(bases.has('commits')).toBe(true);
+    expect(bases.has('prs')).toBe(true);
+    expect(bases.has('lines')).toBe(true);
+  });
+
+  test('empty-array repoIds returns non-empty rows (matches undefined path)', () => {
+    const rows = getConcentrationMonthly([], TEST_PERIODS);
+    expect(rows.length).toBeGreaterThan(0);
+    // Should match the undefined-path output shape
+    const bases = new Set(rows.map((r) => r.basis));
+    expect(bases.has('commits')).toBe(true);
+    expect(bases.has('prs')).toBe(true);
+    expect(bases.has('lines')).toBe(true);
+  });
+
+  test('empty and undefined repoIds produce equivalent output', () => {
+    const fromUndefined = getConcentrationMonthly(undefined, TEST_PERIODS);
+    const fromEmptyArray = getConcentrationMonthly([], TEST_PERIODS);
+    expect(fromEmptyArray).toEqual(fromUndefined);
+  });
+});
