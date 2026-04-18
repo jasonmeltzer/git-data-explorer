@@ -127,3 +127,167 @@ describe('validateBundle', () => {
     expect(parsed.success).toBe(true);
   });
 });
+
+// ─── Phase 9.4 row-schema rejection tests ──────────────────────────────────
+// Each of the 3 new row schemas (ConcentrationMonthlyRowSchema,
+// HeadcountMonthlyRowSchema, PeriodMetricSchema) is exercised via the
+// ExportBundle envelope — valid-shape positive cases, then rejection cases
+// for bad enum values, wrong types, and missing required fields.
+
+describe('Phase 9.4 row schemas — rejection cases', () => {
+  describe('ConcentrationMonthlyRowSchema', () => {
+    const validRow = {
+      month: '2025-06',
+      basis: 'prs',
+      top1Share: 40,
+      top3Share: 60,
+      top5Share: 75,
+      hhi: 0.15,
+      gini: 0.3,
+      busFactor: 3,
+      activeDevs: 8,
+      topContributor: 'alice',
+    };
+
+    it('accepts a valid row', () => {
+      const result = validateBundle({ ...validBundle, concentrationMonthly: [validRow] });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects invalid basis value', () => {
+      const bad = { ...validRow, basis: 'foo' };
+      const result = validateBundle({ ...validBundle, concentrationMonthly: [bad] });
+      expect(result.valid).toBe(false);
+      expect(result.errors?.some((e) => /basis/.test(e))).toBe(true);
+    });
+
+    it('rejects missing month', () => {
+      const { month, ...bad } = validRow;
+      void month;
+      const result = validateBundle({ ...validBundle, concentrationMonthly: [bad as unknown] });
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects top1Share as string (wrong type)', () => {
+      const bad = { ...validRow, top1Share: '40' as unknown };
+      const result = validateBundle({ ...validBundle, concentrationMonthly: [bad] });
+      expect(result.valid).toBe(false);
+    });
+
+    it('accepts all nullable numeric fields as null', () => {
+      const nullRow = {
+        month: '2025-06',
+        basis: 'commits',
+        top1Share: null,
+        top3Share: null,
+        top5Share: null,
+        hhi: null,
+        gini: null,
+        busFactor: null,
+        activeDevs: 0,
+        topContributor: null,
+      };
+      const result = validateBundle({ ...validBundle, concentrationMonthly: [nullRow] });
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('HeadcountMonthlyRowSchema', () => {
+    const validRow = {
+      month: '2025-06',
+      activeDevs: 10,
+      totalPrs: 30,
+      totalCommits: 150,
+      prsPerDev: 3,
+      commitsPerDev: 15,
+    };
+
+    it('accepts a valid row', () => {
+      const result = validateBundle({ ...validBundle, headcountMonthly: [validRow] });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects activeDevs as string', () => {
+      const bad = { ...validRow, activeDevs: '10' as unknown };
+      const result = validateBundle({ ...validBundle, headcountMonthly: [bad] });
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects missing totalPrs', () => {
+      const { totalPrs, ...bad } = validRow;
+      void totalPrs;
+      const result = validateBundle({ ...validBundle, headcountMonthly: [bad as unknown] });
+      expect(result.valid).toBe(false);
+    });
+
+    it('accepts null prsPerDev and commitsPerDev (zero-activity edge case)', () => {
+      const zeroRow = {
+        month: '2025-06',
+        activeDevs: 0,
+        totalPrs: 0,
+        totalCommits: 0,
+        prsPerDev: null,
+        commitsPerDev: null,
+      };
+      const result = validateBundle({ ...validBundle, headcountMonthly: [zeroRow] });
+      expect(result.valid).toBe(true);
+    });
+  });
+
+  describe('PeriodMetricSchema', () => {
+    const validPeriod = {
+      period: { startDate: '2025-01-01', endDate: '2025-06-30', label: 'Pre-AI' },
+      metrics: { avgCommitSize: 150, prFrequency: 3, rampUpSpeed: 8, activeContributors: 10 },
+    };
+
+    it('accepts a valid period metric', () => {
+      const result = validateBundle({ ...validBundle, periodMetrics: [validPeriod] });
+      expect(result.valid).toBe(true);
+    });
+
+    it('accepts period with optional markerDate', () => {
+      const withMarker = {
+        ...validPeriod,
+        period: { ...validPeriod.period, markerDate: '2025-07-01' },
+      };
+      const result = validateBundle({ ...validBundle, periodMetrics: [withMarker] });
+      expect(result.valid).toBe(true);
+    });
+
+    it('rejects missing period.label', () => {
+      const bad = {
+        period: { startDate: '2025-01-01', endDate: '2025-06-30' } as unknown,
+        metrics: validPeriod.metrics,
+      };
+      const result = validateBundle({ ...validBundle, periodMetrics: [bad] });
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects non-string startDate (number)', () => {
+      const bad = {
+        period: { startDate: 1735689600 as unknown, endDate: '2025-06-30', label: 'Pre-AI' },
+        metrics: validPeriod.metrics,
+      };
+      const result = validateBundle({ ...validBundle, periodMetrics: [bad] });
+      expect(result.valid).toBe(false);
+    });
+
+    it('rejects metrics values that are not number|null (string)', () => {
+      const bad = {
+        ...validPeriod,
+        metrics: { avgCommitSize: 'large' as unknown },
+      };
+      const result = validateBundle({ ...validBundle, periodMetrics: [bad] });
+      expect(result.valid).toBe(false);
+    });
+
+    it('accepts metrics with null values (nullable contract)', () => {
+      const withNulls = {
+        ...validPeriod,
+        metrics: { avgCommitSize: null, prFrequency: null, rampUpSpeed: 8, activeContributors: 10 },
+      };
+      const result = validateBundle({ ...validBundle, periodMetrics: [withNulls] });
+      expect(result.valid).toBe(true);
+    });
+  });
+});

@@ -90,6 +90,38 @@ sqlite.exec(`
     total_commits INTEGER NOT NULL DEFAULT 0,
     bot_percentage REAL NOT NULL DEFAULT 0
   );
+  CREATE TABLE IF NOT EXISTS concentration_monthly (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
+    basis TEXT NOT NULL,
+    period_month TEXT NOT NULL,
+    top1_share REAL,
+    top3_share REAL,
+    top5_share REAL,
+    hhi REAL,
+    gini REAL,
+    bus_factor INTEGER,
+    active_devs INTEGER NOT NULL,
+    top_contributor TEXT
+  );
+  CREATE TABLE IF NOT EXISTS headcount_monthly (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
+    period_month TEXT NOT NULL,
+    active_devs INTEGER NOT NULL,
+    total_prs INTEGER NOT NULL,
+    total_commits INTEGER NOT NULL,
+    prs_per_dev REAL,
+    commits_per_dev REAL
+  );
+  CREATE TABLE IF NOT EXISTS period_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
+    data_json TEXT NOT NULL
+  );
   CREATE INDEX IF NOT EXISTS idx_snapshots_org_id ON snapshots(org_id);
   CREATE INDEX IF NOT EXISTS idx_cohort_metrics_snapshot ON cohort_metrics(snapshot_id);
   CREATE INDEX IF NOT EXISTS idx_cohort_metrics_org ON cohort_metrics(org_id, metric_type);
@@ -101,6 +133,8 @@ sqlite.exec(`
   CREATE INDEX IF NOT EXISTS idx_pr_turnaround_snapshot ON pr_turnaround(snapshot_id);
   CREATE INDEX IF NOT EXISTS idx_pr_turnaround_org ON pr_turnaround(org_id);
   CREATE INDEX IF NOT EXISTS idx_bot_ratio_org ON bot_ratio(org_id);
+  CREATE INDEX IF NOT EXISTS idx_concentration_monthly_org ON concentration_monthly(org_id, basis);
+  CREATE INDEX IF NOT EXISTS idx_headcount_monthly_org ON headcount_monthly(org_id);
 `);
 
 // Drop deprecated columns from existing databases (no-op on fresh DBs)
