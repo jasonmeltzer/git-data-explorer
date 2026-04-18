@@ -11,7 +11,7 @@
     "research": "npm run dev -w @git-data-explorer/research",
     "test": "vitest run --reporter=verbose",
     "seed": "npm run seed -w @git-data-explorer/main",
-    "dev:seed": "DB_PATH=$PWD/data/seed.db npm run dev -w @git-data-explorer/main",
+    "dev:seed": "npm run dev:seed -w @git-data-explorer/main",
     "db:generate": "npm run db:generate -w @git-data-explorer/main",
     "db:migrate": "npm run db:migrate -w @git-data-explorer/main",
     "lint": "eslint packages/"
