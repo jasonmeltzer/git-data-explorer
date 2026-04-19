@@ -14,6 +14,8 @@ export default defineConfig({
     testTimeout: 10000,
     environmentMatchGlobs: [
       ['packages/**/client/__tests__/**/*.test.tsx', 'jsdom'],
+      ['packages/shared/components/**/__tests__/**/*.test.tsx', 'jsdom'],
+      ['packages/shared/**/__tests__/**/*.test.tsx', 'jsdom'],
     ],
   },
 });
