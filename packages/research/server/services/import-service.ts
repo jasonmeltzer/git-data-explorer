@@ -104,16 +104,32 @@ export function importBundle(
   const contributorCount = new Set(data.contributors.map((c) => c.authorLogin)).size;
   const repoCount = data.metadata.repoNames.length;
 
-  // Auto-create org if needed
+  // Auto-create org if needed — but first, check whether this exact bundle
+  // (by contentHash) has already been imported into ANY existing org. If so,
+  // attach as a new snapshot on that org instead of creating a duplicate org.
+  // This matches user expectation: re-importing the same ZIP should add a new
+  // snapshot, not spawn a parallel org. (Filed 2026-04-18 smoke test §3f.)
   if (orgId === null) {
-    const label =
-      orgLabel ??
-      data.metadata.orgName ??   // D-11: prefer orgName from metadata
-      (repoCount > 0
-        ? `${data.metadata.repoNames[0]}${repoCount > 1 ? ` (+${repoCount - 1} more)` : ''}`
-        : `Import-${new Date().toISOString().slice(0, 10)}`);
-    const size = contributorCount <= 20 ? 'small' : contributorCount <= 100 ? 'medium' : 'large';
-    orgId = createOrg(label, importSource, size);
+    const existingSnapshot = db
+      .select({ orgId: snapshots.orgId })
+      .from(snapshots)
+      .where(eq(snapshots.contentHash, contentHash))
+      .limit(1)
+      .get();
+
+    if (existingSnapshot) {
+      orgId = existingSnapshot.orgId;
+      warnings.push('Content matches an existing org — attaching as a new snapshot');
+    } else {
+      const label =
+        orgLabel ??
+        data.metadata.orgName ??   // D-11: prefer orgName from metadata
+        (repoCount > 0
+          ? `${data.metadata.repoNames[0]}${repoCount > 1 ? ` (+${repoCount - 1} more)` : ''}`
+          : `Import-${new Date().toISOString().slice(0, 10)}`);
+      const size = contributorCount <= 20 ? 'small' : contributorCount <= 100 ? 'medium' : 'large';
+      orgId = createOrg(label, importSource, size);
+    }
   }
 
   // Check for duplicate (same contentHash for this org) — single indexed query (WR-01)
