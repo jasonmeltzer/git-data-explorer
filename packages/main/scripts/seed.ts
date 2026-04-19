@@ -159,7 +159,7 @@ const REPOS = [
 interface ContributorPersona {
   login: string;
   name: string;
-  type: 'senior' | 'regular' | 'new-pre-ai' | 'new-post-ai' | 'part-time' | 'bot';
+  type: 'senior' | 'regular' | 'new-pre-ai' | 'new-post-ai' | 'part-time' | 'bot' | 'commit-only' | 'pr-reviewer';
   repos: number[];         // indices into REPOS array
   joinWeekOffset: number;  // weeks from DATA_START when they first commit
   leaveWeekOffset?: number; // weeks from DATA_START when they stop committing (undefined = never)
@@ -167,6 +167,8 @@ interface ContributorPersona {
   sizeMu: number;
   sizeSigma: number;
   isBot: boolean;
+  refactorWaveWeek?: number;  // If set, generate ~150 deletion-heavy commits in this week (relative to DATA_START)
+  botStormWeeks?: [number, number];  // [startWeek, endWeek] — inclusive — bot commits are 8× normal during this window
 }
 
 const PERSONAS: ContributorPersona[] = [
@@ -175,7 +177,7 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'mrodriguez', name: 'Miguel Rodriguez', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
   { login: 'akumar', name: 'Anika Kumar', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
   { login: 'sjohansson', name: 'Sofia Johansson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
-  { login: 'lwilson', name: 'Liam Wilson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
+  { login: 'lwilson', name: 'Liam Wilson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false, refactorWaveWeek: 40 },
 
   // --- 10 Regulars (some leave mid-way for realistic churn) ---
   { login: 'tgarcia', name: 'Tomás García', type: 'regular', repos: [0, 1], joinWeekOffset: 0, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
@@ -233,8 +235,21 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'contractor-sam', name: 'Sam Okonkwo', type: 'part-time', repos: [1], joinWeekOffset: 0, commitsPerWeek: 0.5, sizeMu: 2.5, sizeSigma: 1.2, isBot: false },
   { login: 'contractor-lee', name: 'Lee Hofmann', type: 'part-time', repos: [2], joinWeekOffset: 0, commitsPerWeek: 0.5, sizeMu: 2.5, sizeSigma: 1.2, isBot: false },
 
+  // --- Commit-only persona (D-01: direct-to-main workflow, zero PRs) ---
+  // Exercises the ScaryRealPanel zero-PR null guard and the divergence between
+  // commits-basis activeDevs and PRs-basis activeDevs in concentration analytics.
+  { login: 'direct-devon', name: 'Devon Quinn', type: 'commit-only', repos: [2], joinWeekOffset: 4, commitsPerWeek: 3, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+
+  // --- PR-reviewer persona (D-02: merges PRs but minimal own commits) ---
+  // Exercises D-10 merged_at author-set semantics: has active PR months
+  // where they authored 0 commits (extra PRs injected in injectPrReviewerPrs below).
+  // commitsPerWeek is intentionally low (~1 commit/month on average).
+  // repos: [0] (single repo) to keep total commits well below 20 so the acceptance test's
+  // "< 20 commits total" threshold has comfortable margin — expected total ≈ 0.3 × 42 weeks × 1 repo ≈ 13 commits.
+  { login: 'reviewer-riley', name: 'Riley Navarro', type: 'pr-reviewer', repos: [0], joinWeekOffset: 10, commitsPerWeek: 0.3, sizeMu: 2.5, sizeSigma: 0.8, isBot: false },
+
   // --- 3 Bots (all 3 repos, KNOWN_BOTS set) ---
-  { login: 'dependabot[bot]', name: 'Dependabot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
+  { login: 'dependabot[bot]', name: 'Dependabot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true, botStormWeeks: [34, 37] },
   { login: 'github-actions[bot]', name: 'GitHub Actions', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
   { login: 'renovate[bot]', name: 'Renovate Bot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
 ];
@@ -385,32 +400,81 @@ function generateCommitsForPersonaRepo(
     // Calculate week index since join (for ramp-up logic)
     const weeksSinceJoin = (weekStart - joinMs) / MS_PER_WEEK;
 
+    // --- Refactor wave override ---
+    // If this persona has a designated refactor-wave week AND we're in that specific week
+    // (in the persona's first assigned repo only — to keep the deletion burst concentrated
+    // in one repo), generate the wave instead of normal commits.
+    const weeksSinceStart = (weekStart - DATA_START_MS) / MS_PER_WEEK;
+    if (
+      persona.refactorWaveWeek != null
+      && Math.floor(weeksSinceStart) === persona.refactorWaveWeek
+      && repoIndex === persona.repos[0]
+    ) {
+      const WAVE_COMMITS = 150;
+      // W-2 round 2: 150 commits × ~325 avg lines (linesDeleted + linesAdded) ≈ ~48.8k lines from lwilson.
+      // Non-lwilson humans contribute ~313 commits × ~60 lines = ~18.8k lines.
+      // Share ≈ 48.8 / 67.6 ≈ 72%, comfortable margin above the 70% Plan 03 threshold.
+      for (let c = 0; c < WAVE_COMMITS; c++) {
+        const commitDate = weightedRandomDate(weekStartDate, weekEndDate);
+        if (commitDate.getTime() >= activeEndMs) continue;
+
+        // Deletion-heavy: large deletions, small additions, several files
+        const linesDeleted = 250 + Math.floor(Math.random() * 150);  // 250-400
+        const linesAdded = 5 + Math.floor(Math.random() * 15);        // 5-20
+        const filesChanged = 3 + Math.floor(Math.random() * 5);       // 3-7
+
+        globalCommitCounter++;
+        records.push({
+          sha: `seed-${globalCommitCounter}`,
+          repoIndex,
+          authorLogin: persona.login,
+          message: 'refactor: consolidate legacy ' + pickRandom(['utilities', 'helpers', 'configs', 'types'] as const),
+          committedAt: commitDate,
+          linesAdded,
+          linesDeleted,
+          filesChanged,
+        });
+      }
+      weekStart = weekEnd;
+      continue;  // skip normal generation for this week
+    }
+
     if (persona.type === 'bot') {
-      // Bots: 1 commit per weekday (Mon-Fri)
+      // Bots: normally 1 commit per weekday (Mon-Fri); 8× during botStormWeeks.
+      // W-3: 8× for weeks 34-37 raises dependabot's storm-month volume to ~480 commits
+      // (160/repo × 3 repos) vs ~300 human commits → ~60-65% bot share.
+      const inStorm =
+        persona.botStormWeeks != null
+        && weeksSinceStart >= persona.botStormWeeks[0]
+        && weeksSinceStart <= persona.botStormWeeks[1];
+      const commitsPerWeekday = inStorm ? 8 : 1;
+
       for (let d = 0; d < 7; d++) {
         const dayMs = weekStart + d * MS_PER_DAY;
         if (dayMs >= DATA_END_MS) break;
         const dayDate = new Date(dayMs);
         const dow = dayDate.getUTCDay();
         if (dow >= 1 && dow <= 5) {
-          // It's a weekday — add a commit
-          const hours = 8 + Math.floor(Math.random() * 4);
-          const minutes = Math.floor(Math.random() * 60);
-          const seconds = Math.floor(Math.random() * 60);
-          const commitDate = new Date(dayMs);
-          commitDate.setUTCHours(hours, minutes, seconds, 0);
+          // It's a weekday — add commitsPerWeekday commits
+          for (let k = 0; k < commitsPerWeekday; k++) {
+            const hours = 8 + Math.floor(Math.random() * 4);
+            const minutes = Math.floor(Math.random() * 60);
+            const seconds = Math.floor(Math.random() * 60);
+            const commitDate = new Date(dayMs);
+            commitDate.setUTCHours(hours, minutes, seconds, 0);
 
-          globalCommitCounter++;
-          records.push({
-            sha: `seed-${globalCommitCounter}`,
-            repoIndex,
-            authorLogin: persona.login,
-            message: pickRandom(COMMIT_MESSAGES),
-            committedAt: commitDate,
-            linesAdded: logNormal(persona.sizeMu, persona.sizeSigma),
-            linesDeleted: 0,
-            filesChanged: 1,
-          });
+            globalCommitCounter++;
+            records.push({
+              sha: `seed-${globalCommitCounter}`,
+              repoIndex,
+              authorLogin: persona.login,
+              message: pickRandom(COMMIT_MESSAGES),
+              committedAt: commitDate,
+              linesAdded: logNormal(persona.sizeMu, persona.sizeSigma),
+              linesDeleted: 0,
+              filesChanged: 1,
+            });
+          }
         }
       }
     } else {
@@ -420,7 +484,12 @@ function generateCommitsForPersonaRepo(
 
       const ramp = aiRampProgress(weekStartDate);
 
-      if (persona.type === 'senior' || persona.type === 'regular') {
+      if (
+        persona.type === 'senior'
+        || persona.type === 'regular'
+        || persona.type === 'commit-only'
+        || persona.type === 'pr-reviewer'
+      ) {
         // After AI marker: more frequent, smaller commits
         frequencyMultiplier = 1.0 + 0.3 * ramp;
         currentMu = persona.sizeMu - 0.3 * ramp;
@@ -511,6 +580,7 @@ function generatePRs(commitsByAuthorRepo: Map<string, CommitRecord[]>): PRRecord
     // Skip bots — they don't create PRs
     const persona = PERSONAS.find(p => p.login === authorLogin);
     if (persona?.isBot) continue;
+    if (persona?.type === 'commit-only') continue;  // D-01: direct-to-main, no PRs
 
     // Sort commits by date
     const sorted = [...commits].sort((a, b) => a.committedAt.getTime() - b.committedAt.getTime());
@@ -592,6 +662,92 @@ function generatePRs(commitsByAuthorRepo: Map<string, CommitRecord[]>): PRRecord
   return prs;
 }
 
+/**
+ * Inject extra PRs for the pr-reviewer persona (D-02).
+ * These PRs span month boundaries: createdAt is mid-month, mergedAt is +14-21 days
+ * (landing in the NEXT calendar month for most PRs). This exercises the D-10
+ * merged_at author-set semantics path.
+ *
+ * Call AFTER generatePRs, BEFORE the PR batch insert, so authorIdByLogin is available.
+ */
+function injectPrReviewerPrs(existingPrs: PRRecord[]): PRRecord[] {
+  const persona = PERSONAS.find(p => p.type === 'pr-reviewer');
+  if (!persona) return existingPrs;
+
+  // reviewer-riley is in repos: [0]
+  const repoIndex = persona.repos[0];
+  const prNumberByRepo = new Map<number, number>();
+  // Seed the per-repo counter from existing PRs to avoid number collisions
+  for (const pr of existingPrs) {
+    const cur = prNumberByRepo.get(pr.repoIndex) ?? 0;
+    if (pr.number > cur) prNumberByRepo.set(pr.repoIndex, pr.number);
+  }
+
+  const injected: PRRecord[] = [];
+
+  // Active window: week 20 to week 48 from DATA_START (covers ~7 calendar months)
+  const windowStartMs = DATA_START_MS + 20 * MS_PER_WEEK;
+  const windowEndMs = DATA_START_MS + 48 * MS_PER_WEEK;
+
+  // Iterate month-by-month through the window
+  let monthCursor = new Date(windowStartMs);
+  monthCursor.setUTCDate(1);
+  monthCursor.setUTCHours(0, 0, 0, 0);
+
+  while (monthCursor.getTime() < windowEndMs) {
+    const monthStartMs = monthCursor.getTime();
+
+    // Create 2-4 PRs per month
+    const prCount = 2 + Math.floor(Math.random() * 3);
+
+    for (let p = 0; p < prCount; p++) {
+      // createdAt: days 10-25 of the month
+      const dayOffset = 10 + Math.floor(Math.random() * 16); // 10..25
+      const createdAt = new Date(monthStartMs);
+      createdAt.setUTCDate(dayOffset);
+      createdAt.setUTCHours(9 + Math.floor(Math.random() * 8), Math.floor(Math.random() * 60), 0, 0);
+
+      // mergedAt: createdAt + 14-21 days (crosses into next calendar month for most)
+      const turnaroundDays = 14 + Math.floor(Math.random() * 8); // 14..21
+      const mergedAt = new Date(createdAt.getTime() + turnaroundDays * MS_PER_DAY);
+
+      // Skip if either date is past DATA_END (preserve month-boundary invariant)
+      if (createdAt.getTime() >= DATA_END_MS) continue;
+      if (mergedAt.getTime() > DATA_END_MS) continue;
+
+      const linesAdded = logNormal(3.5, 0.5);
+      const linesDeleted = Math.round(linesAdded * 0.3);
+      const filesChanged = 2 + Math.floor(Math.random() * 4);
+
+      const prNum = (prNumberByRepo.get(repoIndex) ?? 0) + 1;
+      prNumberByRepo.set(repoIndex, prNum);
+
+      injected.push({
+        githubId: globalPRId++,
+        repoIndex,
+        authorLogin: persona.login,
+        number: prNum,
+        title: pickRandom(PR_TITLES),
+        state: 'merged',
+        createdAt,
+        mergedAt,
+        closedAt: mergedAt,
+        updatedAt: mergedAt,
+        linesAdded,
+        linesDeleted,
+        filesChanged,
+        commitCount: 1,
+      });
+    }
+
+    // Advance to next month
+    monthCursor.setUTCMonth(monthCursor.getUTCMonth() + 1);
+  }
+
+  console.log(`  Injected ${injected.length} PRs for pr-reviewer persona (reviewer-riley)`);
+  return [...existingPrs, ...injected];
+}
+
 // ---------------------------------------------------------------------------
 // Main seed execution
 // ---------------------------------------------------------------------------
@@ -666,9 +822,10 @@ allCommits.sort((a, b) => a.committedAt.getTime() - b.committedAt.getTime());
 
 console.log(`Generated ${allCommits.length} commits`);
 
-// Step 2: Generate PRs
-const allPRs = generatePRs(commitsByAuthorRepo);
-console.log(`Generated ${allPRs.length} PRs`);
+// Step 2: Generate PRs (then inject pr-reviewer standalone PRs)
+let allPRs = generatePRs(commitsByAuthorRepo);
+allPRs = injectPrReviewerPrs(allPRs);
+console.log(`Generated ${allPRs.length} PRs (including pr-reviewer injections)`);
 
 // Step 3: Compute firstCommitAt per author
 const firstCommitByAuthor = new Map<string, Date>();
@@ -863,6 +1020,28 @@ for (const row of seniorCheckRows) {
   const days = Math.floor(row.tenure_seconds / 86400);
   const cohort = days >= 360 ? 'SENIOR' : days >= 90 ? 'GROWING' : 'NEW';
   console.log(`  ${row.github_login} in ${row.full_name}: ${days} days (${cohort})`);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9.4.2 scenario logs
+// ---------------------------------------------------------------------------
+
+console.log('\nPhase 9.4.2 scenarios:');
+console.log('  Commit-only persona: direct-devon (commits, zero PRs)');
+console.log('  PR-reviewer persona: reviewer-riley (many PRs, ~1 commit/month)');
+
+const refactorWavePersona = PERSONAS.find(p => p.refactorWaveWeek != null);
+if (refactorWavePersona) {
+  const waveMonthIso = new Date(DATA_START_MS + refactorWavePersona.refactorWaveWeek! * MS_PER_WEEK).toISOString().slice(0, 10);
+  console.log(`  Refactor wave: ${refactorWavePersona.login} in week ${refactorWavePersona.refactorWaveWeek} (approx ${waveMonthIso})`);
+}
+
+const botStormPersona = PERSONAS.find(p => p.botStormWeeks != null);
+if (botStormPersona) {
+  const [w0, w1] = botStormPersona.botStormWeeks!;
+  const startIso = new Date(DATA_START_MS + w0 * MS_PER_WEEK).toISOString().slice(0, 10);
+  const endIso   = new Date(DATA_START_MS + w1 * MS_PER_WEEK).toISOString().slice(0, 10);
+  console.log(`  Bot storm: ${botStormPersona.login} weeks ${w0}-${w1} (${startIso} to ${endIso})`);
 }
 
 // ---------------------------------------------------------------------------
