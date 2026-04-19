@@ -70,6 +70,132 @@ function pastMonths(count: number, referenceDate: Date = new Date()): string[] {
   return months;
 }
 
+// ─── Activity profile: single source of truth for a generated org ─────────
+interface SyntheticPersona {
+  login: string;
+  cohort: 'new' | 'mid' | 'senior';
+  commitsPerMonth: number;
+  linesPerCommit: number;
+  prsPerMonth: number;
+  aiBoostFactor: number;  // 1.0 = no effect; 1.2 = 20% boost when in post-AI month
+}
+
+interface ActivityProfile {
+  personas: SyntheticPersona[];
+  months: string[];
+  aiMarkerMonth: string | null;
+  monthlyCommitsByPersona: Array<Map<string, number>>;
+  monthlyLinesByPersona:   Array<Map<string, number>>;
+  monthlyPrsByPersona:     Array<Map<string, number>>;
+}
+
+interface BuildActivityProfileParams {
+  contributorCount: number;
+  months: string[];
+  aiMarkerMonth: string | null;
+  cohorts: Array<{ key: 'new' | 'mid' | 'senior'; weight: number }>;
+  baseCommitsPerMonth: number;      // center of distribution for per-persona commits
+  baseLinesPerCommit: number;
+  basePrsPerMonth: number;
+  aiBoostMean: number;              // mean of aiBoostFactor across personas (e.g. 1.2)
+  dominantWindow?: { startIdx: number; endIdx: number; topShare: number }; // indices into months array
+  headcountSchedule?: Array<{ monthIdx: number; delta: number }>; // D-09: preserves team-size step (delta < 0 = departures)
+}
+
+function buildActivityProfile(p: BuildActivityProfileParams): ActivityProfile {
+  // 1. Generate personas
+  const personas: SyntheticPersona[] = [];
+  const cohortChoices = p.cohorts.map(c => ({ value: c.key, weight: c.weight }));
+  for (let i = 0; i < p.contributorCount; i++) {
+    const cohort = weightedChoice(cohortChoices);
+    personas.push({
+      login: animalName(i),
+      cohort,
+      commitsPerMonth: Math.max(1, Math.round(jitter(p.baseCommitsPerMonth, p.baseCommitsPerMonth * 0.3))),
+      linesPerCommit: Math.max(10, Math.round(logNormal(Math.log(p.baseLinesPerCommit), 0.4))),
+      prsPerMonth: Math.max(0.5, jitter(p.basePrsPerMonth, p.basePrsPerMonth * 0.25)),
+      aiBoostFactor: jitter(p.aiBoostMean, 0.05),
+    });
+  }
+
+  // 2. Compute monthly activity per persona
+  const monthlyCommitsByPersona = p.months.map(() => new Map<string, number>());
+  const monthlyLinesByPersona   = p.months.map(() => new Map<string, number>());
+  const monthlyPrsByPersona     = p.months.map(() => new Map<string, number>());
+
+  for (let mi = 0; mi < p.months.length; mi++) {
+    const month = p.months[mi];
+    const isPostAI = p.aiMarkerMonth !== null && month > p.aiMarkerMonth;
+
+    for (const persona of personas) {
+      const boost = isPostAI ? persona.aiBoostFactor : 1.0;
+      const commits = Math.max(0, Math.round(persona.commitsPerMonth * boost * jitter(1, 0.1)));
+      const lines = commits * Math.max(10, Math.round(persona.linesPerCommit * jitter(1, 0.1)));
+      const prs = Math.max(0, persona.prsPerMonth * boost * jitter(1, 0.1));
+
+      monthlyCommitsByPersona[mi].set(persona.login, commits);
+      monthlyLinesByPersona[mi].set(persona.login, lines);
+      monthlyPrsByPersona[mi].set(persona.login, prs);
+    }
+  }
+
+  // 3. Apply dominant window override: for the specified months, elevate ONE
+  //    persona to ~`topShare` of that month's activity on all 3 bases.
+  if (p.dominantWindow) {
+    const { startIdx, endIdx, topShare } = p.dominantWindow;
+    // Pick the 0th persona as the "dominant" one; could be any stable choice
+    const dominantLogin = personas[0].login;
+    for (let mi = startIdx; mi <= endIdx; mi++) {
+      if (mi >= p.months.length) break;
+      // Re-balance: set dominant to topShare × current total; scale others to (1-topShare) × current total
+      for (const bucket of [monthlyCommitsByPersona[mi], monthlyLinesByPersona[mi], monthlyPrsByPersona[mi]]) {
+        const currentTotal = Array.from(bucket.values()).reduce((s, v) => s + v, 0);
+        if (currentTotal === 0) continue;
+        const dominantValue = Math.round(currentTotal * topShare);
+        const remainingBudget = currentTotal - dominantValue;
+        const othersCount = bucket.size - 1;
+        const perOther = othersCount > 0 ? Math.max(0, Math.round(remainingBudget / othersCount)) : 0;
+        for (const login of bucket.keys()) {
+          if (login === dominantLogin) {
+            bucket.set(login, dominantValue);
+          } else {
+            bucket.set(login, perOther);
+          }
+        }
+      }
+    }
+  }
+
+  // 4. Apply headcountSchedule (D-09 team-size step): deactivate N personas
+  //    starting at the given monthIdx. Deactivation means zeroing out their
+  //    commits/lines/prs for that month and all later months. delta must be
+  //    negative (departure scenario); positive deltas are rejected.
+  if (p.headcountSchedule) {
+    for (const step of p.headcountSchedule) {
+      if (step.delta >= 0) continue;  // only departures supported — additions come from month-1 onwards naturally
+      const departingCount = Math.abs(step.delta);
+      // Pick the last-N personas as "departing" (stable, predictable choice)
+      const departingLogins = personas.slice(-departingCount).map(pp => pp.login);
+      for (let mi = step.monthIdx; mi < p.months.length; mi++) {
+        for (const login of departingLogins) {
+          monthlyCommitsByPersona[mi].set(login, 0);
+          monthlyLinesByPersona[mi].set(login, 0);
+          monthlyPrsByPersona[mi].set(login, 0);
+        }
+      }
+    }
+  }
+
+  return {
+    personas,
+    months: p.months,
+    aiMarkerMonth: p.aiMarkerMonth,
+    monthlyCommitsByPersona,
+    monthlyLinesByPersona,
+    monthlyPrsByPersona,
+  };
+}
+
 // ─── Base ExportMetadata builder ──────────────────────────────────────────────
 
 // Greek letters for anonymized repo names (matches main app's anonymizer)
