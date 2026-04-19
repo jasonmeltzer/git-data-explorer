@@ -51,7 +51,10 @@ export function useDeleteOrg() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (orgId: number) =>
-      fetch(`/api/orgs/${orgId}`, { method: 'DELETE' }).then(r => r.json()),
+      fetch(`/api/orgs/${orgId}`, { method: 'DELETE' }).then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['orgs'] }),
   });
 }
@@ -70,7 +73,10 @@ export function useUpdateOrg() {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
-      }).then(r => r.json()),
+      }).then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
     onSuccess: (_data, { orgId }) => {
       queryClient.invalidateQueries({ queryKey: ['orgs'] });
       queryClient.invalidateQueries({ queryKey: ['orgs', orgId] });
@@ -82,7 +88,10 @@ export function useDeleteSnapshot() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ orgId, snapshotId }: { orgId: number; snapshotId: number }) =>
-      fetch(`/api/orgs/${orgId}/snapshots/${snapshotId}`, { method: 'DELETE' }).then(r => r.json()),
+      fetch(`/api/orgs/${orgId}/snapshots/${snapshotId}`, { method: 'DELETE' }).then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
     onSuccess: (_data, { orgId }) => {
       queryClient.invalidateQueries({ queryKey: ['orgs'] });
       queryClient.invalidateQueries({ queryKey: ['orgs', orgId] });
