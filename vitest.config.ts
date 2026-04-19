@@ -12,8 +12,9 @@ export default defineConfig({
     environment: 'node',
     include: ['packages/**/__tests__/**/*.test.{ts,tsx}'],
     testTimeout: 10000,
-    environmentMatchGlobs: [
-      ['packages/**/client/__tests__/**/*.test.tsx', 'jsdom'],
-    ],
+    // NOTE: environmentMatchGlobs was removed in vitest 4.x.
+    // Component tests under packages/shared/components/**/__tests__/ use the
+    // `// @vitest-environment jsdom` docblock comment at the top of each file
+    // to opt into jsdom. Server/node tests remain in the default node environment.
   },
 });

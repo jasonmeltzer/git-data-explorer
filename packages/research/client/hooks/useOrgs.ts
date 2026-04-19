@@ -27,14 +27,22 @@ export interface OrgDetail extends OrgSummary {
 export function useOrgs() {
   return useQuery<OrgSummary[]>({
     queryKey: ['orgs'],
-    queryFn: () => fetch('/api/orgs').then(r => r.json()),
+    queryFn: () =>
+      fetch('/api/orgs').then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
   });
 }
 
 export function useOrg(orgId: number | null) {
   return useQuery<OrgDetail>({
     queryKey: ['orgs', orgId],
-    queryFn: () => fetch(`/api/orgs/${orgId}`).then(r => r.json()),
+    queryFn: () =>
+      fetch(`/api/orgs/${orgId}`).then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      }),
     enabled: orgId != null,
   });
 }

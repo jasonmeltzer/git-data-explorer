@@ -30,6 +30,8 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
+**Phase 9.4.1 complete** — Test coverage completion for Phase 9.4. Added 173 tests (from 521 to 694 across 53 files): route integration tests for all 6 new HTTP endpoints (main + research), unit tests for 4 shared chart components (TeamDistributionChart/Table, ScaryRealPanel, BeforeAfterComparison's four render branches), hook tests for the 3 new DashboardPage `useQuery` calls, and an end-to-end bundle round-trip (export → ZIP → import → DB → reconstruct) verifying Phase 9.4 data sections survive the pipeline with exact field equality. First jsdom component tests in the repo — `@testing-library/react` + `@vitest-environment jsdom` docblock pattern established.
+
 **Phase 9.4 complete** — Team Distribution section with concentration risk metrics (top-N share, HHI, Gini, bus factor), headcount-normalized output, and the period-array data model that will carry forward through Phases 9.5–10. BeforeAfterComparison rewired to consume `PeriodMetric[]`; export bundle gains `concentrationMonthly`, `headcountMonthly`, `periodMetrics` sections.
 
 What works today:
@@ -57,7 +59,7 @@ What works today:
 - **9-section dashboard** — Executive Summary KPI tiles, Team Distribution, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
 - **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle with anonymization
 - **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download
-- **520 passing tests** across 42 test files (including D-16 seed assertions when `npm run seed` has run)
+- **694 passing tests** across 53 test files (including D-16 seed assertions when `npm run seed` has run)
 
 ### Research Tool (`packages/research/`)
 A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
@@ -82,7 +84,7 @@ The project is organized as an npm workspaces monorepo:
 
 ### Code Quality
 - **ESLint configured** — flat config with typescript-eslint parser; includes `no-restricted-syntax` rule banning `asChild` prop on `@base-ui/react` components (prevents regression of resolved console warnings)
-- **520 passing tests** across 42 test files (including D-16 seed assertions when `npm run seed` has run)
+- **694 passing tests** across 53 test files (including D-16 seed assertions when `npm run seed` has run)
 
 What's next:
 - **Phase 9.5: Contribution Patterns** — per-developer monthly time series with privacy framing

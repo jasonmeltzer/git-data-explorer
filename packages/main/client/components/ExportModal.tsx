@@ -80,6 +80,69 @@ function extractAllLogins(bundle: ExportBundle): string[] {
 
 // ─── ZIP creation ─────────────────────────────────────────────────────────────
 
+/**
+ * Build the {filename -> bytes} dictionary for the export ZIP.
+ * Exported for testing. createAndDownloadZip wraps this with anonymization
+ * and browser-download mechanics.
+ */
+export function buildZipFileEntries(
+  bundle: ExportBundle,
+  format: 'csv' | 'json',
+): Record<string, Uint8Array> {
+  const files: Record<string, Uint8Array> = {};
+
+  // metadata.json always JSON regardless of format
+  files['metadata.json'] = strToU8(JSON.stringify(bundle.metadata, null, 2));
+
+  if (format === 'json') {
+    files['cohort-commits.json'] = strToU8(JSON.stringify(bundle.cohortCommits, null, 2));
+    files['cohort-prs.json'] = strToU8(JSON.stringify(bundle.cohortPrs, null, 2));
+    files['ramp-up.json'] = strToU8(JSON.stringify(bundle.rampUp, null, 2));
+    files['rolling-comparison.json'] = strToU8(JSON.stringify(bundle.rolling, null, 2));
+    files['contributors.json'] = strToU8(JSON.stringify(bundle.contributors, null, 2));
+    files['pr-turnaround.json'] = strToU8(JSON.stringify(bundle.prTurnaround, null, 2));
+    files['bot-ratio.json'] = strToU8(JSON.stringify(bundle.botRatio, null, 2));
+    if (bundle.executiveSummary) {
+      files['executive-summary.json'] = strToU8(JSON.stringify(bundle.executiveSummary, null, 2));
+    }
+    // FIX (9.4.1-06): consistent with CSV path — empty periodMetrics array
+    // should NOT produce an empty file.
+    if (bundle.periodMetrics && bundle.periodMetrics.length > 0) {
+      files['period-metrics.json'] = strToU8(JSON.stringify(bundle.periodMetrics, null, 2));
+    }
+    if (bundle.concentrationMonthly.length > 0) {
+      files['concentration-monthly.json'] = strToU8(JSON.stringify(bundle.concentrationMonthly, null, 2));
+    }
+    if (bundle.headcountMonthly.length > 0) {
+      files['headcount-monthly.json'] = strToU8(JSON.stringify(bundle.headcountMonthly, null, 2));
+    }
+  } else {
+    files['cohort-commits.csv'] = strToU8(arrayToCsv(bundle.cohortCommits as unknown as Record<string, unknown>[]));
+    files['cohort-prs.csv'] = strToU8(arrayToCsv(bundle.cohortPrs as unknown as Record<string, unknown>[]));
+    files['ramp-up.csv'] = strToU8(arrayToCsv(bundle.rampUp as unknown as Record<string, unknown>[]));
+    files['contributors.csv'] = strToU8(contributorsToCsv(bundle.contributors));
+    files['pr-turnaround.csv'] = strToU8(arrayToCsv(bundle.prTurnaround as unknown as Record<string, unknown>[]));
+    files['bot-ratio.csv'] = strToU8(arrayToCsv(bundle.botRatio as unknown as Record<string, unknown>[]));
+    if (bundle.rolling) {
+      files['rolling-comparison.csv'] = strToU8(rollingToCsv(bundle.rolling));
+    }
+    if (bundle.executiveSummary) {
+      files['executive-summary.csv'] = strToU8(executiveSummaryToCsv(bundle.executiveSummary));
+    }
+    if (bundle.periodMetrics && bundle.periodMetrics.length > 0) {
+      files['period-metrics.csv'] = strToU8(periodMetricsToCsv(bundle.periodMetrics));
+    }
+    if (bundle.concentrationMonthly.length > 0) {
+      files['concentration-monthly.csv'] = strToU8(concentrationMonthlyToCsv(bundle.concentrationMonthly));
+    }
+    if (bundle.headcountMonthly.length > 0) {
+      files['headcount-monthly.csv'] = strToU8(headcountMonthlyToCsv(bundle.headcountMonthly));
+    }
+  }
+
+  return files;
+}
+
 function createAndDownloadZip(
   bundle: ExportBundle,
   format: 'csv' | 'json',
@@ -95,54 +158,7 @@ function createAndDownloadZip(
     finalBundle = anonymizeBundle(bundle, pseudonymMap, repoMap);
   }
 
-  const files: Record<string, Uint8Array> = {};
-
-  // metadata.json always JSON regardless of format
-  files['metadata.json'] = strToU8(JSON.stringify(finalBundle.metadata, null, 2));
-
-  if (format === 'json') {
-    files['cohort-commits.json'] = strToU8(JSON.stringify(finalBundle.cohortCommits, null, 2));
-    files['cohort-prs.json'] = strToU8(JSON.stringify(finalBundle.cohortPrs, null, 2));
-    files['ramp-up.json'] = strToU8(JSON.stringify(finalBundle.rampUp, null, 2));
-    files['rolling-comparison.json'] = strToU8(JSON.stringify(finalBundle.rolling, null, 2));
-    files['contributors.json'] = strToU8(JSON.stringify(finalBundle.contributors, null, 2));
-    files['pr-turnaround.json'] = strToU8(JSON.stringify(finalBundle.prTurnaround, null, 2));
-    files['bot-ratio.json'] = strToU8(JSON.stringify(finalBundle.botRatio, null, 2));
-    if (finalBundle.executiveSummary) {
-      files['executive-summary.json'] = strToU8(JSON.stringify(finalBundle.executiveSummary, null, 2));
-    }
-    if (finalBundle.periodMetrics) {
-      files['period-metrics.json'] = strToU8(JSON.stringify(finalBundle.periodMetrics, null, 2));
-    }
-    if (finalBundle.concentrationMonthly.length > 0) {
-      files['concentration-monthly.json'] = strToU8(JSON.stringify(finalBundle.concentrationMonthly, null, 2));
-    }
-    if (finalBundle.headcountMonthly.length > 0) {
-      files['headcount-monthly.json'] = strToU8(JSON.stringify(finalBundle.headcountMonthly, null, 2));
-    }
-  } else {
-    files['cohort-commits.csv'] = strToU8(arrayToCsv(finalBundle.cohortCommits as unknown as Record<string, unknown>[]));
-    files['cohort-prs.csv'] = strToU8(arrayToCsv(finalBundle.cohortPrs as unknown as Record<string, unknown>[]));
-    files['ramp-up.csv'] = strToU8(arrayToCsv(finalBundle.rampUp as unknown as Record<string, unknown>[]));
-    files['contributors.csv'] = strToU8(contributorsToCsv(finalBundle.contributors));
-    files['pr-turnaround.csv'] = strToU8(arrayToCsv(finalBundle.prTurnaround as unknown as Record<string, unknown>[]));
-    files['bot-ratio.csv'] = strToU8(arrayToCsv(finalBundle.botRatio as unknown as Record<string, unknown>[]));
-    if (finalBundle.rolling) {
-      files['rolling-comparison.csv'] = strToU8(rollingToCsv(finalBundle.rolling));
-    }
-    if (finalBundle.executiveSummary) {
-      files['executive-summary.csv'] = strToU8(executiveSummaryToCsv(finalBundle.executiveSummary));
-    }
-    if (finalBundle.periodMetrics && finalBundle.periodMetrics.length > 0) {
-      files['period-metrics.csv'] = strToU8(periodMetricsToCsv(finalBundle.periodMetrics));
-    }
-    if (finalBundle.concentrationMonthly.length > 0) {
-      files['concentration-monthly.csv'] = strToU8(concentrationMonthlyToCsv(finalBundle.concentrationMonthly));
-    }
-    if (finalBundle.headcountMonthly.length > 0) {
-      files['headcount-monthly.csv'] = strToU8(headcountMonthlyToCsv(finalBundle.headcountMonthly));
-    }
-  }
+  const files = buildZipFileEntries(finalBundle, format);
 
   const zip = zipSync(files);
   const date = new Date().toISOString().split('T')[0];
