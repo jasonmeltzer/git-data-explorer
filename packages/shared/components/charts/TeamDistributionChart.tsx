@@ -33,7 +33,7 @@ const chartConfig = {
   },
 };
 
-function getBarFill(top1Share: number | null): string {
+export function getBarFill(top1Share: number | null): string {
   if (top1Share == null) return 'var(--chart-concentration)';
   if (top1Share >= 60) return 'oklch(0.577 0.245 27.325)'; // red (reuse --destructive light)
   if (top1Share >= 50) return 'oklch(0.75 0.15 85)';       // amber
