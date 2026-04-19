@@ -290,9 +290,16 @@ analytics.get('/api/analytics/contributors', (c) => {
 
 // ─── PR turnaround endpoint ───────────────────────────────────────────────────
 
+// Date refinement: reject garbage like "not-a-date" with 400 instead of
+// crashing downstream and returning 500. Mirrors cohortQuerySchema's validation.
+const dateStringOptional = z.string().refine(
+  v => !isNaN(new Date(v).getTime()),
+  { message: 'must be a valid date string' },
+).optional();
+
 const trendQuerySchema = z.object({
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: dateStringOptional,
+  endDate: dateStringOptional,
   repoIds: z.string().optional(),
 });
 
