@@ -177,7 +177,7 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'mrodriguez', name: 'Miguel Rodriguez', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
   { login: 'akumar', name: 'Anika Kumar', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
   { login: 'sjohansson', name: 'Sofia Johansson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
-  { login: 'lwilson', name: 'Liam Wilson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false },
+  { login: 'lwilson', name: 'Liam Wilson', type: 'senior', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 2.5, sizeMu: 4.0, sizeSigma: 1.2, isBot: false, refactorWaveWeek: 40 },
 
   // --- 10 Regulars (some leave mid-way for realistic churn) ---
   { login: 'tgarcia', name: 'Tomás García', type: 'regular', repos: [0, 1], joinWeekOffset: 0, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
@@ -399,6 +399,45 @@ function generateCommitsForPersonaRepo(
 
     // Calculate week index since join (for ramp-up logic)
     const weeksSinceJoin = (weekStart - joinMs) / MS_PER_WEEK;
+
+    // --- Refactor wave override ---
+    // If this persona has a designated refactor-wave week AND we're in that specific week
+    // (in the persona's first assigned repo only — to keep the deletion burst concentrated
+    // in one repo), generate the wave instead of normal commits.
+    const weeksSinceStart = (weekStart - DATA_START_MS) / MS_PER_WEEK;
+    if (
+      persona.refactorWaveWeek != null
+      && Math.floor(weeksSinceStart) === persona.refactorWaveWeek
+      && repoIndex === persona.repos[0]
+    ) {
+      const WAVE_COMMITS = 150;
+      // W-2 round 2: 150 commits × ~325 avg lines (linesDeleted + linesAdded) ≈ ~48.8k lines from lwilson.
+      // Non-lwilson humans contribute ~313 commits × ~60 lines = ~18.8k lines.
+      // Share ≈ 48.8 / 67.6 ≈ 72%, comfortable margin above the 70% Plan 03 threshold.
+      for (let c = 0; c < WAVE_COMMITS; c++) {
+        const commitDate = weightedRandomDate(weekStartDate, weekEndDate);
+        if (commitDate.getTime() >= activeEndMs) continue;
+
+        // Deletion-heavy: large deletions, small additions, several files
+        const linesDeleted = 250 + Math.floor(Math.random() * 150);  // 250-400
+        const linesAdded = 5 + Math.floor(Math.random() * 15);        // 5-20
+        const filesChanged = 3 + Math.floor(Math.random() * 5);       // 3-7
+
+        globalCommitCounter++;
+        records.push({
+          sha: `seed-${globalCommitCounter}`,
+          repoIndex,
+          authorLogin: persona.login,
+          message: 'refactor: consolidate legacy ' + pickRandom(['utilities', 'helpers', 'configs', 'types'] as const),
+          committedAt: commitDate,
+          linesAdded,
+          linesDeleted,
+          filesChanged,
+        });
+      }
+      weekStart = weekEnd;
+      continue;  // skip normal generation for this week
+    }
 
     if (persona.type === 'bot') {
       // Bots: 1 commit per weekday (Mon-Fri)
@@ -971,6 +1010,20 @@ for (const row of seniorCheckRows) {
   const days = Math.floor(row.tenure_seconds / 86400);
   const cohort = days >= 360 ? 'SENIOR' : days >= 90 ? 'GROWING' : 'NEW';
   console.log(`  ${row.github_login} in ${row.full_name}: ${days} days (${cohort})`);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 9.4.2 scenario logs
+// ---------------------------------------------------------------------------
+
+console.log('\nPhase 9.4.2 scenarios:');
+console.log('  Commit-only persona: direct-devon (commits, zero PRs)');
+console.log('  PR-reviewer persona: reviewer-riley (many PRs, ~1 commit/month)');
+
+const refactorWavePersona = PERSONAS.find(p => p.refactorWaveWeek != null);
+if (refactorWavePersona) {
+  const waveMonthIso = new Date(DATA_START_MS + refactorWavePersona.refactorWaveWeek! * MS_PER_WEEK).toISOString().slice(0, 10);
+  console.log(`  Refactor wave: ${refactorWavePersona.login} in week ${refactorWavePersona.refactorWaveWeek} (approx ${waveMonthIso})`);
 }
 
 // ---------------------------------------------------------------------------
