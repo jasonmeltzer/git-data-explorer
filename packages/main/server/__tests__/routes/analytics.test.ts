@@ -12,7 +12,11 @@
  *   (b) omitted dates → earliestCommitDate fallback (H1 regression)
  *   (c) empty repoIds → all complete repos path
  *   (d) invalid Zod input (malformed date string) → 400
- *   (e) simulated service throw → 500
+ *   (e) simulated service throw → 500 — intentionally omitted; see inline
+ *       comment where the concentration suite previously attempted this.
+ *       ESM live bindings make post-import rebinding of service exports
+ *       ineffective for Hono route handlers; a vi.mock top-level approach
+ *       is the follow-up path.
  */
 
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
