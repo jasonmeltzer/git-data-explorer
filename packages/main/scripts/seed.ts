@@ -249,7 +249,7 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'reviewer-riley', name: 'Riley Navarro', type: 'pr-reviewer', repos: [0], joinWeekOffset: 10, commitsPerWeek: 0.3, sizeMu: 2.5, sizeSigma: 0.8, isBot: false },
 
   // --- 3 Bots (all 3 repos, KNOWN_BOTS set) ---
-  { login: 'dependabot[bot]', name: 'Dependabot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
+  { login: 'dependabot[bot]', name: 'Dependabot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true, botStormWeeks: [34, 37] },
   { login: 'github-actions[bot]', name: 'GitHub Actions', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
   { login: 'renovate[bot]', name: 'Renovate Bot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
 ];
@@ -440,31 +440,41 @@ function generateCommitsForPersonaRepo(
     }
 
     if (persona.type === 'bot') {
-      // Bots: 1 commit per weekday (Mon-Fri)
+      // Bots: normally 1 commit per weekday (Mon-Fri); 8× during botStormWeeks.
+      // W-3: 8× for weeks 34-37 raises dependabot's storm-month volume to ~480 commits
+      // (160/repo × 3 repos) vs ~300 human commits → ~60-65% bot share.
+      const inStorm =
+        persona.botStormWeeks != null
+        && weeksSinceStart >= persona.botStormWeeks[0]
+        && weeksSinceStart <= persona.botStormWeeks[1];
+      const commitsPerWeekday = inStorm ? 8 : 1;
+
       for (let d = 0; d < 7; d++) {
         const dayMs = weekStart + d * MS_PER_DAY;
         if (dayMs >= DATA_END_MS) break;
         const dayDate = new Date(dayMs);
         const dow = dayDate.getUTCDay();
         if (dow >= 1 && dow <= 5) {
-          // It's a weekday — add a commit
-          const hours = 8 + Math.floor(Math.random() * 4);
-          const minutes = Math.floor(Math.random() * 60);
-          const seconds = Math.floor(Math.random() * 60);
-          const commitDate = new Date(dayMs);
-          commitDate.setUTCHours(hours, minutes, seconds, 0);
+          // It's a weekday — add commitsPerWeekday commits
+          for (let k = 0; k < commitsPerWeekday; k++) {
+            const hours = 8 + Math.floor(Math.random() * 4);
+            const minutes = Math.floor(Math.random() * 60);
+            const seconds = Math.floor(Math.random() * 60);
+            const commitDate = new Date(dayMs);
+            commitDate.setUTCHours(hours, minutes, seconds, 0);
 
-          globalCommitCounter++;
-          records.push({
-            sha: `seed-${globalCommitCounter}`,
-            repoIndex,
-            authorLogin: persona.login,
-            message: pickRandom(COMMIT_MESSAGES),
-            committedAt: commitDate,
-            linesAdded: logNormal(persona.sizeMu, persona.sizeSigma),
-            linesDeleted: 0,
-            filesChanged: 1,
-          });
+            globalCommitCounter++;
+            records.push({
+              sha: `seed-${globalCommitCounter}`,
+              repoIndex,
+              authorLogin: persona.login,
+              message: pickRandom(COMMIT_MESSAGES),
+              committedAt: commitDate,
+              linesAdded: logNormal(persona.sizeMu, persona.sizeSigma),
+              linesDeleted: 0,
+              filesChanged: 1,
+            });
+          }
         }
       }
     } else {
@@ -1024,6 +1034,14 @@ const refactorWavePersona = PERSONAS.find(p => p.refactorWaveWeek != null);
 if (refactorWavePersona) {
   const waveMonthIso = new Date(DATA_START_MS + refactorWavePersona.refactorWaveWeek! * MS_PER_WEEK).toISOString().slice(0, 10);
   console.log(`  Refactor wave: ${refactorWavePersona.login} in week ${refactorWavePersona.refactorWaveWeek} (approx ${waveMonthIso})`);
+}
+
+const botStormPersona = PERSONAS.find(p => p.botStormWeeks != null);
+if (botStormPersona) {
+  const [w0, w1] = botStormPersona.botStormWeeks!;
+  const startIso = new Date(DATA_START_MS + w0 * MS_PER_WEEK).toISOString().slice(0, 10);
+  const endIso   = new Date(DATA_START_MS + w1 * MS_PER_WEEK).toISOString().slice(0, 10);
+  console.log(`  Bot storm: ${botStormPersona.login} weeks ${w0}-${w1} (${startIso} to ${endIso})`);
 }
 
 // ---------------------------------------------------------------------------
