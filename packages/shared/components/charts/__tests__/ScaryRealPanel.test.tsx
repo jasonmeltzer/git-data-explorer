@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, test, expect, beforeAll, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -41,7 +42,6 @@ vi.mock('recharts', async () => {
     }: {
       children: React.ReactElement;
     }) => {
-      const React = require('react');
       return React.cloneElement(children, { width: 600, height: 300 });
     },
   };
