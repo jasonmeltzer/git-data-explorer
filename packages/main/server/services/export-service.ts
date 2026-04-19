@@ -7,6 +7,8 @@
  */
 
 import { createRequire } from 'node:module';
+import { sql } from 'drizzle-orm';
+import { db } from '../db/client.js';
 import type {
   ExportBundle,
   ExportRequest,
@@ -67,7 +69,28 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
 
   // ── Build query params ────────────────────────────────────────────────────
 
-  const startDate = new Date(req.startDate);
+  // If the client sent an epoch-adjacent startDate (the "All" preset uses
+  // new Date(0)), substitute the earliest actual commit date across the
+  // selected repos so metadata.startDate reads as a real date rather than
+  // "Dec 1969" in downstream UIs. Mirrors the H1 fix already applied to the
+  // analytics routes.
+  const reqStartMs = new Date(req.startDate).getTime();
+  const MIN_MEANINGFUL_MS = new Date('2000-01-01').getTime();
+  let effectiveStartIso = req.startDate;
+  if (reqStartMs < MIN_MEANINGFUL_MS) {
+    const repoFilter = req.repoIds.length > 0
+      ? `WHERE repo_id IN (${req.repoIds.filter(n => Number.isInteger(n) && n > 0).join(',')})`
+      : '';
+    const row = db.all(sql.raw(
+      `SELECT MIN(CAST(committed_at AS INTEGER)) AS minEpoch FROM commits ${repoFilter}`,
+    )) as Array<{ minEpoch: number | null }>;
+    const minEpoch = row[0]?.minEpoch ?? null;
+    if (minEpoch !== null) {
+      effectiveStartIso = new Date(minEpoch * 1000).toISOString();
+    }
+  }
+
+  const startDate = new Date(effectiveStartIso);
   const endDate = new Date(req.endDate);
   const repoIds = req.repoIds.length > 0 ? req.repoIds : undefined;
 
@@ -152,7 +175,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
   let prTurnaround: ExportBundle['prTurnaround'] = [];
   try {
     const result = getPrTurnaroundTrend({
-      startDate: req.startDate,
+      startDate: effectiveStartIso,
       endDate: req.endDate,
       repoIds,
     });
@@ -170,7 +193,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
   let botRatio: ExportBundle['botRatio'] = [];
   try {
     const result = getBotRatioTrend({
-      startDate: req.startDate,
+      startDate: effectiveStartIso,
       endDate: req.endDate,
       repoIds,
     });
@@ -189,7 +212,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
   let executiveSummary: ExportBundle['executiveSummary'] = null;
   try {
     const result = getExecutiveSummary({
-      startDate: req.startDate,
+      startDate: effectiveStartIso,
       endDate: req.endDate,
       repoIds,
     });
@@ -208,7 +231,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
   const markerDateStr = aiMarkerDate
     ? aiMarkerDate.toISOString().slice(0, 10)
     : null;
-  const periods = buildPeriodsFromMarker(req.startDate.slice(0, 10), req.endDate.slice(0, 10), markerDateStr);
+  const periods = buildPeriodsFromMarker(effectiveStartIso.slice(0, 10), req.endDate.slice(0, 10), markerDateStr);
 
   let periodMetrics: ExportBundle['periodMetrics'] = null;
   try {
@@ -239,7 +262,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
 
   const metadata: ExportMetadata = {
     exportTimestamp: new Date().toISOString(),
-    startDate: req.startDate,
+    startDate: effectiveStartIso,
     endDate: req.endDate,
     aiMarkerDate: aiMarkerDate ? aiMarkerDate.toISOString().split('T')[0] : null,
     tenureMode: req.tenureMode,
