@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
 import { BarChart3, TableProperties } from 'lucide-react';
 import { Badge } from '@shared/components/ui/badge.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
@@ -19,7 +18,7 @@ import { BeforeAfterComparison } from '@shared/components/charts/BeforeAfterComp
 import { computeCohortInsights, computeRampUpInsights } from '@shared/lib/insights.js';
 import { cohortTrendNarrative, METRIC_NARRATIVE_LABELS, METRIC_OPTIONS, CONCENTRATION_BASIS_OPTIONS } from '@shared/lib/narratives.js';
 import type { MetricOption } from '@shared/lib/narratives.js';
-import type { ConcentrationBasis, ConcentrationMonthlyRow, PeriodMetric } from '@shared/types.js';
+import type { ConcentrationBasis } from '@shared/types.js';
 import SnapshotHistory from '../components/SnapshotHistory.js';
 import { useOrg } from '../hooks/useOrgs.js';
 import OrgMetadataForm from '../components/OrgMetadataForm.js';
@@ -43,7 +42,10 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   const snapshotId = selectedSnapshotId ?? (org?.snapshots?.[0]?.id ?? null);
   const { data: bundle, isFetching: dataFetching } = useSnapshotData(orgId, snapshotId);
 
-  // Concentration and period-metrics from research API (Phase 9.4).
+  // Concentration and period-metrics are read from the reconstructed snapshot
+  // bundle (the H2 fix endpoint), NOT from separate org-level queries. Using
+  // bundle.* here ensures the Team Distribution section reacts to snapshot
+  // selection — the org-level endpoints would pin to the latest snapshot.
   //
   // The sibling `/api/orgs/:orgId/headcount` route also exists (see
   // packages/research/server/routes/orgs.ts) but is intentionally NOT consumed
@@ -51,24 +53,8 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   // spec (no ScaryRealPanel, no StatCalloutRow), so there is no current UI
   // surface that would render headcount. The route is available for Phase 9.7
   // cross-org aggregation.
-  const { data: concentrationData, isLoading: concentrationLoading } = useQuery<ConcentrationMonthlyRow[]>({
-    queryKey: ['research', 'concentration', orgId],
-    queryFn: async () => {
-      const res = await fetch(`/api/orgs/${orgId}/concentration`);
-      if (!res.ok) throw new Error('Failed to fetch concentration metrics');
-      return res.json();
-    },
-    enabled: orgId != null,
-  });
-  const { data: periodMetricsData, isLoading: periodMetricsLoading } = useQuery<PeriodMetric[] | null>({
-    queryKey: ['research', 'period-metrics', orgId],
-    queryFn: async () => {
-      const res = await fetch(`/api/orgs/${orgId}/period-metrics`);
-      if (!res.ok) throw new Error('Failed to fetch period metrics');
-      return res.json();
-    },
-    enabled: orgId != null,
-  });
+  const concentrationData = bundle?.concentrationMonthly ?? [];
+  const periodMetricsData = bundle?.periodMetrics ?? null;
   const snapshots = org?.snapshots ?? [];
 
   // Dynamic chart config from bundle metadata
@@ -183,7 +169,7 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
                 <TeamDistributionChart
                   data={(concentrationData ?? []).filter(r => r.basis === concentrationBasis)}
                   aiMarkerDate={aiMarkerDate}
-                  isLoading={concentrationLoading}
+                  isLoading={dataFetching && !bundle?.concentrationMonthly}
                 />
               ) : (
                 <TeamDistributionTable
@@ -482,7 +468,7 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
       {/* Before/After AI Adoption (rewired to periodMetrics per Phase 9.4 D-13) */}
       <BeforeAfterComparison
         periodMetrics={periodMetricsData ?? null}
-        isLoading={periodMetricsLoading}
+        isLoading={dataFetching && bundle?.periodMetrics === undefined}
       />
 
       {/* PR Turnaround */}
