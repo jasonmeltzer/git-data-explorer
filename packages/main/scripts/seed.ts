@@ -410,9 +410,11 @@ function generateCommitsForPersonaRepo(
       && Math.floor(weeksSinceStart) === persona.refactorWaveWeek
       && repoIndex === persona.repos[0]
     ) {
-      const WAVE_COMMITS = 150;
-      // W-2 round 2: 150 commits × ~325 avg lines (linesDeleted + linesAdded) ≈ ~48.8k lines from lwilson.
-      // Non-lwilson humans contribute ~313 commits × ~60 lines = ~18.8k lines.
+      const WAVE_COMMITS = 250;
+      // W-2 round 4: empirical runs showed non-lwilson humans contribute ~30k lines in 2025-12 (well above
+      // the plan's ~19k estimate), so 150/200 commits left lwilson at 69-69.2% — just under Plan 03's 70%
+      // threshold. 250 commits × ~337 avg lines ≈ 84k lwilson lines; share ≈ 84 / (84 + 30) ≈ 74% with
+      // comfortable margin.
       // Share ≈ 48.8 / 67.6 ≈ 72%, comfortable margin above the 70% Plan 03 threshold.
       for (let c = 0; c < WAVE_COMMITS; c++) {
         const commitDate = weightedRandomDate(weekStartDate, weekEndDate);
