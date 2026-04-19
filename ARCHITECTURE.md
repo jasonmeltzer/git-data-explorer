@@ -73,7 +73,7 @@ git-data-explorer/
 │  NO GitHub API — all data from imported ExportBundles    │
 │                        │                                 │
 │  SQLite (better-sqlite3) — data/research.db             │
-│  Drizzle ORM schema (8 tables)                          │
+│  Drizzle ORM schema (11 tables)                         │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -121,7 +121,7 @@ Hono HTTP server. No GitHub API dependency — all data from imported ExportBund
 - `analytics.ts` — `GET /api/analytics/cross-org/cohort-metrics`, `GET /api/analytics/cross-org/ramp-up`, `GET /api/analytics/cross-org/comparison`
 
 **Services** (`server/services/`):
-- `import-service.ts` — ZIP parsing (fflate), bundle validation, org auto-creation, DB insertion, duplicate detection by SHA-256 content hash, cross-org duplicate detection (exact hash match + fuzzy match on overlapping owners/repos/dates)
+- `import-service.ts` — ZIP parsing (fflate), bundle validation, org auto-creation, DB insertion, duplicate detection by SHA-256 content hash, cross-org duplicate detection (exact hash match + fuzzy match on overlapping owners/repos/dates). When the caller passes `orgId=null` (the `/api/import/file` path), a contentHash match against any existing snapshot auto-attaches the new snapshot to that org rather than creating a parallel duplicate org — re-importing the same ZIP produces a new snapshot on the original org.
 - `validation.ts` — Zod schema for ExportBundle; validates shape, warns on null/empty optional sections; backward-compatible with old toolVersion bundles
 - `org-service.ts` — Org and snapshot CRUD (create, list, get, update, delete with cascade)
 - `aggregation.ts` — Cross-org aggregation engine: `getAggregatedCohortMetrics`, `getAggregatedRampUp`, `getOrgComparisonTable`; uses latest snapshot per org
@@ -367,7 +367,7 @@ packages/
     └── server/
         ├── index.ts                  # Hono app (port 3002)
         ├── db/
-        │   ├── schema.ts             # Drizzle table definitions (8 tables)
+        │   ├── schema.ts             # Drizzle table definitions (11 tables: Phase 9.4 added concentration_monthly, headcount_monthly, period_metrics)
         │   ├── client.ts             # DB singleton (data/research.db)
         │   └── migrate.ts            # Migration runner
         ├── routes/
