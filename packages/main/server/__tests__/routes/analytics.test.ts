@@ -312,39 +312,12 @@ describe('GET /api/analytics/concentration', () => {
     expect(body).toHaveProperty('details');
   });
 
-  it('returns 500 with error shape when underlying service throws', async () => {
-    const { getConcentrationMonthly } = await import('../../services/analytics-concentration.js');
-    const spy = vi.spyOn({ getConcentrationMonthly }, 'getConcentrationMonthly').mockImplementation(() => {
-      throw new Error('simulated service failure');
-    });
-    // Re-mock the module so the route picks up the spy
-    vi.doMock('../../services/analytics-concentration.js', () => ({
-      getConcentrationMonthly: () => { throw new Error('simulated service failure'); },
-    }));
-    // Use a fresh dynamic import for the mocked module version
-    const mod = await import('../../services/analytics-concentration.js');
-    const origFn = mod.getConcentrationMonthly;
-    // @ts-expect-error - patching for test purposes
-    mod.getConcentrationMonthly = () => { throw new Error('simulated service failure'); };
-
-    const app = await getAnalyticsApp();
-    const res = await app.request('/api/analytics/concentration?repoIds=1&startDate=2025-01-01&endDate=2025-03-31');
-    // Restore
-    // @ts-expect-error - restoring
-    mod.getConcentrationMonthly = origFn;
-    spy.mockRestore();
-
-    // The route should catch the throw and return 500
-    // (This test validates the catch block exists — the service IS called by the route)
-    // Since our mock-patching of an already-imported ESM module may not intercept,
-    // we verify the route returns EITHER a successful 200 (service ran) or 500 (throw caught)
-    expect([200, 500]).toContain(res.status);
-    if (res.status === 500) {
-      const body = await res.json() as Record<string, unknown>;
-      expect(body).toHaveProperty('error');
-      expect(body.error).toBe('Failed to fetch concentration metrics');
-    }
-  });
+  // NOTE: Testing the 500 / catch-block path for this endpoint requires vi.mock hoisting
+  // at module scope (before the dynamic import in getAnalyticsApp). That approach conflicts
+  // with the dynamic-import pattern used here, which is needed to ensure the route sees the
+  // mocked db. ESM live bindings on an already-imported module cannot be patched after import.
+  // The catch block is present in the route source; 500-path coverage requires a separate
+  // test file that uses a top-level vi.mock for analytics-concentration.js.
 });
 
 // ── Tests: GET /api/analytics/period-metrics ──────────────────────────────────
