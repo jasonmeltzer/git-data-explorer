@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { sql } from 'drizzle-orm';
+import { db } from '../db/client.js';
 import { getAiMarkerDate, setAiMarkerDate } from '../services/analytics-config.js';
 import { getCohortCommitMetrics, getCohortPrMetrics } from '../services/analytics-cohorts.js';
 import { getRampUpCurves } from '../services/analytics-rampup.js';
@@ -9,7 +11,10 @@ import { getCohortConfig, setCohortConfig } from '../services/cohort-config-serv
 import { getPrTurnaroundTrend } from '../services/analytics-pr-turnaround.js';
 import { getBotRatioTrend } from '../services/analytics-bot-ratio.js';
 import { getExecutiveSummary } from '../services/analytics-summary.js';
-import { getBeforeAfterComparison } from '../services/analytics-before-after.js';
+import { getConcentrationMonthly } from '../services/analytics-concentration.js';
+import { getHeadcountMonthly } from '../services/analytics-headcount.js';
+import { getPeriodMetrics } from '../services/analytics-period-metrics.js';
+import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 
 const analytics = new Hono();
 
@@ -285,9 +290,16 @@ analytics.get('/api/analytics/contributors', (c) => {
 
 // ─── PR turnaround endpoint ───────────────────────────────────────────────────
 
+// Date refinement: reject garbage like "not-a-date" with 400 instead of
+// crashing downstream and returning 500. Mirrors cohortQuerySchema's validation.
+const dateStringOptional = z.string().refine(
+  v => !isNaN(new Date(v).getTime()),
+  { message: 'must be a valid date string' },
+).optional();
+
 const trendQuerySchema = z.object({
-  startDate: z.string().optional(),
-  endDate: z.string().optional(),
+  startDate: dateStringOptional,
+  endDate: dateStringOptional,
   repoIds: z.string().optional(),
 });
 
@@ -352,25 +364,96 @@ analytics.get('/api/analytics/summary', (c) => {
   }
 });
 
-// ─── Before/after comparison endpoint ────────────────────────────────────────
+// ─── Period-metrics endpoint ──────────────────────────────────────────────────
 
-// GET /api/analytics/before-after — metrics split at AI marker date
-analytics.get('/api/analytics/before-after', (c) => {
+// Earliest-commit fallback for the period-aware endpoints. Returns null when
+// there are no commits in scope (empty repo set or empty DB). Only integer
+// repoIds reach sql.raw, per the SEC-01 guard.
+function earliestCommitDate(repoIdsParsed: number[] | undefined): string | null {
+  const filter = repoIdsParsed && repoIdsParsed.length > 0
+    ? `WHERE repo_id IN (${repoIdsParsed.filter(n => Number.isInteger(n) && n > 0).join(',')})`
+    : '';
+  const row = db.all(sql.raw(
+    `SELECT MIN(CAST(committed_at AS INTEGER)) AS minEpoch FROM commits ${filter}`,
+  )) as Array<{ minEpoch: number | null }>;
+  const minEpoch = row[0]?.minEpoch ?? null;
+  if (minEpoch === null) return null;
+  return new Date(minEpoch * 1000).toISOString().slice(0, 10);
+}
+
+// Shared helper: resolve the analysis window for the 3 period-aware endpoints.
+// Accepts optional startDate/endDate from query; falls back to the repo set's
+// earliest commit (per H1 audit finding — previous hardcoded '2020-01-01' made
+// periodMetrics[0].startDate always claim 2020-01-01 regardless of actual data).
+function resolvePeriods(startDate: string | undefined, endDate: string | undefined, repoIdsParsed: number[] | undefined) {
+  const resolvedEnd = endDate ?? new Date().toISOString().slice(0, 10);
+  const resolvedStart = startDate ?? earliestCommitDate(repoIdsParsed) ?? '2020-01-01';
+  const aiMarkerDate = getAiMarkerDate();
+  const markerDateStr = aiMarkerDate ? aiMarkerDate.toISOString().slice(0, 10) : null;
+  return buildPeriodsFromMarker(resolvedStart, resolvedEnd, markerDateStr);
+}
+
+// GET /api/analytics/period-metrics — metrics per period (replaces before-after)
+analytics.get('/api/analytics/period-metrics', (c) => {
   try {
-    const schema = z.object({ repoIds: z.string().optional() });
-    const parsed = schema.safeParse(c.req.query());
+    const parsed = trendQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
     }
 
-    const { repoIds } = parsed.data;
+    const { startDate, endDate, repoIds } = parsed.data;
     const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
 
-    const result = getBeforeAfterComparison({ repoIds: repoIdsParsed });
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
+    const result = getPeriodMetrics(repoIdsParsed, periods);
     return c.json(result);
   } catch (err) {
-    console.error('GET /api/analytics/before-after error:', err);
-    return c.json({ error: 'Failed to fetch before/after comparison' }, 500);
+    console.error('GET /api/analytics/period-metrics error:', err);
+    return c.json({ error: 'Failed to fetch period metrics' }, 500);
+  }
+});
+
+// ─── Concentration endpoint ───────────────────────────────────────────────────
+
+// GET /api/analytics/concentration — monthly concentration metrics (top-N, HHI, Gini, bus factor)
+analytics.get('/api/analytics/concentration', (c) => {
+  try {
+    const parsed = trendQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
+    const result = getConcentrationMonthly(repoIdsParsed, periods);
+    return c.json(result);
+  } catch (err) {
+    console.error('GET /api/analytics/concentration error:', err);
+    return c.json({ error: 'Failed to fetch concentration metrics' }, 500);
+  }
+});
+
+// ─── Headcount endpoint ───────────────────────────────────────────────────────
+
+// GET /api/analytics/headcount — monthly active headcount and output per dev
+analytics.get('/api/analytics/headcount', (c) => {
+  try {
+    const parsed = trendQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
+    const result = getHeadcountMonthly(repoIdsParsed, periods);
+    return c.json(result);
+  } catch (err) {
+    console.error('GET /api/analytics/headcount error:', err);
+    return c.json({ error: 'Failed to fetch headcount metrics' }, 500);
   }
 });
 

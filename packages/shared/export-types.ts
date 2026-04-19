@@ -2,9 +2,9 @@
  * Types for the data export feature.
  *
  * NOTE: Server-side analytics types (PrTurnaroundRow, BotRatioRow, ExecutiveSummary,
- * BeforeAfterComparison) are inlined here rather than imported from server services
- * to keep this shared module free of server-only imports (which would break Vite
- * bundling for the client).
+ * ConcentrationMonthlyRow, HeadcountMonthlyRow, Period, PeriodMetric) are inlined
+ * here rather than imported from server services to keep this shared module free of
+ * server-only imports (which would break Vite bundling for the client).
  */
 
 import type {
@@ -43,17 +43,43 @@ export interface ExecutiveSummary {
   aiAdoptionDelta: string | null;
 }
 
-export interface BeforeAfterMetrics {
-  avgCommitSize: number;
-  prFrequency: number;
-  rampUpSpeed: number | null;
-  activeContributors: number;
+// ─── Inlined Phase 9.4 types (matching shared/types.ts) ──────────────────────
+// Inlined per Phase 08 convention: shared module must not import from server.
+
+export interface Period {
+  startDate: string;   // ISO date string
+  endDate: string;     // ISO date string
+  label: string;
+  markerDate?: string; // ISO date string, for chart marker decoration
 }
 
-export interface BeforeAfterComparison {
-  before: BeforeAfterMetrics;
-  after: BeforeAfterMetrics;
-  markerDate: string;
+export interface PeriodMetric {
+  period: Period;
+  metrics: Record<string, number | null>;
+}
+
+export type ConcentrationBasis = 'prs' | 'commits' | 'lines';
+
+export interface ConcentrationMonthlyRow {
+  month: string;            // 'YYYY-MM'
+  basis: ConcentrationBasis;
+  top1Share: number | null; // 0-100 (percentage), null if zero activity for this basis
+  top3Share: number | null;
+  top5Share: number | null;
+  hhi: number | null;       // 0-1 scale
+  gini: number | null;      // 0-1 scale
+  busFactor: number | null; // devsToReach50Pct, integer
+  activeDevs: number;       // always populated (commit-OR-PR definition)
+  topContributor: string | null; // github_login of top-1 contributor for chart annotation
+}
+
+export interface HeadcountMonthlyRow {
+  month: string;               // 'YYYY-MM'
+  activeDevs: number;          // commit-OR-PR active definition (D-09)
+  totalPrs: number;
+  totalCommits: number;
+  prsPerDev: number | null;    // null if activeDevs=0
+  commitsPerDev: number | null;
 }
 
 // ─── Export feature types ─────────────────────────────────────────────────────
@@ -82,7 +108,9 @@ export interface ExportBundle {
   prTurnaround: PrTurnaroundRow[];
   botRatio: BotRatioRow[];
   executiveSummary: ExecutiveSummary | null;
-  beforeAfter: BeforeAfterComparison | null;
+  periodMetrics: PeriodMetric[] | null;             // replaces beforeAfter (D-13)
+  concentrationMonthly: ConcentrationMonthlyRow[];  // NEW (Phase 9.4)
+  headcountMonthly: HeadcountMonthlyRow[];           // NEW (Phase 9.4)
 }
 
 export interface ExportRequest {

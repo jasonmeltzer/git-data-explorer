@@ -8,7 +8,7 @@ import { useCohortPrs } from '../hooks/useCohortPrs.js';
 import { useCohortCommits } from '../hooks/useCohortCommits.js';
 import { useRampUp } from '../hooks/useRampUp.js';
 import { useRolling } from '../hooks/useRolling.js';
-import { cohortTrendNarrative, rollingNarrative, METRIC_OPTIONS, METRIC_NARRATIVE_LABELS } from '@shared/lib/narratives.js';
+import { cohortTrendNarrative, rollingNarrative, METRIC_OPTIONS, METRIC_NARRATIVE_LABELS, CONCENTRATION_BASIS_OPTIONS } from '@shared/lib/narratives.js';
 import type { MetricOption } from '@shared/lib/narratives.js';
 import { computeCohortInsights, computeRampUpInsights, computeRollingInsights } from '@shared/lib/insights.js';
 import FilterBar from '../components/FilterBar.js';
@@ -23,6 +23,9 @@ import NarrativeCard from '@shared/components/charts/NarrativeCard.js';
 import { ContributorTable } from '../components/ContributorTable.js';
 import { ExecutiveSummary } from '@shared/components/charts/ExecutiveSummary.js';
 import { BeforeAfterComparison } from '@shared/components/charts/BeforeAfterComparison.js';
+import { TeamDistributionChart } from '@shared/components/charts/TeamDistributionChart.js';
+import { TeamDistributionTable } from '@shared/components/charts/TeamDistributionTable.js';
+import { ScaryRealPanel } from '@shared/components/charts/ScaryRealPanel.js';
 import { PrTurnaroundChart } from '@shared/components/charts/PrTurnaroundChart.js';
 import { BotRatioChart } from '@shared/components/charts/BotRatioChart.js';
 import { SectionHeader } from '@shared/components/SectionHeader.js';
@@ -32,7 +35,7 @@ import { StatCalloutBox } from '@shared/components/charts/StatCalloutBox.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-import type { TrackedRepo } from '@shared/types.js';
+import type { TrackedRepo, ConcentrationBasis, ConcentrationMonthlyRow, HeadcountMonthlyRow, PeriodMetric } from '@shared/types.js';
 import type { ExportBundle } from '@shared/export-types.js';
 
 export default function DashboardPage() {
@@ -50,6 +53,8 @@ export default function DashboardPage() {
   const [cohortPrView, setCohortPrView] = useState<'chart' | 'table'>('chart');
   const [cohortCommitView, setCohortCommitView] = useState<'chart' | 'table'>('chart');
   const [rampUpView, setRampUpView] = useState<'chart' | 'table'>('chart');
+  const [concentrationBasis, setConcentrationBasis] = useState<ConcentrationBasis>('prs');
+  const [concentrationView, setConcentrationView] = useState<'chart' | 'table'>('chart');
 
   // Sharing prompt state
   const [sharingPromptOpen, setSharingPromptOpen] = useState(false);
@@ -89,6 +94,39 @@ export default function DashboardPage() {
     granularity: rollingGranularity, repoIds,
   });
 
+  // Fetch concentration, headcount, and period metrics data (Phase 9.4).
+  // Pass startDate/endDate so period boundaries reflect the user's selected range
+  // rather than the previous hardcoded '2020-01-01' fallback.
+  // Backend treats empty repoIds as "all complete repos" — mirrors
+  // useCohortPrs / useCohortCommits / useRampUp / useRolling behavior.
+  // Don't gate on repoIds.length; otherwise the Team Distribution section
+  // stays empty until the user manually opens the repo filter.
+  const teamDistributionParams = { startDate, endDate, repoIds: repoIds.join(',') };
+  const { data: concentrationData, isLoading: concentrationLoading, isError: concentrationError } = useQuery<ConcentrationMonthlyRow[]>({
+    queryKey: ['analytics', 'concentration', startDate, endDate, repoIds],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/concentration?' + new URLSearchParams(teamDistributionParams));
+      if (!res.ok) throw new Error('Failed to fetch concentration metrics');
+      return res.json();
+    },
+  });
+  const { data: headcountData, isLoading: headcountLoading, isError: headcountError } = useQuery<HeadcountMonthlyRow[]>({
+    queryKey: ['analytics', 'headcount', startDate, endDate, repoIds],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/headcount?' + new URLSearchParams(teamDistributionParams));
+      if (!res.ok) throw new Error('Failed to fetch headcount metrics');
+      return res.json();
+    },
+  });
+  const { data: periodMetricsData, isLoading: periodMetricsLoading, isError: periodMetricsError } = useQuery<PeriodMetric[]>({
+    queryKey: ['analytics', 'period-metrics', startDate, endDate, repoIds],
+    queryFn: async () => {
+      const res = await fetch('/api/analytics/period-metrics?' + new URLSearchParams(teamDistributionParams));
+      if (!res.ok) throw new Error('Failed to fetch period metrics');
+      return res.json();
+    },
+  });
+
   // Check token + repos existence + seed mode
   const { data: trackedData, isLoading: reposLoading } = useQuery<{ repos: TrackedRepo[] }>({
     queryKey: ['repos', 'tracked'],
@@ -108,13 +146,78 @@ export default function DashboardPage() {
   const isSeedDb = healthData?.isSeedDb ?? false;
   const hasToken = isSeedDb || (tokenData?.configured ?? true); // seed DB doesn't need a real token
   const anyFetching = prFetching || commitFetching || rampUpFetching || rollingFetching;
-  const anyError = prError || commitError || rampUpError || rollingError;
+  const anyError = prError || commitError || rampUpError || rollingError
+    || concentrationError || headcountError || periodMetricsError;
 
   // Compute insights for existing sections
   const prInsights = computeCohortInsights(prData, prMetric, 'pr');
   const commitInsights = computeCohortInsights(commitData, commitMetric, 'commit');
   const rampUpInsights = computeRampUpInsights(rampUpData, !!markerDate);
   const rollingInsights = computeRollingInsights(rollingData);
+
+  // Filter concentration data by selected basis and compute stat callout values
+  const filteredConcentration: ConcentrationMonthlyRow[] = (concentrationData ?? []).filter(
+    (r: ConcentrationMonthlyRow) => r.basis === concentrationBasis,
+  );
+
+  // Sort by month asc; take latest and prior-month for delta computation
+  const sortedConc = [...filteredConcentration].sort((a, b) => a.month.localeCompare(b.month));
+  const latestConc = sortedConc[sortedConc.length - 1] ?? null;
+  const priorConc = sortedConc[sortedConc.length - 2] ?? null;
+
+  const fmtPct = (v: number | null) => (v == null ? '--' : `${Math.round(v)}%`);
+  const fmtInt = (v: number | null) => (v == null ? '--' : String(Math.round(v)));
+
+  const busFactor = latestConc?.busFactor ?? null;
+  const priorBusFactor = priorConc?.busFactor ?? null;
+  const busDelta = priorBusFactor != null && busFactor != null
+    ? `${busFactor - priorBusFactor >= 0 ? '+' : ''}${busFactor - priorBusFactor} vs prior month`
+    : undefined;
+  const busDir: 'up' | 'down' | 'neutral' | undefined = busDelta == null
+    ? undefined
+    : busFactor! > priorBusFactor! ? 'up' : busFactor! < priorBusFactor! ? 'down' : 'neutral';
+
+  const top1Share = latestConc?.top1Share ?? null;
+  const priorTop1 = priorConc?.top1Share ?? null;
+  const topDeltaPp = priorTop1 != null && top1Share != null ? top1Share - priorTop1 : null;
+  const topDelta = topDeltaPp != null
+    ? `${topDeltaPp >= 0 ? '+' : ''}${Math.round(topDeltaPp)}pp`
+    : undefined;
+  // lowerIsBetter: decreasing share = up/emerald
+  const topDir: 'up' | 'down' | 'neutral' | undefined = topDeltaPp == null
+    ? undefined
+    : topDeltaPp < 0 ? 'up' : topDeltaPp > 0 ? 'down' : 'neutral';
+
+  const activeDevs = latestConc?.activeDevs ?? null;
+  const priorDevs = priorConc?.activeDevs ?? null;
+  const devsDeltaNum = priorDevs != null && activeDevs != null ? activeDevs - priorDevs : null;
+  const devsDelta = devsDeltaNum != null
+    ? `${devsDeltaNum >= 0 ? '+' : ''}${devsDeltaNum} vs prior month`
+    : undefined;
+  const devsDir: 'up' | 'down' | 'neutral' | undefined = devsDeltaNum == null
+    ? undefined
+    : devsDeltaNum > 0 ? 'up' : devsDeltaNum < 0 ? 'down' : 'neutral';
+
+  // Auto-generate concentration narrative
+  const concentrationNarrative = (() => {
+    if (sortedConc.length < 2) return '';
+    const first = sortedConc[0];
+    const last = sortedConc[sortedConc.length - 1];
+    const parts: string[] = [];
+    if (first.top1Share != null && last.top1Share != null) {
+      const dir = last.top1Share < first.top1Share ? 'decreased' : 'increased';
+      parts.push(`Top contributor share ${dir} from ${Math.round(first.top1Share)}% to ${Math.round(last.top1Share)}% (${concentrationBasis} basis)`);
+    }
+    if (first.busFactor != null && last.busFactor != null && first.busFactor !== last.busFactor) {
+      const dir = last.busFactor > first.busFactor ? 'improved' : 'decreased';
+      parts.push(`bus factor ${dir} from ${first.busFactor} to ${last.busFactor} developers`);
+    }
+    if (first.activeDevs !== last.activeDevs) {
+      const dir = last.activeDevs > first.activeDevs ? 'grew' : 'shrank';
+      parts.push(`active team ${dir} from ${first.activeDevs} to ${last.activeDevs} contributors`);
+    }
+    return parts.length > 0 ? parts.join('; ') + '.' : '';
+  })();
 
   // Show empty state: no token configured
   if (!reposLoading && tokenData && !hasToken) {
@@ -233,7 +336,124 @@ export default function DashboardPage() {
         {/* Section 1: Executive Summary (D-11) */}
         <ExecutiveSummary startDate={startDate} endDate={endDate} repoIds={repoIds} />
 
-        {/* Section 2: Cohort Trends (D-11) */}
+        {/* Section 2: Team Distribution (D-01..D-12) */}
+        <section>
+          <SectionHeader title="Team Distribution" scope="filtered" />
+          <div className="mt-4 space-y-6">
+
+            {/* Subsection 2a: Concentration Risk */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-base font-medium">Concentration Risk</h3>
+                <div className="flex items-center gap-2">
+                  <Tabs value={concentrationBasis} onValueChange={(v) => setConcentrationBasis(v as ConcentrationBasis)}>
+                    <TabsList className="h-8 gap-1">
+                      {CONCENTRATION_BASIS_OPTIONS.map(opt => (
+                        <TabsTrigger key={opt.value} value={opt.value} className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">
+                          {opt.label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                  <Tabs value={concentrationView} onValueChange={(v) => setConcentrationView(v as 'chart' | 'table')}>
+                    <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+                      <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
+                      <TabsTrigger value="table" className="h-full px-2 py-0.5 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view"><TableProperties className="h-3.5 w-3.5" /></TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              </div>
+              <StatCalloutRow>
+                <StatCalloutBox
+                  label="Bus Factor"
+                  value={fmtInt(busFactor) + (busFactor != null ? ' devs' : '')}
+                  delta={busDelta}
+                  deltaDir={busDir}
+                  isLoading={concentrationLoading && filteredConcentration.length === 0}
+                />
+                <StatCalloutBox
+                  label="Top Contributor Share"
+                  value={fmtPct(top1Share)}
+                  delta={topDelta}
+                  deltaDir={topDir}
+                  isLoading={concentrationLoading && filteredConcentration.length === 0}
+                />
+                <StatCalloutBox
+                  label="Active Developers"
+                  value={fmtInt(activeDevs)}
+                  delta={devsDelta}
+                  deltaDir={devsDir}
+                  isLoading={concentrationLoading && filteredConcentration.length === 0}
+                />
+              </StatCalloutRow>
+              {concentrationNarrative && (
+                <NarrativeCard text={concentrationNarrative} />
+              )}
+              {concentrationView === 'chart'
+                ? <TeamDistributionChart data={filteredConcentration} aiMarkerDate={markerDate} isLoading={concentrationLoading} />
+                : <TeamDistributionTable data={filteredConcentration} />
+              }
+              <HelpPanel>
+                <p>
+                  Team Distribution shows how code contributions are spread across your team over time.
+                  The concentration chart tracks what percentage of monthly output comes from your most
+                  active contributors. High concentration (one person doing 40-50%+ of PRs) signals bus
+                  factor risk -- if that person leaves, the team may struggle to absorb the gap.
+                </p>
+                <p className="mt-2">
+                  The HHI (Herfindahl-Hirschman Index) overlay line measures overall concentration on a
+                  0-1 scale. Values above 0.25 indicate significant concentration. The table view also
+                  includes the Gini coefficient, which captures the full inequality spread across all
+                  contributors.
+                </p>
+                <p className="mt-2">
+                  Bus Factor shows the minimum number of developers whose combined contributions reach
+                  50% of monthly output. A bus factor of 1 means a single person accounts for half the
+                  work -- a clear resilience risk.
+                </p>
+                <p className="mt-2">
+                  The PRs/Commits/Lines tabs show concentration computed over different contribution
+                  measures. PRs reflect review-based workflows. Commits reflect direct code changes.
+                  Lines of code should be interpreted with caution: large refactors, generated code,
+                  vendored dependencies, and auto-formatting can dominate the lines signal without
+                  reflecting meaningful development effort. Lines are useful for spotting refactor waves
+                  but misleading as a measure of who did more work.
+                </p>
+                <p className="mt-2">
+                  Use Settings to configure the AI adoption marker date. The vertical marker line on
+                  charts lets you visually compare concentration patterns before and after tool adoption.
+                </p>
+              </HelpPanel>
+            </div>
+
+            {/* Subsection 2b: Output per Developer */}
+            <div>
+              <h3 className="text-base font-medium mb-3">Output per Developer</h3>
+              <ScaryRealPanel data={headcountData ?? []} aiMarkerDate={markerDate} isLoading={headcountLoading} />
+              <HelpPanel>
+                <p>
+                  This panel shows the same PR volume data from two perspectives. The left chart shows
+                  total PRs per month, which can look alarming during team changes -- losing contributors
+                  naturally reduces total output. The right chart normalizes by team size, showing PRs per
+                  active developer alongside the number of active contributors.
+                </p>
+                <p className="mt-2">
+                  When the team shrinks but PRs-per-developer stays flat (or rises), it means the
+                  remaining team absorbed the workload. When the team grows and PRs-per-developer holds
+                  steady, it means new contributors are productive, not just present.
+                </p>
+                <p className="mt-2">
+                  An active developer is anyone with at least one commit or PR (created or merged) in a
+                  given month, excluding bots. This is the most inclusive definition -- it captures both
+                  commit-to-main workflows and PR-based review workflows.
+                </p>
+              </HelpPanel>
+            </div>
+
+          </div>
+        </section>
+
+        {/* Section 3: Cohort Trends (D-11) */}
         <section>
           <SectionHeader title="Cohort Trends" scope="filtered" />
           <div className="mt-4 space-y-6">
@@ -427,7 +647,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Section 3: Ramp-Up Curves (D-11) */}
+        {/* Section 4: Ramp-Up Curves (D-11) */}
         <section>
           <div className="flex items-center justify-between">
             <SectionHeader title="Ramp-Up Curves" scope="independent" />
@@ -494,13 +714,13 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Section 4: Before/After Comparison (D-11) */}
-        <BeforeAfterComparison repoIds={repoIds} aiMarkerDate={markerDate} />
+        {/* Section 5: Before/After Comparison (D-11) */}
+        <BeforeAfterComparison periodMetrics={periodMetricsData ?? null} isLoading={periodMetricsLoading} />
 
-        {/* Section 5: PR Turnaround (D-11) */}
+        {/* Section 6: PR Turnaround (D-11) */}
         <PrTurnaroundChart startDate={startDate} endDate={endDate} repoIds={repoIds} />
 
-        {/* Section 6: Rolling Comparisons (D-11) */}
+        {/* Section 7: Rolling Comparisons (D-11) */}
         <section>
           <SectionHeader title="Rolling Comparisons" scope="independent" />
           <div className="mt-4">
@@ -534,10 +754,10 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Section 7: Bot vs Human Ratio (D-11) */}
+        {/* Section 8: Bot vs Human Ratio (D-11) */}
         <BotRatioChart startDate={startDate} endDate={endDate} repoIds={repoIds} />
 
-        {/* Section 8: Contributor Table (D-11) */}
+        {/* Section 9: Contributor Table (D-11) */}
         <section>
           <ContributorTable
             startDate={startDate}

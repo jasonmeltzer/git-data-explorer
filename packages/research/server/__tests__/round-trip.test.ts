@@ -146,12 +146,22 @@ function makeFullBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       { weekIndex: 1, avgLinesChanged: 32.8, avgFilesChanged: 2.5, contributionCount: 7, contributorCount: 2, joinPeriod: 'before' },
       { weekIndex: 0, avgLinesChanged: 45.0, avgFilesChanged: 3.0, contributionCount: 5, contributorCount: 3, joinPeriod: 'after' },
     ],
+    // rolling stored as JSON blob — shape doesn't need to match RollingComparisonResult exactly
     rolling: {
       granularity: 'month',
-      periods: [
-        { label: '2025-09', startDate: '2025-09-01', endDate: '2025-09-30', commitCount: 120, prCount: 30, avgCommitSize: 55.2, uniqueAuthors: 8, linesAdded: 6624, linesDeleted: 2480 },
-        { label: '2025-10', startDate: '2025-10-01', endDate: '2025-10-31', commitCount: 145, prCount: 38, avgCommitSize: 62.1, uniqueAuthors: 9, linesAdded: 9004, linesDeleted: 3100 },
-      ],
+      current: {
+        label: 'Oct 2025', startDate: '2025-10-01', endDate: '2025-10-31',
+        avgCommitSize: 62.1, avgPrSize: 145.0, commitCount: 145, prCount: 38,
+        avgFilesPerCommit: 3.2, avgFilesPerPr: 7.5, dailyAvgCommitSize: 2.0,
+        dailyAvgPrSize: 4.7, dailyCommitCount: 4.7, dailyPrCount: 1.2,
+      },
+      prior: {
+        label: 'Sep 2025', startDate: '2025-09-01', endDate: '2025-09-30',
+        avgCommitSize: 55.2, avgPrSize: 130.0, commitCount: 120, prCount: 30,
+        avgFilesPerCommit: 2.8, avgFilesPerPr: 6.5, dailyAvgCommitSize: 1.8,
+        dailyAvgPrSize: 4.3, dailyCommitCount: 4.0, dailyPrCount: 1.0,
+      },
+      changes: { commitSize: 12.5, prSize: 11.5, commitFrequency: null, prFrequency: null },
     },
     contributors: [
       {
@@ -171,7 +181,7 @@ function makeFullBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       {
         authorLogin: 'charlie',
         cohort: 'mid',
-        firstCommitAt: null,
+        firstCommitAt: '2025-03-01T00:00:00Z',  // non-null: ContributorBeforeAfterStats.firstCommitAt is string
         pre: null,
         post: { authorLogin: 'charlie', cohort: 'mid', totalCommits: 15, totalPrs: 5, avgLinesAdded: 45, avgLinesDeleted: 15, avgFilesChanged: 3, firstCommitAt: '2025-03-01T00:00:00Z' },
       },
@@ -190,11 +200,18 @@ function makeFullBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       rampUpTrend: 'faster',
       aiAdoptionDelta: '+23% commit velocity',
     },
-    beforeAfter: {
-      before: { avgCommitSize: 55.2, prFrequency: 3.1, rampUpSpeed: 4.5, activeContributors: 8 },
-      after: { avgCommitSize: 72.8, prFrequency: 4.8, rampUpSpeed: 2.8, activeContributors: 12 },
-      markerDate: '2025-10-15',
-    },
+    periodMetrics: [
+      {
+        period: { startDate: '2025-04-01', endDate: '2025-10-15', label: 'Before AI' },
+        metrics: { avgCommitSize: 55.2, prFrequency: 3.1, rampUpSpeed: 4.5, activeContributors: 8 },
+      },
+      {
+        period: { startDate: '2025-10-15', endDate: '2026-04-01', label: 'After AI', markerDate: '2025-10-15' },
+        metrics: { avgCommitSize: 72.8, prFrequency: 4.8, rampUpSpeed: 2.8, activeContributors: 12 },
+      },
+    ],
+    concentrationMonthly: [],
+    headcountMonthly: [],
     ...overrides,
   };
 }
@@ -213,7 +230,9 @@ function bundleToZip(bundle: ExportBundle): Buffer {
   };
   if (bundle.rolling) files['rolling-comparison.json'] = json(bundle.rolling);
   if (bundle.executiveSummary) files['executive-summary.json'] = json(bundle.executiveSummary);
-  if (bundle.beforeAfter) files['before-after.json'] = json(bundle.beforeAfter);
+  if (bundle.periodMetrics) files['period-metrics.json'] = json(bundle.periodMetrics);
+  if (bundle.concentrationMonthly.length > 0) files['concentration-monthly.json'] = json(bundle.concentrationMonthly);
+  if (bundle.headcountMonthly.length > 0) files['headcount-monthly.json'] = json(bundle.headcountMonthly);
   return Buffer.from(zipSync(files));
 }
 
@@ -247,7 +266,6 @@ function importBundleIntoDb(
       repoCount: bundle.metadata.repoNames.length,
       contentHash: 'test-hash',
       executiveSummaryJson: bundle.executiveSummary ? JSON.stringify(bundle.executiveSummary) : null,
-      beforeAfterJson: bundle.beforeAfter ? JSON.stringify(bundle.beforeAfter) : null,
     }).returning({ id: schema.snapshots.id }).get();
 
     const snapId = snap.id;
@@ -360,7 +378,9 @@ function readBackBundle(
     prTurnaround: prTurnaroundRows.map(({ id: _id, snapshotId: _s, orgId: _o, ...rest }) => rest),
     botRatio: botRatioRows.map(({ id: _id, snapshotId: _s, orgId: _o, ...rest }) => rest),
     executiveSummary: snapshot.executiveSummaryJson ? JSON.parse(snapshot.executiveSummaryJson) : null,
-    beforeAfter: snapshot.beforeAfterJson ? JSON.parse(snapshot.beforeAfterJson) : null,
+    periodMetrics: null,        // not persisted in snapshots table (Phase 9.4 D-13)
+    concentrationMonthly: [],
+    headcountMonthly: [],
   };
 }
 
@@ -471,7 +491,9 @@ describe('full round-trip: bundle → import → read back', () => {
     expect(result.rolling).not.toBeNull();
     const rolling = result.rolling as Record<string, unknown>;
     expect(rolling.granularity).toBe('month');
-    expect((rolling.periods as unknown[]).length).toBe(2);
+    expect(rolling.current).toBeDefined();
+    expect(rolling.prior).toBeDefined();
+    expect((rolling.current as Record<string, unknown>).label).toBe('Oct 2025');
   });
 
   it('preserves all contributor fields including pre/post JSON', () => {
@@ -497,9 +519,9 @@ describe('full round-trip: bundle → import → read back', () => {
     expect(bob.post).toBeNull();
     expect((bob.pre as Record<string, unknown>).totalCommits).toBe(200);
 
-    // charlie has post only, null firstCommitAt
+    // charlie has post only; firstCommitAt is the stored value (non-null per ContributorBeforeAfterStats type)
     const charlie = contributors.find(c => c.authorLogin === 'charlie')!;
-    expect(charlie.firstCommitAt).toBeNull();
+    expect(charlie.firstCommitAt).toBe('2025-03-01T00:00:00Z');
     expect(charlie.pre).toBeNull();
     expect(charlie.post).not.toBeNull();
   });
@@ -543,15 +565,13 @@ describe('full round-trip: bundle → import → read back', () => {
     expect(es.aiAdoptionDelta).toBe('+23% commit velocity');
   });
 
-  it('preserves before/after comparison JSON', () => {
+  it('preserves periodMetrics (null — not persisted in snapshots table)', () => {
     const bundle = makeFullBundle();
     const { snapshotId } = importBundleIntoDb(testDb, bundle, 'Test Org');
     const result = readBackBundle(testDb, snapshotId);
 
-    const ba = result.beforeAfter as Record<string, Record<string, unknown>>;
-    expect(ba.before.avgCommitSize).toBeCloseTo(55.2);
-    expect(ba.after.prFrequency).toBeCloseTo(4.8);
-    expect(ba.markerDate).toBe('2025-10-15');
+    // periodMetrics is not persisted in the snapshots table (Phase 9.4 D-13)
+    expect(result.periodMetrics).toBeNull();
   });
 
   it('preserves metadata including all fields', () => {
@@ -610,7 +630,9 @@ describe('ZIP round-trip: bundle → ZIP → parse → import → read back', ()
       prTurnaround: readJson('pr-turnaround.json') ?? [],
       botRatio: readJson('bot-ratio.json') ?? [],
       executiveSummary: readJson('executive-summary.json') ?? null,
-      beforeAfter: readJson('before-after.json') ?? null,
+      periodMetrics: readJson('period-metrics.json') ?? null,
+      concentrationMonthly: readJson('concentration-monthly.json') ?? [],
+      headcountMonthly: readJson('headcount-monthly.json') ?? [],
     } as ExportBundle;
 
     // Import parsed bundle
@@ -627,7 +649,8 @@ describe('ZIP round-trip: bundle → ZIP → parse → import → read back', ()
     expect(result.prTurnaround).toHaveLength(original.prTurnaround.length);
     expect(result.botRatio).toHaveLength(original.botRatio.length);
     expect(result.executiveSummary).toEqual(original.executiveSummary);
-    expect(result.beforeAfter).toEqual(original.beforeAfter);
+    // periodMetrics not persisted in snapshots table (Phase 9.4 D-13)
+    expect(result.periodMetrics).toBeNull();
   });
 });
 
@@ -643,14 +666,14 @@ describe('edge cases', () => {
     const bundle = makeFullBundle({
       rolling: null,
       executiveSummary: null,
-      beforeAfter: null,
+      periodMetrics: null,
     });
     const { snapshotId } = importBundleIntoDb(testDb, bundle, 'Null Optionals');
     const result = readBackBundle(testDb, snapshotId);
 
     expect(result.rolling).toBeNull();
     expect(result.executiveSummary).toBeNull();
-    expect(result.beforeAfter).toBeNull();
+    expect(result.periodMetrics).toBeNull();
     // Other sections still intact
     expect(result.cohortCommits).toHaveLength(3);
     expect(result.contributors).toHaveLength(3);
@@ -676,7 +699,8 @@ describe('edge cases', () => {
     expect(result.botRatio).toEqual([]);
     // Optional JSONs still present
     expect(result.executiveSummary).not.toBeNull();
-    expect(result.beforeAfter).not.toBeNull();
+    // periodMetrics not persisted to DB (Phase 9.4 D-13), returns null from readBackBundle
+    expect(result.periodMetrics).toBeNull();
   });
 
   it('handles bundle with null aiMarkerDate (pre-AI control group)', () => {
@@ -730,7 +754,7 @@ describe('edge cases', () => {
         orgId: org.id, importTimestamp: Date.now(), metadataJson: JSON.stringify(bundle1.metadata),
         toolVersion: '1.0.0', startDate: bundle1.metadata.startDate, endDate: bundle1.metadata.endDate,
         aiMarkerDate: bundle1.metadata.aiMarkerDate, contributorCount: 3, repoCount: 2, contentHash: 'hash1',
-        executiveSummaryJson: null, beforeAfterJson: null,
+        executiveSummaryJson: null,
       }).returning({ id: schema.snapshots.id }).get();
 
       testDb.insert(schema.cohortMetrics).values(
@@ -744,7 +768,7 @@ describe('edge cases', () => {
         orgId: org.id, importTimestamp: Date.now() + 1000, metadataJson: JSON.stringify(bundle2.metadata),
         toolVersion: '1.0.0', startDate: bundle2.metadata.startDate, endDate: bundle2.metadata.endDate,
         aiMarkerDate: bundle2.metadata.aiMarkerDate, contributorCount: 3, repoCount: 2, contentHash: 'hash2',
-        executiveSummaryJson: null, beforeAfterJson: null,
+        executiveSummaryJson: null,
       }).returning({ id: schema.snapshots.id }).get();
 
       testDb.insert(schema.cohortMetrics).values(
@@ -815,7 +839,7 @@ describe('test data generator round-trip', () => {
 
     expect(snap.aiMarkerDate).toBeNull();
     expect(result.cohortCommits).toHaveLength(bundle.cohortCommits.length);
-    expect(result.beforeAfter).toBeNull(); // pre-AI has no before/after
+    expect(result.periodMetrics).toBeNull(); // pre-AI has no periodMetrics
   });
 
   it('all 3 test org bundles can coexist in one database', async () => {

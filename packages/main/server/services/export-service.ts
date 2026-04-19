@@ -7,6 +7,8 @@
  */
 
 import { createRequire } from 'node:module';
+import { sql } from 'drizzle-orm';
+import { db } from '../db/client.js';
 import type {
   ExportBundle,
   ExportRequest,
@@ -19,8 +21,11 @@ import { getContributorStats, getContributorBeforeAfterStats } from './analytics
 import { getPrTurnaroundTrend } from './analytics-pr-turnaround.js';
 import { getBotRatioTrend } from './analytics-bot-ratio.js';
 import { getExecutiveSummary } from './analytics-summary.js';
-import { getBeforeAfterComparison } from './analytics-before-after.js';
 import { getAiMarkerDate } from './analytics-config.js';
+import { getConcentrationMonthly } from './analytics-concentration.js';
+import { getHeadcountMonthly } from './analytics-headcount.js';
+import { getPeriodMetrics } from './analytics-period-metrics.js';
+import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 import { getCohortConfig } from './cohort-config-service.js';
 import { getTrackedRepos } from './repo-management.js';
 
@@ -64,7 +69,28 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
 
   // ── Build query params ────────────────────────────────────────────────────
 
-  const startDate = new Date(req.startDate);
+  // If the client sent an epoch-adjacent startDate (the "All" preset uses
+  // new Date(0)), substitute the earliest actual commit date across the
+  // selected repos so metadata.startDate reads as a real date rather than
+  // "Dec 1969" in downstream UIs. Mirrors the H1 fix already applied to the
+  // analytics routes.
+  const reqStartMs = new Date(req.startDate).getTime();
+  const MIN_MEANINGFUL_MS = new Date('2000-01-01').getTime();
+  let effectiveStartIso = req.startDate;
+  if (reqStartMs < MIN_MEANINGFUL_MS) {
+    const repoFilter = req.repoIds.length > 0
+      ? `WHERE repo_id IN (${req.repoIds.filter(n => Number.isInteger(n) && n > 0).join(',')})`
+      : '';
+    const row = db.all(sql.raw(
+      `SELECT MIN(CAST(committed_at AS INTEGER)) AS minEpoch FROM commits ${repoFilter}`,
+    )) as Array<{ minEpoch: number | null }>;
+    const minEpoch = row[0]?.minEpoch ?? null;
+    if (minEpoch !== null) {
+      effectiveStartIso = new Date(minEpoch * 1000).toISOString();
+    }
+  }
+
+  const startDate = new Date(effectiveStartIso);
   const endDate = new Date(req.endDate);
   const repoIds = req.repoIds.length > 0 ? req.repoIds : undefined;
 
@@ -149,7 +175,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
   let prTurnaround: ExportBundle['prTurnaround'] = [];
   try {
     const result = getPrTurnaroundTrend({
-      startDate: req.startDate,
+      startDate: effectiveStartIso,
       endDate: req.endDate,
       repoIds,
     });
@@ -167,7 +193,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
   let botRatio: ExportBundle['botRatio'] = [];
   try {
     const result = getBotRatioTrend({
-      startDate: req.startDate,
+      startDate: effectiveStartIso,
       endDate: req.endDate,
       repoIds,
     });
@@ -186,7 +212,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
   let executiveSummary: ExportBundle['executiveSummary'] = null;
   try {
     const result = getExecutiveSummary({
-      startDate: req.startDate,
+      startDate: effectiveStartIso,
       endDate: req.endDate,
       repoIds,
     });
@@ -201,31 +227,31 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     console.error('[export-service] executiveSummary failed:', err);
   }
 
-  let beforeAfter: ExportBundle['beforeAfter'] = null;
+  // ── Build Period[] for new Phase 9.4 services ────────────────────────────
+  const markerDateStr = aiMarkerDate
+    ? aiMarkerDate.toISOString().slice(0, 10)
+    : null;
+  const periods = buildPeriodsFromMarker(effectiveStartIso.slice(0, 10), req.endDate.slice(0, 10), markerDateStr);
+
+  let periodMetrics: ExportBundle['periodMetrics'] = null;
   try {
-    if (aiMarkerDate) {
-      const result = getBeforeAfterComparison({ repoIds });
-      if (result) {
-        // Map from analytics-before-after.BeforeAfterComparison to export-types.BeforeAfterComparison
-        beforeAfter = {
-          before: {
-            avgCommitSize: result.before.avgCommitSize,
-            prFrequency: result.before.prFrequency,
-            rampUpSpeed: result.before.rampUpSpeed,
-            activeContributors: result.before.activeContributors,
-          },
-          after: {
-            avgCommitSize: result.after.avgCommitSize,
-            prFrequency: result.after.prFrequency,
-            rampUpSpeed: result.after.rampUpSpeed,
-            activeContributors: result.after.activeContributors,
-          },
-          markerDate: result.markerDate,
-        };
-      }
-    }
+    periodMetrics = getPeriodMetrics(repoIds, periods);
   } catch (err) {
-    console.error('[export-service] beforeAfter failed:', err);
+    console.error('[export-service] periodMetrics failed:', err);
+  }
+
+  let concentrationMonthly: ExportBundle['concentrationMonthly'] = [];
+  try {
+    concentrationMonthly = getConcentrationMonthly(repoIds, periods);
+  } catch (err) {
+    console.error('[export-service] concentrationMonthly failed:', err);
+  }
+
+  let headcountMonthly: ExportBundle['headcountMonthly'] = [];
+  try {
+    headcountMonthly = getHeadcountMonthly(repoIds, periods);
+  } catch (err) {
+    console.error('[export-service] headcountMonthly failed:', err);
   }
 
   // ── Build metadata ────────────────────────────────────────────────────────
@@ -236,7 +262,7 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
 
   const metadata: ExportMetadata = {
     exportTimestamp: new Date().toISOString(),
-    startDate: req.startDate,
+    startDate: effectiveStartIso,
     endDate: req.endDate,
     aiMarkerDate: aiMarkerDate ? aiMarkerDate.toISOString().split('T')[0] : null,
     tenureMode: req.tenureMode,
@@ -260,6 +286,8 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     prTurnaround,
     botRatio,
     executiveSummary,
-    beforeAfter,
+    periodMetrics,
+    concentrationMonthly,
+    headcountMonthly,
   };
 }

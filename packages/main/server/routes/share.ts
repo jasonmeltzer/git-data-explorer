@@ -83,7 +83,9 @@ share.post('/api/share/gist', async (c) => {
       'pr-turnaround.json': { content: JSON.stringify(data?.prTurnaround ?? [], null, 2) },
       'bot-ratio.json': { content: JSON.stringify(data?.botRatio ?? [], null, 2) },
       'executive-summary.json': { content: JSON.stringify(data?.executiveSummary ?? null, null, 2) },
-      'before-after.json': { content: JSON.stringify(data?.beforeAfter ?? null, null, 2) },
+      'period-metrics.json': { content: JSON.stringify(data?.periodMetrics ?? null, null, 2) },
+      'concentration-monthly.json': { content: JSON.stringify(data?.concentrationMonthly ?? [], null, 2) },
+      'headcount-monthly.json': { content: JSON.stringify(data?.headcountMonthly ?? [], null, 2) },
     };
   }
 

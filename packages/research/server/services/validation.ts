@@ -83,6 +83,42 @@ const BotRatioRowSchema = z.object({
   botPercentage: z.number(),
 });
 
+// ─── Phase 9.4 schemas ────────────────────────────────────────────────────────
+
+const PeriodSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  label: z.string(),
+  markerDate: z.string().optional(),
+});
+
+const PeriodMetricSchema = z.object({
+  period: PeriodSchema,
+  metrics: z.record(z.string(), z.number().nullable()),
+});
+
+const ConcentrationMonthlyRowSchema = z.object({
+  month: z.string(),
+  basis: z.enum(['prs', 'commits', 'lines']),
+  top1Share: z.number().nullable(),
+  top3Share: z.number().nullable(),
+  top5Share: z.number().nullable(),
+  hhi: z.number().nullable(),
+  gini: z.number().nullable(),
+  busFactor: z.number().nullable(),
+  activeDevs: z.number(),
+  topContributor: z.string().nullable(),
+});
+
+const HeadcountMonthlyRowSchema = z.object({
+  month: z.string(),
+  activeDevs: z.number(),
+  totalPrs: z.number(),
+  totalCommits: z.number(),
+  prsPerDev: z.number().nullable(),
+  commitsPerDev: z.number().nullable(),
+});
+
 export const ExportBundleSchema = z.object({
   metadata: ExportMetadataSchema,
   cohortCommits: z.array(CohortMetricsRowSchema).default([]),
@@ -93,7 +129,9 @@ export const ExportBundleSchema = z.object({
   prTurnaround: z.array(PrTurnaroundRowSchema).default([]),
   botRatio: z.array(BotRatioRowSchema).default([]),
   executiveSummary: z.unknown().nullable().default(null),
-  beforeAfter: z.unknown().nullable().default(null),
+  periodMetrics: z.array(PeriodMetricSchema).nullable().default(null),
+  concentrationMonthly: z.array(ConcentrationMonthlyRowSchema).default([]),
+  headcountMonthly: z.array(HeadcountMonthlyRowSchema).default([]),
 });
 
 export type ValidationResult = {
@@ -120,7 +158,7 @@ export function validateBundle(raw: unknown): ValidationResult {
   // Generate warnings for missing/empty optional sections
   if (!data.rolling) warnings.push('rolling section is null');
   if (!data.executiveSummary) warnings.push('executiveSummary section is null');
-  if (!data.beforeAfter) warnings.push('beforeAfter section is null');
+  if (!data.periodMetrics) warnings.push('periodMetrics section is null');
   if (data.cohortCommits.length === 0) warnings.push('cohortCommits is empty');
   if (data.cohortPrs.length === 0) warnings.push('cohortPrs is empty');
   if (data.contributors.length === 0) warnings.push('contributors is empty');

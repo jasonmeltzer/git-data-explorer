@@ -29,7 +29,7 @@ import {
 import { useExport, useExportPreview, useIncrementExport } from '../hooks/useExport.js';
 import { buildPseudonymMap, buildRepoMap, anonymizeBundle } from '../lib/anonymizer.js';
 import { toCsv } from '../lib/csv-serializer.js';
-import { rollingToCsv, beforeAfterToCsv, executiveSummaryToCsv } from '../lib/csv-flatteners.js';
+import { rollingToCsv, periodMetricsToCsv, concentrationMonthlyToCsv, headcountMonthlyToCsv, executiveSummaryToCsv } from '../lib/csv-flatteners.js';
 import type { DashboardFilters } from '../hooks/useDashboardFilters.js';
 import type { ExportBundle, ExportRequest } from '@shared/export-types.js';
 import type { ContributorBeforeAfterStats } from '@shared/types.js';
@@ -111,8 +111,14 @@ function createAndDownloadZip(
     if (finalBundle.executiveSummary) {
       files['executive-summary.json'] = strToU8(JSON.stringify(finalBundle.executiveSummary, null, 2));
     }
-    if (finalBundle.beforeAfter) {
-      files['before-after.json'] = strToU8(JSON.stringify(finalBundle.beforeAfter, null, 2));
+    if (finalBundle.periodMetrics) {
+      files['period-metrics.json'] = strToU8(JSON.stringify(finalBundle.periodMetrics, null, 2));
+    }
+    if (finalBundle.concentrationMonthly.length > 0) {
+      files['concentration-monthly.json'] = strToU8(JSON.stringify(finalBundle.concentrationMonthly, null, 2));
+    }
+    if (finalBundle.headcountMonthly.length > 0) {
+      files['headcount-monthly.json'] = strToU8(JSON.stringify(finalBundle.headcountMonthly, null, 2));
     }
   } else {
     files['cohort-commits.csv'] = strToU8(arrayToCsv(finalBundle.cohortCommits as unknown as Record<string, unknown>[]));
@@ -127,8 +133,14 @@ function createAndDownloadZip(
     if (finalBundle.executiveSummary) {
       files['executive-summary.csv'] = strToU8(executiveSummaryToCsv(finalBundle.executiveSummary));
     }
-    if (finalBundle.beforeAfter) {
-      files['before-after.csv'] = strToU8(beforeAfterToCsv(finalBundle.beforeAfter));
+    if (finalBundle.periodMetrics && finalBundle.periodMetrics.length > 0) {
+      files['period-metrics.csv'] = strToU8(periodMetricsToCsv(finalBundle.periodMetrics));
+    }
+    if (finalBundle.concentrationMonthly.length > 0) {
+      files['concentration-monthly.csv'] = strToU8(concentrationMonthlyToCsv(finalBundle.concentrationMonthly));
+    }
+    if (finalBundle.headcountMonthly.length > 0) {
+      files['headcount-monthly.csv'] = strToU8(headcountMonthlyToCsv(finalBundle.headcountMonthly));
     }
   }
 

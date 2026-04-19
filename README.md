@@ -30,7 +30,7 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
-**Phase 9.3 complete** — Critical review of research tool against LDX3 and D.Eng benchmarks. Gap catalog (13 gaps), architectural decisions (period-array, privacy framing, seed ownership), and phase roadmap (9.4-9.8) documented.
+**Phase 9.4 complete** — Team Distribution section with concentration risk metrics (top-N share, HHI, Gini, bus factor), headcount-normalized output, and the period-array data model that will carry forward through Phases 9.5–10. BeforeAfterComparison rewired to consume `PeriodMetric[]`; export bundle gains `concentrationMonthly`, `headcountMonthly`, `periodMetrics` sections.
 
 What works today:
 
@@ -52,10 +52,12 @@ What works today:
 - **Date range filtering** — preset chips (90d, 6mo, 1yr, All) plus custom date range picker
 - **Repo filtering** — multi-select dropdown filters all dashboard views
 - **Contributor drill-down** — collapsible table with sortable per-author stats; per-repo mode shows one row per author-repo pair with Repo column, visual row grouping, and per-repo tenure
-- **8-section dashboard** — Executive Summary KPI tiles, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
+- **Team Distribution section** — concentration risk visualization (top-1/3/5 share bars with HHI overlay line), "Scary/Real" dual panel (total PRs + PRs/dev overlay), sortable table with Gini and bus factor, metric selector (PRs / Commits / Lines), StatCalloutRow showing Bus Factor / Top Contributor Share / Active Developers
+- **Period-array data model** — replaces single before/after split with `PeriodMetric[]` across the export bundle and UI; length-1 for no-marker, length-2 for single-marker, length-N ready for Phase 10 multi-marker
+- **9-section dashboard** — Executive Summary KPI tiles, Team Distribution, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
 - **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle with anonymization
 - **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download
-- **454 passing tests** across 37 test files
+- **520 passing tests** across 42 test files (including D-16 seed assertions when `npm run seed` has run)
 
 ### Research Tool (`packages/research/`)
 A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
@@ -69,6 +71,8 @@ A personal research tool for cross-org AI adoption analysis. No GitHub token req
 - **Cross-org duplicate detection** — warns when the same bundle (exact hash match) or similar data (fuzzy match on overlapping owners, repos, and date ranges) is imported across different orgs; unified warning banner with conditional redirect and "Continue to dashboard" button
 - **orgName in exports** — org name automatically inferred from GitHub repo owners at export time, used as default org label on import; opt-out checkbox in ExportModal
 - **Simplified schema** — orgs table stores only label and sizeCategory (dropped unused industry/aiTool columns)
+- **Team Distribution section** — minimal concentration chart + sortable table on OrgDashboard per D-15 (no ScaryRealPanel); three new tables (`concentration_monthly`, `headcount_monthly`, `period_metrics`) ingested from imported bundles
+- **Period-array import** — `parseZipBundle` reads `period-metrics.json`, `concentration-monthly.json`, `headcount-monthly.json`; old `before-after.json` fully removed
 
 ### Monorepo Structure
 The project is organized as an npm workspaces monorepo:
@@ -78,15 +82,14 @@ The project is organized as an npm workspaces monorepo:
 
 ### Code Quality
 - **ESLint configured** — flat config with typescript-eslint parser; includes `no-restricted-syntax` rule banning `asChild` prop on `@base-ui/react` components (prevents regression of resolved console warnings)
-- **454 passing tests** across 37 test files
+- **520 passing tests** across 42 test files (including D-16 seed assertions when `npm run seed` has run)
 
 What's next:
-- **Phase 9.4: Team Dynamics** — concentration risk, headcount-normalized output, period-array data model
 - **Phase 9.5: Contribution Patterns** — per-developer monthly time series with privacy framing
 - **Phase 9.6: Cycle Time Correction** — first-commit-to-merge analytics
-- **Phase 9.7: Research Tool Enhancements** — cross-org before/after splits, CrossOrg parity
+- **Phase 9.7: Research Tool Enhancements** — cross-org period-array aggregation, CrossOrg Team Distribution parity
 - **Phase 9.8: Individual Onboarding Profiles** — per-new-hire first-N-weeks breakdown
-- **Phase 10: Multi-Marker AI Timeline** — multiple AI tool adoption events (now thin migration)
+- **Phase 10: Multi-Marker AI Timeline** — multiple AI tool adoption events (now thin migration since the period-array model is in place)
 
 ## Tech Stack
 
@@ -172,7 +175,7 @@ Open http://localhost:5173 — all dashboard views populated with synthetic data
 ### Run Tests
 
 ```bash
-npm run test        # Run all tests across workspaces (454 tests, 37 files)
+npm run test        # Run all tests across workspaces (520 tests, 42 files)
 ```
 
 ### First Use (main app, with real data)

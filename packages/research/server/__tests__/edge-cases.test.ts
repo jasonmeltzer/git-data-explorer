@@ -165,7 +165,9 @@ function makeMinimalBundle(overrides: Partial<ExportBundle> = {}): ExportBundle 
     prTurnaround: [],
     botRatio: [],
     executiveSummary: null,
-    beforeAfter: null,
+    periodMetrics: null,
+    concentrationMonthly: [],
+    headcountMonthly: [],
   };
   return { ...base, ...overrides };
 }
@@ -178,20 +180,20 @@ describe('Edge case tests (D-11-4)', () => {
       const bundle = makeMinimalBundle({
         rolling: null,
         executiveSummary: null,
-        beforeAfter: null,
+        periodMetrics: null,
       });
       const result = validateBundle(bundle);
       expect(result.valid).toBe(true);
       expect(result.warnings).toContain('rolling section is null');
       expect(result.warnings).toContain('executiveSummary section is null');
-      expect(result.warnings).toContain('beforeAfter section is null');
+      expect(result.warnings).toContain('periodMetrics section is null');
     });
 
     it('importBundle succeeds even with all optional sections null', () => {
       const bundle = makeMinimalBundle({
         rolling: null,
         executiveSummary: null,
-        beforeAfter: null,
+        periodMetrics: null,
       });
       let result: Awaited<ReturnType<typeof importBundle>>;
       expect(() => {

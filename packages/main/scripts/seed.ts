@@ -182,12 +182,34 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'npatel', name: 'Neha Patel', type: 'regular', repos: [0, 1], joinWeekOffset: 2, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'eoconnor', name: 'Ethan O\'Connor', type: 'regular', repos: [0, 1], joinWeekOffset: 1, leaveWeekOffset: 30, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'ykim', name: 'Yuna Kim', type: 'regular', repos: [0, 1], joinWeekOffset: 3, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'btremblay', name: 'Baptiste Tremblay', type: 'regular', repos: [0, 1], joinWeekOffset: 2, leaveWeekOffset: 36, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  // D-16 team-size decrease: btremblay moved from week 36 to week 31 (same month as eoconnor)
+  // so both depart in the same ~2-month window, creating a visible step-down in activeDevs.
+  { login: 'btremblay', name: 'Baptiste Tremblay', type: 'regular', repos: [0, 1], joinWeekOffset: 2, leaveWeekOffset: 31, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'fmartinez', name: 'Fernanda Martínez', type: 'regular', repos: [0], joinWeekOffset: 0, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'rlee', name: 'Ryan Lee', type: 'regular', repos: [0], joinWeekOffset: 4, leaveWeekOffset: 40, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'kmoser', name: 'Katrin Moser', type: 'regular', repos: [0], joinWeekOffset: 1, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'dpark', name: 'Daniel Park', type: 'regular', repos: [1, 2], joinWeekOffset: 0, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'amüller', name: 'Anna Müller', type: 'regular', repos: [1, 2], joinWeekOffset: 3, commitsPerWeek: 4.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+
+  // --- D-16 Dominant contributor (active weeks 6-22: 3 full months at 45-55% top-1 share) ---
+  // alexpower commits only in repo 0. The concentration query runs across ALL selected
+  // repos (default view = all 3), so the denominator is monthly commits from every
+  // persona in every repo, NOT just platform-repo activity. Accounting for:
+  //   - 5 seniors × 3.57 cross-repo commits/week = ~72/mo
+  //   - 5 regulars [0,1] × 5.14 commits/week ≈ 103/mo
+  //   - 3 regulars [0] × 4.0 commits/week = 48/mo
+  //   - 2 regulars [1,2] × 6.0 commits/week ≈ 48/mo
+  //   - pre-AI new devs (mixed repos): ~50-60/mo
+  //   - part-timer: ~2/mo
+  //  → Other human commits ~325/month across all 3 repos.
+  //
+  // alex at 90 commits/week × 4.33 = ~390/mo:
+  //   390 / (390 + 325) ≈ 54% — centered in D-16 target of 45-55%.
+  //
+  // Weeks 6-22 span from early month 2 to late month 5, ensuring months 3, 4, 5 are fully
+  // covered and produce 3 consecutive dominant months. Verified by the seed.test.ts
+  // dominant-contributor assertion after running `npm run seed`.
+  { login: 'alexpower', name: 'Alex Power', type: 'regular', repos: [0], joinWeekOffset: 6, leaveWeekOffset: 22, commitsPerWeek: 90, sizeMu: 4.5, sizeSigma: 0.8, isBot: false },
 
   // --- 5 Pre-AI new devs (join months 2-5 = weeks 4-20, some churn out) ---
   { login: 'rookie-alice', name: 'Alice Thornton', type: 'new-pre-ai', repos: [0], joinWeekOffset: 4, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
@@ -196,10 +218,13 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'rookie-diana', name: 'Diana Ferreira', type: 'new-pre-ai', repos: [0], joinWeekOffset: 16, leaveWeekOffset: 32, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'rookie-eli', name: 'Eli Rosenberg', type: 'new-pre-ai', repos: [2], joinWeekOffset: 20, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
 
-  // --- 5 Post-AI new devs (join months 8-11 = weeks 30-44) ---
+  // --- 5 Post-AI new devs (D-16 team-size increase: first 3 join at weeks 30-33 = same ~2-month window) ---
+  // D-16: at least one team-size increase event: 3 joiners in the same 2-month window.
+  // newdev-carol (week 30), newdev-dave (week 31), newdev-eva (week 33) all join within 3 weeks
+  // creating a visible step-up in the activeDevs time series.
   { login: 'newdev-carol', name: 'Carol Vasquez', type: 'new-post-ai', repos: [0], joinWeekOffset: 30, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'newdev-dave', name: 'Dave Steinberg', type: 'new-post-ai', repos: [0], joinWeekOffset: 34, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
-  { login: 'newdev-eva', name: 'Eva Lindström', type: 'new-post-ai', repos: [1], joinWeekOffset: 38, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  { login: 'newdev-dave', name: 'Dave Steinberg', type: 'new-post-ai', repos: [0], joinWeekOffset: 31, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  { login: 'newdev-eva', name: 'Eva Lindström', type: 'new-post-ai', repos: [1], joinWeekOffset: 33, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'newdev-frank', name: 'Frank Adeyemi', type: 'new-post-ai', repos: [0], joinWeekOffset: 42, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
   { login: 'newdev-grace', name: 'Grace Tanaka', type: 'new-post-ai', repos: [2], joinWeekOffset: 44, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
 

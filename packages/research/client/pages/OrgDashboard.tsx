@@ -12,9 +12,13 @@ import { CohortDataTable } from '@shared/components/charts/CohortDataTable.js';
 import RampUpLineChart from '@shared/components/charts/RampUpLineChart.js';
 import { RampUpDataTable } from '@shared/components/charts/RampUpDataTable.js';
 import { HelpPanel } from '@shared/components/HelpPanel.js';
+import { TeamDistributionChart } from '@shared/components/charts/TeamDistributionChart.js';
+import { TeamDistributionTable } from '@shared/components/charts/TeamDistributionTable.js';
+import { BeforeAfterComparison } from '@shared/components/charts/BeforeAfterComparison.js';
 import { computeCohortInsights, computeRampUpInsights } from '@shared/lib/insights.js';
-import { cohortTrendNarrative, METRIC_NARRATIVE_LABELS, METRIC_OPTIONS } from '@shared/lib/narratives.js';
+import { cohortTrendNarrative, METRIC_NARRATIVE_LABELS, METRIC_OPTIONS, CONCENTRATION_BASIS_OPTIONS } from '@shared/lib/narratives.js';
 import type { MetricOption } from '@shared/lib/narratives.js';
+import type { ConcentrationBasis } from '@shared/types.js';
 import SnapshotHistory from '../components/SnapshotHistory.js';
 import { useOrg } from '../hooks/useOrgs.js';
 import OrgMetadataForm from '../components/OrgMetadataForm.js';
@@ -32,9 +36,25 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   const [cohortPrView, setCohortPrView] = useState<'chart' | 'table'>('chart');
   const [cohortCommitView, setCohortCommitView] = useState<'chart' | 'table'>('chart');
   const [rampUpView, setRampUpView] = useState<'chart' | 'table'>('chart');
+  const [concentrationBasis, setConcentrationBasis] = useState<ConcentrationBasis>('prs');
+  const [concentrationView, setConcentrationView] = useState<'chart' | 'table'>('chart');
 
   const snapshotId = selectedSnapshotId ?? (org?.snapshots?.[0]?.id ?? null);
   const { data: bundle, isFetching: dataFetching } = useSnapshotData(orgId, snapshotId);
+
+  // Concentration and period-metrics are read from the reconstructed snapshot
+  // bundle (the H2 fix endpoint), NOT from separate org-level queries. Using
+  // bundle.* here ensures the Team Distribution section reacts to snapshot
+  // selection — the org-level endpoints would pin to the latest snapshot.
+  //
+  // The sibling `/api/orgs/:orgId/headcount` route also exists (see
+  // packages/research/server/routes/orgs.ts) but is intentionally NOT consumed
+  // here: D-15 holds the research-tool Team Distribution section to a minimal
+  // spec (no ScaryRealPanel, no StatCalloutRow), so there is no current UI
+  // surface that would render headcount. The route is available for Phase 9.7
+  // cross-org aggregation.
+  const concentrationData = bundle?.concentrationMonthly ?? [];
+  const periodMetricsData = bundle?.periodMetrics ?? null;
   const snapshots = org?.snapshots ?? [];
 
   // Dynamic chart config from bundle metadata
@@ -115,6 +135,78 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
           </div>
         </section>
       )}
+
+      {/* Team Distribution (Phase 9.4) */}
+      <section>
+        <div className="mt-4 space-y-6">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-base font-semibold">Team Distribution</h2>
+              <div className="flex items-center gap-2">
+                <Tabs value={concentrationBasis} onValueChange={(v) => setConcentrationBasis(v as ConcentrationBasis)}>
+                  <TabsList className="h-8 gap-1">
+                    {CONCENTRATION_BASIS_OPTIONS.map(({ label, value }) => (
+                      <TabsTrigger key={value} value={value} className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground">
+                        {label}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+                <Tabs value={concentrationView} onValueChange={(v) => setConcentrationView(v as 'chart' | 'table')}>
+                  <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
+                    <TabsTrigger value="chart" className="h-full px-2 py-1 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view">
+                      <BarChart3 className="h-3.5 w-3.5" />
+                    </TabsTrigger>
+                    <TabsTrigger value="table" className="h-full px-2 py-1 rounded-l-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Table view">
+                      <TableProperties className="h-3.5 w-3.5" />
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+            </div>
+            <div className="mt-4">
+              {concentrationView === 'chart' ? (
+                <TeamDistributionChart
+                  data={(concentrationData ?? []).filter(r => r.basis === concentrationBasis)}
+                  aiMarkerDate={aiMarkerDate}
+                  isLoading={dataFetching && !bundle?.concentrationMonthly}
+                />
+              ) : (
+                <TeamDistributionTable
+                  data={(concentrationData ?? []).filter(r => r.basis === concentrationBasis)}
+                />
+              )}
+            </div>
+            <HelpPanel>
+              <p>
+                Team Distribution shows how code contributions are spread across your team over time.
+                The concentration chart tracks what percentage of monthly output comes from your most
+                active contributors. High concentration (one person doing 40-50%+ of PRs) signals bus
+                factor risk -- if that person leaves, the team may struggle to absorb the gap.
+              </p>
+              <p className="mt-2">
+                The HHI (Herfindahl-Hirschman Index) overlay line measures overall concentration on a
+                0-1 scale. Values above 0.25 indicate significant concentration. The table view also
+                includes the Gini coefficient, which captures the full inequality spread across all
+                contributors.
+              </p>
+              <p className="mt-2">
+                Bus Factor shows the minimum number of developers whose combined contributions reach
+                50% of monthly output. A bus factor of 1 means a single person accounts for half the
+                work -- a clear resilience risk.
+              </p>
+              <p className="mt-2">
+                The PRs/Commits/Lines tabs show concentration computed over different contribution
+                measures. PRs reflect review-based workflows. Commits reflect direct code changes.
+                Lines of code should be interpreted with caution: large refactors, generated code,
+                vendored dependencies, and auto-formatting can dominate the lines signal without
+                reflecting meaningful development effort. Lines are useful for spotting refactor waves
+                but misleading as a measure of who did more work.
+              </p>
+            </HelpPanel>
+          </div>
+        </div>
+      </section>
 
       {/* Cohort Commit Size Trends */}
       {bundle?.cohortCommits && (
@@ -372,6 +464,12 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
           </div>
         </section>
       )}
+
+      {/* Before/After AI Adoption (rewired to periodMetrics per Phase 9.4 D-13) */}
+      <BeforeAfterComparison
+        periodMetrics={periodMetricsData ?? null}
+        isLoading={dataFetching && bundle?.periodMetrics === undefined}
+      />
 
       {/* PR Turnaround */}
       {bundle?.prTurnaround && bundle.prTurnaround.length > 0 && (

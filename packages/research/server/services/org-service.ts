@@ -8,6 +8,9 @@ import {
   contributors,
   prTurnaround,
   botRatio,
+  concentrationMonthly,
+  headcountMonthly,
+  periodMetrics,
 } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 
@@ -62,6 +65,10 @@ export function deleteSnapshotData(snapshotId: number) {
   db.delete(contributors).where(eq(contributors.snapshotId, snapshotId)).run();
   db.delete(prTurnaround).where(eq(prTurnaround.snapshotId, snapshotId)).run();
   db.delete(botRatio).where(eq(botRatio.snapshotId, snapshotId)).run();
+  // Phase 9.4 tables — must be deleted too or FK constraints block the cascade.
+  db.delete(concentrationMonthly).where(eq(concentrationMonthly.snapshotId, snapshotId)).run();
+  db.delete(headcountMonthly).where(eq(headcountMonthly.snapshotId, snapshotId)).run();
+  db.delete(periodMetrics).where(eq(periodMetrics.snapshotId, snapshotId)).run();
 }
 
 export function deleteSnapshot(snapshotId: number) {

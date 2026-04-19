@@ -407,10 +407,11 @@ describe('CollectionEngine', () => {
     // Create a mock that aborts after second page is yielded
     // (so first page processes, second page checks abort before processing)
     let pageCount = 0;
+    const listCommitsMock = vi.fn();
     const mockOctokit = {
       rest: {
         repos: {
-          listCommits: vi.fn(),
+          listCommits: listCommitsMock,
           getCommit: vi.fn(),
         },
         pulls: {
@@ -420,7 +421,7 @@ describe('CollectionEngine', () => {
       },
       paginate: {
         iterator: vi.fn().mockImplementation((endpoint: unknown) => {
-          if (endpoint === mockOctokit.rest.repos.listCommits) {
+          if (endpoint === listCommitsMock) {
             const pages = [page1, page2, page3];
             pageCount = 0;
             return {

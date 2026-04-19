@@ -12,6 +12,9 @@ import {
   contributors,
   prTurnaround,
   botRatio,
+  concentrationMonthly,
+  headcountMonthly,
+  periodMetrics,
 } from '../db/schema.js';
 import { eq, and, ne } from 'drizzle-orm';
 import { validateBundle } from './validation.js';
@@ -69,7 +72,9 @@ export function parseZipBundle(buffer: Buffer): unknown {
     prTurnaround: readJson('pr-turnaround.json') ?? [],
     botRatio: readJson('bot-ratio.json') ?? [],
     executiveSummary: readJson('executive-summary.json') ?? null,
-    beforeAfter: readJson('before-after.json') ?? null,
+    periodMetrics: readJson('period-metrics.json') ?? null,
+    concentrationMonthly: readJson('concentration-monthly.json') ?? [],
+    headcountMonthly: readJson('headcount-monthly.json') ?? [],
   };
 }
 
@@ -99,16 +104,32 @@ export function importBundle(
   const contributorCount = new Set(data.contributors.map((c) => c.authorLogin)).size;
   const repoCount = data.metadata.repoNames.length;
 
-  // Auto-create org if needed
+  // Auto-create org if needed — but first, check whether this exact bundle
+  // (by contentHash) has already been imported into ANY existing org. If so,
+  // attach as a new snapshot on that org instead of creating a duplicate org.
+  // This matches user expectation: re-importing the same ZIP should add a new
+  // snapshot, not spawn a parallel org. (Filed 2026-04-18 smoke test §3f.)
   if (orgId === null) {
-    const label =
-      orgLabel ??
-      data.metadata.orgName ??   // D-11: prefer orgName from metadata
-      (repoCount > 0
-        ? `${data.metadata.repoNames[0]}${repoCount > 1 ? ` (+${repoCount - 1} more)` : ''}`
-        : `Import-${new Date().toISOString().slice(0, 10)}`);
-    const size = contributorCount <= 20 ? 'small' : contributorCount <= 100 ? 'medium' : 'large';
-    orgId = createOrg(label, importSource, size);
+    const existingSnapshot = db
+      .select({ orgId: snapshots.orgId })
+      .from(snapshots)
+      .where(eq(snapshots.contentHash, contentHash))
+      .limit(1)
+      .get();
+
+    if (existingSnapshot) {
+      orgId = existingSnapshot.orgId;
+      warnings.push('Content matches an existing org — attaching as a new snapshot');
+    } else {
+      const label =
+        orgLabel ??
+        data.metadata.orgName ??   // D-11: prefer orgName from metadata
+        (repoCount > 0
+          ? `${data.metadata.repoNames[0]}${repoCount > 1 ? ` (+${repoCount - 1} more)` : ''}`
+          : `Import-${new Date().toISOString().slice(0, 10)}`);
+      const size = contributorCount <= 20 ? 'small' : contributorCount <= 100 ? 'medium' : 'large';
+      orgId = createOrg(label, importSource, size);
+    }
   }
 
   // Check for duplicate (same contentHash for this org) — single indexed query (WR-01)
@@ -232,7 +253,6 @@ export function importBundle(
         executiveSummaryJson: data.executiveSummary
           ? JSON.stringify(data.executiveSummary)
           : null,
-        beforeAfterJson: data.beforeAfter ? JSON.stringify(data.beforeAfter) : null,
       })
       .returning({ id: snapshots.id })
       .get();
@@ -357,6 +377,51 @@ export function importBundle(
           }))
         )
         .run();
+    }
+
+    // Insert concentration_monthly rows
+    if (data.concentrationMonthly?.length) {
+      for (const row of data.concentrationMonthly) {
+        db.insert(concentrationMonthly).values({
+          snapshotId: snapId,
+          orgId: orgId as number,
+          basis: row.basis,
+          periodMonth: row.month,
+          top1Share: row.top1Share ?? null,
+          top3Share: row.top3Share ?? null,
+          top5Share: row.top5Share ?? null,
+          hhi: row.hhi ?? null,
+          gini: row.gini ?? null,
+          busFactor: row.busFactor ?? null,
+          activeDevs: row.activeDevs,
+          topContributor: row.topContributor ?? null,
+        }).run();
+      }
+    }
+
+    // Insert headcount_monthly rows
+    if (data.headcountMonthly?.length) {
+      for (const row of data.headcountMonthly) {
+        db.insert(headcountMonthly).values({
+          snapshotId: snapId,
+          orgId: orgId as number,
+          periodMonth: row.month,
+          activeDevs: row.activeDevs,
+          totalPrs: row.totalPrs,
+          totalCommits: row.totalCommits,
+          prsPerDev: row.prsPerDev ?? null,
+          commitsPerDev: row.commitsPerDev ?? null,
+        }).run();
+      }
+    }
+
+    // Insert period_metrics row (single JSON blob per snapshot)
+    if (data.periodMetrics?.length) {
+      db.insert(periodMetrics).values({
+        snapshotId: snapId,
+        orgId: orgId as number,
+        dataJson: JSON.stringify(data.periodMetrics),
+      }).run();
     }
 
     return snapId;

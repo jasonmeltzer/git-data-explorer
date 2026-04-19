@@ -244,3 +244,41 @@ export interface ContributorRepoBeforeAfterStats {
   pre: ContributorRepoStats | null;
   post: ContributorRepoStats | null;
 }
+
+// ─── Phase 9.4: Team Distribution types ─────────────────────────────────────
+
+export interface Period {
+  startDate: string;   // ISO date string
+  endDate: string;     // ISO date string
+  label: string;
+  markerDate?: string; // ISO date string, for chart marker decoration
+}
+
+export interface PeriodMetric {
+  period: Period;
+  metrics: Record<string, number | null>;
+}
+
+export type ConcentrationBasis = 'prs' | 'commits' | 'lines';
+
+export interface ConcentrationMonthlyRow {
+  month: string;           // 'YYYY-MM'
+  basis: ConcentrationBasis;
+  top1Share: number | null;  // 0-100 (percentage), null if zero activity for this basis
+  top3Share: number | null;
+  top5Share: number | null;
+  hhi: number | null;        // 0-1 scale
+  gini: number | null;       // 0-1 scale
+  busFactor: number | null;  // devsToReach50Pct, integer
+  activeDevs: number;        // always populated (commit-OR-PR definition)
+  topContributor: string | null; // github_login of top-1 contributor for chart annotation
+}
+
+export interface HeadcountMonthlyRow {
+  month: string;              // 'YYYY-MM'
+  activeDevs: number;         // commit-OR-PR active definition (D-09)
+  totalPrs: number;
+  totalCommits: number;
+  prsPerDev: number | null;   // null if activeDevs=0
+  commitsPerDev: number | null;
+}

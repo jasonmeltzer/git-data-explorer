@@ -48,10 +48,10 @@ describe('Test data generator', () => {
       expect(result.success).toBe(true);
     });
 
-    it('has non-null executiveSummary and beforeAfter (has AI marker)', () => {
+    it('has non-null executiveSummary and periodMetrics (has AI marker)', () => {
       const bundle = generateSmallStartup();
       expect(bundle.executiveSummary).not.toBeNull();
-      expect(bundle.beforeAfter).not.toBeNull();
+      expect(bundle.periodMetrics).not.toBeNull();
     });
 
     it('has ramp-up data with 3 distinct join periods', () => {
@@ -151,9 +151,9 @@ describe('Test data generator', () => {
       expect(bundle.metadata.aiMarkerDate).toBeNull();
     });
 
-    it('has beforeAfter === null (no AI marker means no before/after)', () => {
+    it('has periodMetrics === null (no AI marker means no period metrics)', () => {
       const bundle = generatePreAiBaseline();
-      expect(bundle.beforeAfter).toBeNull();
+      expect(bundle.periodMetrics).toBeNull();
     });
 
     it('has 12+ months of data', () => {

@@ -27,6 +27,9 @@
     --color-chart-cohort-mid:    var(--chart-cohort-mid);
     --color-chart-cohort-senior: var(--chart-cohort-senior);
     --color-chart-ai-marker:     var(--chart-ai-marker);
+    --color-chart-concentration: var(--chart-concentration);
+    --color-chart-hhi-line:      var(--chart-hhi-line);
+    --color-chart-headcount:     var(--chart-headcount);
     --color-ring: var(--ring);
     --color-input: var(--input);
     --color-border: var(--border);
@@ -83,6 +86,10 @@
     --chart-cohort-mid:    oklch(0.75 0.15 145);  /* teal-green — 3-12mo cohort */
     --chart-cohort-senior: oklch(0.72 0.16 50);   /* amber — 1yr+ cohort */
     --chart-ai-marker:     oklch(0.55 0.12 300);  /* muted purple — AI marker line */
+    /* Phase 9.4: Team Distribution chart tokens */
+    --chart-concentration: oklch(0.55 0.20 300);  /* purple — top-N share bars */
+    --chart-hhi-line:      oklch(0.60 0.18 30);   /* warm orange — HHI overlay line */
+    --chart-headcount:     oklch(0.70 0.12 220);  /* muted blue — active devs bars */
     --radius: 0.625rem;
     --sidebar: oklch(0.985 0 0);
     --sidebar-foreground: oklch(0.145 0 0);
@@ -122,6 +129,10 @@
     --chart-cohort-mid:    oklch(0.82 0.15 145);
     --chart-cohort-senior: oklch(0.79 0.16 50);
     --chart-ai-marker:     oklch(0.62 0.12 300);
+    /* Phase 9.4: Team Distribution chart tokens */
+    --chart-concentration: oklch(0.65 0.20 300);
+    --chart-hhi-line:      oklch(0.70 0.18 30);
+    --chart-headcount:     oklch(0.78 0.12 220);
     --sidebar: oklch(0.205 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.488 0.243 264.376);

@@ -37,8 +37,22 @@ vi.mock('../services/analytics-summary.js', () => ({
   }),
 }));
 
-vi.mock('../services/analytics-before-after.js', () => ({
-  getBeforeAfterComparison: vi.fn().mockReturnValue(null),
+vi.mock('@shared/lib/periods.js', () => ({
+  buildPeriodsFromMarker: vi.fn().mockReturnValue([
+    { startDate: '2025-01-01', endDate: '2025-12-31', label: 'All-time' },
+  ]),
+}));
+
+vi.mock('../services/analytics-concentration.js', () => ({
+  getConcentrationMonthly: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock('../services/analytics-headcount.js', () => ({
+  getHeadcountMonthly: vi.fn().mockReturnValue([]),
+}));
+
+vi.mock('../services/analytics-period-metrics.js', () => ({
+  getPeriodMetrics: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('../services/analytics-config.js', () => ({
@@ -85,7 +99,7 @@ describe('buildExportBundle', () => {
     vi.clearAllMocks();
   });
 
-  it('returns an object with all 10 expected top-level keys', () => {
+  it('returns an object with all 12 expected top-level keys', () => {
     const bundle = buildExportBundle(BASE_REQUEST);
     expect(bundle).toHaveProperty('metadata');
     expect(bundle).toHaveProperty('cohortCommits');
@@ -96,7 +110,9 @@ describe('buildExportBundle', () => {
     expect(bundle).toHaveProperty('prTurnaround');
     expect(bundle).toHaveProperty('botRatio');
     expect(bundle).toHaveProperty('executiveSummary');
-    expect(bundle).toHaveProperty('beforeAfter');
+    expect(bundle).toHaveProperty('periodMetrics');
+    expect(bundle).toHaveProperty('concentrationMonthly');
+    expect(bundle).toHaveProperty('headcountMonthly');
   });
 
   it('metadata.toolVersion matches package.json version', () => {
@@ -123,10 +139,10 @@ describe('buildExportBundle', () => {
     expect(bundle.metadata.repoNames).toEqual(['org/repo-one']);
   });
 
-  it('beforeAfter is null when getAiMarkerDate returns null', () => {
+  it('periodMetrics is an array when getAiMarkerDate returns null', () => {
     vi.mocked(getAiMarkerDate).mockReturnValue(null);
     const bundle = buildExportBundle(BASE_REQUEST);
-    expect(bundle.beforeAfter).toBeNull();
+    expect(Array.isArray(bundle.periodMetrics)).toBe(true);
   });
 
   it('metadata.aiMarkerDate is null when no AI marker is set', () => {
@@ -180,5 +196,35 @@ describe('buildExportBundle', () => {
   it('metadata.cohortConfig has 3 thresholds', () => {
     const bundle = buildExportBundle(BASE_REQUEST);
     expect(bundle.metadata.cohortConfig.thresholds).toHaveLength(3);
+  });
+});
+
+// ── 9.4 bundle shape assertions ───────────────────────────────────────────────
+// Verify the new sections added by Phase 9.4: periodMetrics replaces
+// beforeAfter, and concentrationMonthly + headcountMonthly are added.
+
+describe('9.4 bundle shape', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('bundle includes periodMetrics as an array', () => {
+    const bundle = buildExportBundle(BASE_REQUEST);
+    expect(Array.isArray(bundle.periodMetrics)).toBe(true);
+  });
+
+  it('bundle includes concentrationMonthly as an array', () => {
+    const bundle = buildExportBundle(BASE_REQUEST);
+    expect(Array.isArray(bundle.concentrationMonthly)).toBe(true);
+  });
+
+  it('bundle includes headcountMonthly as an array', () => {
+    const bundle = buildExportBundle(BASE_REQUEST);
+    expect(Array.isArray(bundle.headcountMonthly)).toBe(true);
+  });
+
+  it('bundle does NOT include beforeAfter key', () => {
+    const bundle = buildExportBundle(BASE_REQUEST);
+    expect('beforeAfter' in bundle).toBe(false);
   });
 });

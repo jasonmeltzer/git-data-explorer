@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../db/schema.js';
+import { DEFAULT_COHORT_CONFIG } from '@shared/cohort-config.js';
 
 // ─── In-memory test DB ────────────────────────────────────────────────────────
 
@@ -54,12 +55,12 @@ const stubBundle = {
     startDate: '2024-01-01',
     endDate: '2024-12-31',
     aiMarkerDate: null,
-    tenureMode: 'global',
+    tenureMode: 'global' as const,
     repoIds: [],
     repoNames: [],
-    cohortConfig: { thresholds: [] },
+    cohortConfig: DEFAULT_COHORT_CONFIG,
     toolVersion: '1.0.0',
-    rollingGranularity: 'month',
+    rollingGranularity: 'month' as const,
     orgName: null,
   },
   cohortCommits: [],
@@ -70,7 +71,9 @@ const stubBundle = {
   prTurnaround: [],
   botRatio: [],
   executiveSummary: null,
-  beforeAfter: null,
+  periodMetrics: null,
+  concentrationMonthly: [],
+  headcountMonthly: [],
 };
 
 vi.mock('../services/export-service.js', () => ({

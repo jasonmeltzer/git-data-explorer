@@ -206,7 +206,6 @@ function importBundleWith(
         repoCount,
         contentHash,
         executiveSummaryJson: data.executiveSummary ? JSON.stringify(data.executiveSummary) : null,
-        beforeAfterJson: data.beforeAfter ? JSON.stringify(data.beforeAfter) : null,
       })
       .returning({ id: schema.snapshots.id })
       .get();
@@ -455,7 +454,9 @@ const sampleBundle = {
     rampUpTrend: 'improving',
     aiAdoptionDelta: '+15%',
   },
-  beforeAfter: null,
+  periodMetrics: null,
+  concentrationMonthly: [],
+  headcountMonthly: [],
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

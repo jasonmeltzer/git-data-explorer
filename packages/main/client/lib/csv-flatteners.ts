@@ -1,13 +1,14 @@
 /**
  * CSV flattening helpers for nested export bundle objects.
  *
- * These functions convert nested object types (rolling comparison, before/after,
- * executive summary) into flat CSV rows suitable for inclusion in CSV-format exports.
+ * These functions convert nested object types (rolling comparison, period metrics,
+ * executive summary, concentration, headcount) into flat CSV rows suitable for
+ * inclusion in CSV-format exports.
  */
 
 import { toCsv } from './csv-serializer.js';
 import type { RollingComparisonResult } from '@shared/types.js';
-import type { BeforeAfterComparison, ExecutiveSummary } from '@shared/export-types.js';
+import type { ExecutiveSummary, PeriodMetric, ConcentrationMonthlyRow, HeadcountMonthlyRow } from '@shared/export-types.js';
 
 /**
  * Flatten a RollingComparisonResult into a 3-row CSV string.
@@ -91,41 +92,60 @@ export function rollingToCsv(rolling: RollingComparisonResult): string {
 }
 
 /**
- * Flatten a BeforeAfterComparison into a 2-row CSV string.
+ * Flatten a PeriodMetric[] into a CSV string.
  *
- * Rows:
- *   1. "before" — metrics before the AI marker date
- *   2. "after"  — metrics after the AI marker date
+ * One row per period. Metric keys are derived from the first entry's metrics object.
+ * If the array is empty, returns an empty string.
  */
-export function beforeAfterToCsv(ba: BeforeAfterComparison): string {
+export function periodMetricsToCsv(periods: PeriodMetric[]): string {
+  if (periods.length === 0) return '';
+
+  // Collect all metric keys across all periods for consistent columns
+  const metricKeys = Array.from(
+    new Set(periods.flatMap((p) => Object.keys(p.metrics)))
+  );
+
+  const headers = ['label', 'startDate', 'endDate', 'markerDate', ...metricKeys];
+
+  const rows = periods.map((p) => [
+    p.period.label,
+    p.period.startDate,
+    p.period.endDate,
+    p.period.markerDate ?? null,
+    ...metricKeys.map((k) => p.metrics[k] ?? null),
+  ]);
+
+  return toCsv(headers, rows);
+}
+
+/**
+ * Flatten a ConcentrationMonthlyRow[] into a CSV string.
+ */
+export function concentrationMonthlyToCsv(rows: ConcentrationMonthlyRow[]): string {
+  if (rows.length === 0) return '';
   const headers = [
-    'period',
-    'avgCommitSize',
-    'prFrequency',
-    'rampUpSpeed',
-    'activeContributors',
-    'markerDate',
+    'month', 'basis', 'top1Share', 'top3Share', 'top5Share',
+    'hhi', 'gini', 'busFactor', 'activeDevs', 'topContributor',
   ];
+  const data = rows.map((r) => [
+    r.month, r.basis, r.top1Share, r.top3Share, r.top5Share,
+    r.hhi, r.gini, r.busFactor, r.activeDevs, r.topContributor,
+  ]);
+  return toCsv(headers, data);
+}
 
-  const beforeRow = [
-    'before',
-    ba.before.avgCommitSize,
-    ba.before.prFrequency,
-    ba.before.rampUpSpeed,
-    ba.before.activeContributors,
-    ba.markerDate,
+/**
+ * Flatten a HeadcountMonthlyRow[] into a CSV string.
+ */
+export function headcountMonthlyToCsv(rows: HeadcountMonthlyRow[]): string {
+  if (rows.length === 0) return '';
+  const headers = [
+    'month', 'activeDevs', 'totalPrs', 'totalCommits', 'prsPerDev', 'commitsPerDev',
   ];
-
-  const afterRow = [
-    'after',
-    ba.after.avgCommitSize,
-    ba.after.prFrequency,
-    ba.after.rampUpSpeed,
-    ba.after.activeContributors,
-    ba.markerDate,
-  ];
-
-  return toCsv(headers, [beforeRow, afterRow]);
+  const data = rows.map((r) => [
+    r.month, r.activeDevs, r.totalPrs, r.totalCommits, r.prsPerDev, r.commitsPerDev,
+  ]);
+  return toCsv(headers, data);
 }
 
 /**

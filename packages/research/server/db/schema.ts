@@ -21,7 +21,7 @@ export const snapshots = sqliteTable('snapshots', {
   repoCount: integer('repo_count'),
   contentHash: text('content_hash'),              // SHA-256 for dedup detection
   executiveSummaryJson: text('executive_summary_json'),
-  beforeAfterJson: text('before_after_json'),
+  // beforeAfterJson removed in Phase 9.4 (D-13) — replaced by periodMetrics table
 });
 
 export const cohortMetrics = sqliteTable('cohort_metrics', {
@@ -100,3 +100,42 @@ export const botRatio = sqliteTable('bot_ratio', {
 }, (table) => [
   index('idx_bot_ratio_org').on(table.orgId),
 ]);
+
+export const concentrationMonthly = sqliteTable('concentration_monthly', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  snapshotId: integer('snapshot_id').notNull().references(() => snapshots.id),
+  orgId: integer('org_id').notNull().references(() => orgs.id),
+  basis: text('basis').notNull(),            // 'prs' | 'commits' | 'lines'
+  periodMonth: text('period_month').notNull(),
+  top1Share: real('top1_share'),             // nullable for zero-activity months
+  top3Share: real('top3_share'),
+  top5Share: real('top5_share'),
+  hhi: real('hhi'),
+  gini: real('gini'),
+  busFactor: integer('bus_factor'),
+  activeDevs: integer('active_devs').notNull(),
+  topContributor: text('top_contributor'),
+}, (table) => [
+  index('idx_concentration_monthly_org').on(table.orgId, table.basis),
+]);
+
+export const headcountMonthly = sqliteTable('headcount_monthly', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  snapshotId: integer('snapshot_id').notNull().references(() => snapshots.id),
+  orgId: integer('org_id').notNull().references(() => orgs.id),
+  periodMonth: text('period_month').notNull(),
+  activeDevs: integer('active_devs').notNull(),
+  totalPrs: integer('total_prs').notNull(),
+  totalCommits: integer('total_commits').notNull(),
+  prsPerDev: real('prs_per_dev'),
+  commitsPerDev: real('commits_per_dev'),
+}, (table) => [
+  index('idx_headcount_monthly_org').on(table.orgId),
+]);
+
+export const periodMetrics = sqliteTable('period_metrics', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  snapshotId: integer('snapshot_id').notNull().references(() => snapshots.id),
+  orgId: integer('org_id').notNull().references(() => orgs.id),
+  dataJson: text('data_json').notNull(),     // JSON-serialized PeriodMetric[]
+});

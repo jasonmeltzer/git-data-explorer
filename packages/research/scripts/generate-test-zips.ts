@@ -36,8 +36,14 @@ function bundleToZip(bundle: ExportBundle): Uint8Array {
   if (bundle.executiveSummary) {
     files['executive-summary.json'] = json(bundle.executiveSummary);
   }
-  if (bundle.beforeAfter) {
-    files['before-after.json'] = json(bundle.beforeAfter);
+  if (bundle.periodMetrics) {
+    files['period-metrics.json'] = json(bundle.periodMetrics);
+  }
+  if (bundle.concentrationMonthly.length > 0) {
+    files['concentration-monthly.json'] = json(bundle.concentrationMonthly);
+  }
+  if (bundle.headcountMonthly.length > 0) {
+    files['headcount-monthly.json'] = json(bundle.headcountMonthly);
   }
 
   return zipSync(files);
