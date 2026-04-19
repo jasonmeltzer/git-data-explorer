@@ -32,7 +32,6 @@ vi.mock('recharts', async () => {
   return {
     ...actual,
     ResponsiveContainer: ({ children }: { children: React.ReactElement }) => {
-      const React = require('react');
       return React.cloneElement(children, { width: 800, height: 400 });
     },
   };

@@ -230,20 +230,20 @@ function seedAll() {
   // Snapshot 1 (older — import_timestamp smaller)
   raw.prepare(`
     INSERT INTO snapshots (id, org_id, import_timestamp, metadata_json, content_hash)
-    VALUES (1, 1, 1000, '${MINIMAL_METADATA}', 'hash-older')
-  `).run();
+    VALUES (?, ?, ?, ?, ?)
+  `).run(1, 1, 1000, MINIMAL_METADATA, 'hash-older');
 
   // Snapshot 2 (newer — import_timestamp larger; should be used by getLatestSnapshotId)
   raw.prepare(`
     INSERT INTO snapshots (id, org_id, import_timestamp, metadata_json, content_hash)
-    VALUES (2, 1, 2000, '${MINIMAL_METADATA}', 'hash-newer')
-  `).run();
+    VALUES (?, ?, ?, ?, ?)
+  `).run(2, 1, 2000, MINIMAL_METADATA, 'hash-newer');
 
   // Snapshot 3 (belongs to org 3 — for org-mismatch 404 test)
   raw.prepare(`
     INSERT INTO snapshots (id, org_id, import_timestamp, metadata_json, content_hash)
-    VALUES (3, 3, 3000, '${MINIMAL_METADATA}', 'hash-org3')
-  `).run();
+    VALUES (?, ?, ?, ?, ?)
+  `).run(3, 3, 3000, MINIMAL_METADATA, 'hash-org3');
 
   // concentration_monthly rows for snapshot 2 (newest): 3 bases × 2 months
   const concentrationRows = [
@@ -277,8 +277,8 @@ function seedAll() {
   // period_metrics for snapshot 2
   raw.prepare(`
     INSERT INTO period_metrics (snapshot_id, org_id, data_json)
-    VALUES (2, 1, '${PERIOD_METRICS_DATA}')
-  `).run();
+    VALUES (?, ?, ?)
+  `).run(2, 1, PERIOD_METRICS_DATA);
 }
 
 // ── App factory ───────────────────────────────────────────────────────────────
@@ -422,7 +422,7 @@ describe('GET /api/orgs/:orgId/period-metrics', () => {
     const body = await res.json();
     expect(body).toBeNull();
     // Restore
-    raw.prepare(`INSERT INTO period_metrics (snapshot_id, org_id, data_json) VALUES (2, 1, '${PERIOD_METRICS_DATA}')`).run();
+    raw.prepare(`INSERT INTO period_metrics (snapshot_id, org_id, data_json) VALUES (?, ?, ?)`).run(2, 1, PERIOD_METRICS_DATA);
   });
 
   it('returns 400 for invalid (non-numeric) orgId', async () => {

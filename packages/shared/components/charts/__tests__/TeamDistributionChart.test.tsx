@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, test, expect, beforeAll, vi } from 'vitest';
 import '@testing-library/jest-dom/vitest';
@@ -48,7 +49,6 @@ vi.mock('recharts', async () => {
       children: React.ReactElement;
     }) => {
       // Clone the child and pass explicit width/height so Recharts Surface renders
-      const React = require('react');
       return React.cloneElement(children, { width: 800, height: 400 });
     },
   };
