@@ -373,7 +373,7 @@ d('seed data refactor wave (9.4.2)', () => {
             SUM(c.lines_added + c.lines_deleted) AS total_lines
           FROM commits c
           JOIN authors a ON a.id = c.author_id
-          WHERE a.is_bot = 0
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
           GROUP BY month, a.id
         ),
         totals AS (
@@ -405,7 +405,7 @@ d('seed data refactor wave (9.4.2)', () => {
             COUNT(*) AS total_commits
           FROM commits c
           JOIN authors a ON a.id = c.author_id
-          WHERE a.is_bot = 0
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
           GROUP BY month, a.id
         ),
         totals AS (
@@ -447,32 +447,53 @@ d('seed data refactor wave (9.4.2)', () => {
   test('refactor-wave month attributes to lwilson (the D-03 persona)', () => {
     const db = openSeedDb();
     try {
-      // Find the lines-basis top-1 row with share >= 70% — it MUST be lwilson
+      // Find the refactor-wave signature month: top-1-lines-share >= 70% AND the same
+      // author's commits-share < 40% (cross-basis divergence). This disambiguates lwilson's
+      // deletion-heavy wave from alexpower's 3-month dominant window — alexpower dominates
+      // BOTH lines and commits, so cross-basis divergence isolates the wave.
       const row = db.prepare(`
-        WITH per_author AS (
+        WITH per_author_lines AS (
           SELECT
             strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            a.id AS author_id,
             a.github_login AS login,
             SUM(c.lines_added + c.lines_deleted) AS total_lines
           FROM commits c
           JOIN authors a ON a.id = c.author_id
-          WHERE a.is_bot = 0
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
           GROUP BY month, a.id
         ),
-        totals AS (SELECT month, SUM(total_lines) AS lines_total FROM per_author GROUP BY month),
-        ranked AS (
+        per_author_commits AS (
           SELECT
-            pa.month, pa.login,
-            CAST(pa.total_lines AS REAL) / t.lines_total AS share,
-            ROW_NUMBER() OVER (PARTITION BY pa.month ORDER BY pa.total_lines DESC) AS rank
-          FROM per_author pa JOIN totals t ON t.month = pa.month
-          WHERE t.lines_total > 0
+            strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            a.id AS author_id,
+            COUNT(*) AS total_commits
+          FROM commits c
+          JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
+          GROUP BY month, a.id
+        ),
+        month_lines_totals AS (SELECT month, SUM(total_lines) AS lines_total FROM per_author_lines GROUP BY month),
+        month_commits_totals AS (SELECT month, SUM(total_commits) AS commits_total FROM per_author_commits GROUP BY month),
+        ranked_lines AS (
+          SELECT pa.month, pa.author_id, pa.login,
+                 CAST(pa.total_lines AS REAL) / mt.lines_total AS lines_share,
+                 ROW_NUMBER() OVER (PARTITION BY pa.month ORDER BY pa.total_lines DESC) AS rank
+          FROM per_author_lines pa JOIN month_lines_totals mt ON mt.month = pa.month
+          WHERE mt.lines_total > 0
         )
-        SELECT month, login, share FROM ranked WHERE rank = 1 AND share >= 0.70
-        ORDER BY share DESC LIMIT 1
-      `).get() as { month: string; login: string; share: number } | undefined;
+        SELECT rl.month, rl.login, rl.lines_share,
+               CAST(pac.total_commits AS REAL) / mct.commits_total AS commits_share
+        FROM ranked_lines rl
+        JOIN per_author_commits pac ON pac.month = rl.month AND pac.author_id = rl.author_id
+        JOIN month_commits_totals mct ON mct.month = rl.month
+        WHERE rl.rank = 1
+          AND rl.lines_share >= 0.70
+          AND CAST(pac.total_commits AS REAL) / mct.commits_total < 0.40
+        ORDER BY rl.lines_share DESC LIMIT 1
+      `).get() as { month: string; login: string; lines_share: number; commits_share: number } | undefined;
 
-      expect(row, 'no month has lines-top1 >= 70%').toBeDefined();
+      expect(row, 'no month has refactor-wave signature (lines-top1 >= 70% AND commits-share < 40%)').toBeDefined();
       expect(row!.login).toBe('lwilson');
     } finally {
       db.close();
@@ -593,7 +614,7 @@ d('seed data 9.4.2 × D-16 window non-overlap (9.4.2)', () => {
                  a.github_login AS login,
                  COUNT(*) AS commits
           FROM commits c JOIN authors a ON a.id = c.author_id
-          WHERE a.is_bot = 0
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
           GROUP BY month, a.id
         ),
         totals AS (SELECT month, SUM(commits) AS total FROM per_author GROUP BY month),
@@ -614,7 +635,7 @@ d('seed data 9.4.2 × D-16 window non-overlap (9.4.2)', () => {
                  a.github_login AS login,
                  SUM(c.lines_added + c.lines_deleted) AS total_lines
           FROM commits c JOIN authors a ON a.id = c.author_id
-          WHERE a.is_bot = 0 GROUP BY month, a.id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%' GROUP BY month, a.id
         ),
         totals AS (SELECT month, SUM(total_lines) AS lines_total FROM per_author GROUP BY month),
         ranked AS (
