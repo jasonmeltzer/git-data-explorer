@@ -125,7 +125,7 @@ Hono HTTP server. No GitHub API dependency — all data from imported ExportBund
 - `validation.ts` — Zod schema for ExportBundle; validates shape, warns on null/empty optional sections; backward-compatible with old toolVersion bundles
 - `org-service.ts` — Org and snapshot CRUD (create, list, get, update, delete with cascade)
 - `aggregation.ts` — Cross-org aggregation engine: `getAggregatedCohortMetrics`, `getAggregatedRampUp`, `getOrgComparisonTable`; uses latest snapshot per org
-- `test-data-generator.ts` — Synthetic ExportBundle generator (small startup, mid-size company, pre-AI baseline); used by tests
+- `test-data-generator.ts` — Synthetic ExportBundle generator (small startup, mid-size company, pre-AI baseline); used by tests. **Phase 9.4.2:** rebuilt around a single `ActivityProfile` per generated org — every section (concentration, headcount, bot ratio, period metrics) now derives from one synthetic activity source, so `topContributor` rotates across generated logins and cross-basis top-1 shares are consistent for dominant-window months. Each generator accepts a `GenerateOrgOptions` parameter with D-09 boolean toggles (`includeDominantWindow`, `includeBotStormMonth`, `includeTeamSizeStep`) defaulting per-orgType. `buildPeriodMetricsFromProfile` computes `avgCommitSize` / `prFrequency` / `activeContributors` from profile activity; `rampUpSpeed` stays a literal constant per D-08's hardcoded-for-now exemption (Phase 9.5 derives it properly).
 
 ### Shared Package (`packages/shared/`)
 
@@ -354,7 +354,7 @@ packages/
 │   │           ├── export-service.ts # buildExportBundle (11 analytics sections: cohortCommits, cohortPrs, rampUp, rolling, contributors, prTurnaround, botRatio, executiveSummary, periodMetrics, concentrationMonthly, headcountMonthly)
 │   │           └── first-commit-fetcher.ts
 │   └── scripts/
-│       └── seed.ts                   # Synthetic data generator (npm run seed)
+│       └── seed.ts                   # Synthetic data generator (npm run seed). 34 personas (3 bots) across 3 repos. Phase 9.4.2 scenarios: `direct-devon` commit-only persona (zero PRs), `reviewer-riley` PR-reviewer persona (cross-month PRs, minimal commits), `lwilson` refactor wave (week 40, 250 deletion-heavy commits), `dependabot` bot storm (weeks 34-37, 14× commit rate).
 │
 ├── shared/
 │   ├── types.ts                      # Shared TypeScript interfaces

@@ -30,6 +30,8 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
+**Phase 9.4.2 complete** — Seed sample data robustness. Extended `packages/main/scripts/seed.ts` with 4 new scenarios that exercise Phase 9.4 UI code paths previously unreachable from seeded data: a commit-only persona (`direct-devon` — commits but zero PRs, exercises ScaryRealPanel's zero-PR null guard), a PR-reviewer persona (`reviewer-riley` — many PRs spanning month boundaries with minimal own commits, exercises D-10 merged_at author-set semantics), a refactor wave (`lwilson` week-40 deletion burst producing a month with ≥70% top-1 lines share and <40% commits share — the HelpPanel "lines are dominated by refactors" caveat), and a bot storm (dependabot 14× weeks 34-37 producing a ≥50% bot-share month). Research tool's `test-data-generator.ts` reworked around a single `ActivityProfile` concept so concentration/headcount/botRatio/periodMetrics derive from one synthetic activity source — `topContributor` rotates (no more hardcoded "Amber Bear"), periodMetrics computed from profile activity (no more literal 150/180), and D-09 boolean toggles (`includeDominantWindow`, `includeBotStormMonth`, `includeTeamSizeStep`) expose per-scenario controls on each generator. Added 21 new tests: 12 seed assertions in `packages/main/scripts/__tests__/seed.test.ts` (commit-only, PR-reviewer, refactor-wave, bot-storm, D-16 non-overlap regression) and 9 regression guards in `packages/research/server/__tests__/test-data-gen.test.ts`.
+
 **Phase 9.4.1 complete** — Test coverage completion for Phase 9.4. Added 173 tests (from 521 to 694 across 53 files): route integration tests for all 6 new HTTP endpoints (main + research), unit tests for 4 shared chart components (TeamDistributionChart/Table, ScaryRealPanel, BeforeAfterComparison's four render branches), hook tests for the 3 new DashboardPage `useQuery` calls, and an end-to-end bundle round-trip (export → ZIP → import → DB → reconstruct) verifying Phase 9.4 data sections survive the pipeline with exact field equality. First jsdom component tests in the repo — `@testing-library/react` + `@vitest-environment jsdom` docblock pattern established.
 
 **Phase 9.4 complete** — Team Distribution section with concentration risk metrics (top-N share, HHI, Gini, bus factor), headcount-normalized output, and the period-array data model that will carry forward through Phases 9.5–10. BeforeAfterComparison rewired to consume `PeriodMetric[]`; export bundle gains `concentrationMonthly`, `headcountMonthly`, `periodMetrics` sections.
@@ -59,7 +61,7 @@ What works today:
 - **9-section dashboard** — Executive Summary KPI tiles, Team Distribution, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
 - **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle with anonymization
 - **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download
-- **694 passing tests** across 53 test files (including D-16 seed assertions when `npm run seed` has run)
+- **715 passing tests** across 53 test files (including D-16 and Phase 9.4.2 seed-scenario assertions when `npm run seed` has run)
 
 ### Research Tool (`packages/research/`)
 A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
@@ -84,7 +86,7 @@ The project is organized as an npm workspaces monorepo:
 
 ### Code Quality
 - **ESLint configured** — flat config with typescript-eslint parser; includes `no-restricted-syntax` rule banning `asChild` prop on `@base-ui/react` components (prevents regression of resolved console warnings)
-- **694 passing tests** across 53 test files (including D-16 seed assertions when `npm run seed` has run)
+- **715 passing tests** across 53 test files (including D-16 and Phase 9.4.2 seed-scenario assertions when `npm run seed` has run)
 
 What's next:
 - **Phase 9.5: Contribution Patterns** — per-developer monthly time series with privacy framing
