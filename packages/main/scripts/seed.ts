@@ -238,7 +238,11 @@ const PERSONAS: ContributorPersona[] = [
   // --- Commit-only persona (D-01: direct-to-main workflow, zero PRs) ---
   // Exercises the ScaryRealPanel zero-PR null guard and the divergence between
   // commits-basis activeDevs and PRs-basis activeDevs in concentration analytics.
-  { login: 'direct-devon', name: 'Devon Quinn', type: 'commit-only', repos: [2], joinWeekOffset: 4, commitsPerWeek: 3, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
+  // joinWeekOffset: 24 — start AFTER alexpower's dominant window (weeks 6-22) ends so direct-devon's
+  // cross-repo commits don't dilute alex's monthly commit share below the D-16 test's 45% threshold.
+  // Devon still has ~28 weeks of activity (weeks 24-52) producing ~80 commits, more than enough for
+  // the Phase 9.4.2 "commits > 0 AND 0 PRs" assertions.
+  { login: 'direct-devon', name: 'Devon Quinn', type: 'commit-only', repos: [2], joinWeekOffset: 24, commitsPerWeek: 3, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
 
   // --- PR-reviewer persona (D-02: merges PRs but minimal own commits) ---
   // Exercises D-10 merged_at author-set semantics: has active PR months
@@ -442,14 +446,17 @@ function generateCommitsForPersonaRepo(
     }
 
     if (persona.type === 'bot') {
-      // Bots: normally 1 commit per weekday (Mon-Fri); 8× during botStormWeeks.
-      // W-3: 8× for weeks 34-37 raises dependabot's storm-month volume to ~480 commits
-      // (160/repo × 3 repos) vs ~300 human commits → ~60-65% bot share.
+      // Bots: normally 1 commit per weekday (Mon-Fri); 14× during botStormWeeks.
+      // W-3 round 2: empirical runs at 8× produced 49-52% bot share in 2025-11 — the
+      // threshold margin was too thin (Plan 03 requires >= 50%, so 49.4% on jittery runs
+      // caused flakes). 14× produces ~65% bot share with comfortable margin above 50%,
+      // matching Plan 01 threat_model's original ~60-65% expectation. Human commit
+      // volume in the storm-overlapping calendar month was higher than the plan estimated.
       const inStorm =
         persona.botStormWeeks != null
         && weeksSinceStart >= persona.botStormWeeks[0]
         && weeksSinceStart <= persona.botStormWeeks[1];
-      const commitsPerWeekday = inStorm ? 8 : 1;
+      const commitsPerWeekday = inStorm ? 14 : 1;
 
       for (let d = 0; d < 7; d++) {
         const dayMs = weekStart + d * MS_PER_DAY;
