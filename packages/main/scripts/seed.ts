@@ -1,7 +1,7 @@
 /**
  * Synthetic seed data generator for Git Data Explorer.
  *
- * Creates data/seed.db with 3 repos, ~30 contributors (including 3 bots),
+ * Creates data/seed.db with 3 repos, 34 contributors (3 bots + 31 humans),
  * 5000-10000 commits, and 500-1000 PRs spanning 13 months ending ~2 weeks ago.
  *
  * Run with: npx tsx scripts/seed.ts
@@ -167,8 +167,8 @@ interface ContributorPersona {
   sizeMu: number;
   sizeSigma: number;
   isBot: boolean;
-  refactorWaveWeek?: number;  // If set, generate ~150 deletion-heavy commits in this week (relative to DATA_START)
-  botStormWeeks?: [number, number];  // [startWeek, endWeek] — inclusive — bot commits are 8× normal during this window
+  refactorWaveWeek?: number;  // If set, generate ~250 deletion-heavy commits in this week (relative to DATA_START)
+  botStormWeeks?: [number, number];  // [startWeek, endWeek] — inclusive — bot commits are 14× normal during this window
 }
 
 const PERSONAS: ContributorPersona[] = [
@@ -248,8 +248,9 @@ const PERSONAS: ContributorPersona[] = [
   // Exercises D-10 merged_at author-set semantics: has active PR months
   // where they authored 0 commits (extra PRs injected in injectPrReviewerPrs below).
   // commitsPerWeek is intentionally low (~1 commit/month on average).
-  // repos: [0] (single repo) to keep total commits well below 20 so the acceptance test's
-  // "< 20 commits total" threshold has comfortable margin — expected total ≈ 0.3 × 42 weeks × 1 repo ≈ 13 commits.
+  // repos: [0] (single repo) keeps total commits modest — expected total ≈ 0.3 × ~46 active
+  // weeks × 1 repo ≈ 14 commits with Poisson variance ±5 — so monthly PR-without-commit windows
+  // reliably occur.
   { login: 'reviewer-riley', name: 'Riley Navarro', type: 'pr-reviewer', repos: [0], joinWeekOffset: 10, commitsPerWeek: 0.3, sizeMu: 2.5, sizeSigma: 0.8, isBot: false },
 
   // --- 3 Bots (all 3 repos, KNOWN_BOTS set) ---
@@ -418,8 +419,7 @@ function generateCommitsForPersonaRepo(
       // W-2 round 4: empirical runs showed non-lwilson humans contribute ~30k lines in 2025-12 (well above
       // the plan's ~19k estimate), so 150/200 commits left lwilson at 69-69.2% — just under Plan 03's 70%
       // threshold. 250 commits × ~337 avg lines ≈ 84k lwilson lines; share ≈ 84 / (84 + 30) ≈ 74% with
-      // comfortable margin.
-      // Share ≈ 48.8 / 67.6 ≈ 72%, comfortable margin above the 70% Plan 03 threshold.
+      // comfortable margin above the 70% Plan 03 threshold.
       for (let c = 0; c < WAVE_COMMITS; c++) {
         const commitDate = weightedRandomDate(weekStartDate, weekEndDate);
         if (commitDate.getTime() >= activeEndMs) continue;

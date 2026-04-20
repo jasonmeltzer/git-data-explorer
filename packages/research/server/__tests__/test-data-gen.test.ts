@@ -246,14 +246,17 @@ describe('Test data generator', () => {
     });
 
     it('D-09 toggle: generatePreAiBaseline stays clean regardless of options', () => {
-      // Attempting to enable scenarios on pre-AI should still produce a clean control-group bundle
+      // D-05 regression guard: forcing every toggle ON must NOT violate the pre-AI
+      // control-group contract: aiMarkerDate=null, periodMetrics=null, no bot-storm month.
       const bundle = generatePreAiBaseline({ includeDominantWindow: true, includeBotStormMonth: true, includeTeamSizeStep: true });
-      expect(bundle.metadata.aiMarkerDate).toBeNull();  // aiMarkerMonth: null is hard-coded in the generator body
-      expect(bundle.periodMetrics).toBeNull();           // helper returns null when marker is null
-      // Note: this test intentionally documents that the toggles do NOT override the pre-AI baseline's
-      // structural invariants (aiMarkerDate=null, periodMetrics=null). The toggle values only affect
-      // the profile's dominantWindow / headcountSchedule fields, but the aiMarkerMonth:null regression
-      // guard is enforced by buildPeriodMetricsFromProfile returning null when aiMarkerDate is null.
+      expect(bundle.metadata.aiMarkerDate).toBeNull();
+      expect(bundle.periodMetrics).toBeNull();
+      // includeBotStormMonth must be forcibly ignored for the pre-AI baseline — otherwise
+      // the control group would contain the same >= 50% bot-share month that small and mid orgs get.
+      expect(
+        bundle.botRatio.every(r => r.botPercentage < 50),
+        `Expected pre-AI baseline to ignore includeBotStormMonth: true; got max bot share ${Math.max(...bundle.botRatio.map(r => r.botPercentage))}%`,
+      ).toBe(true);
     });
 
     it('periodMetrics values are derived, not hardcoded 150/180', () => {

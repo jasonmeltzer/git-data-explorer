@@ -28,6 +28,7 @@ import type {
   RollingComparisonResult,
 } from '@shared/types.js';
 import { DEFAULT_COHORT_CONFIG } from '@shared/cohort-config.js';
+import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 
 // ─── Statistical distribution helpers ────────────────────────────────────────
 
@@ -460,13 +461,15 @@ function buildPeriodMetricsFromProfile(
   const preRampUp = 8;
   const postRampUp = 6;
 
+  // Delegate period boundaries to the canonical buildPeriodsFromMarker so Pre-AI
+  // endDate is the day before the marker (non-overlapping with Post-AI startDate).
+  const startDate = format(subMonths(referenceDate, profile.months.length), 'yyyy-MM-dd');
+  const endDate = format(referenceDate, 'yyyy-MM-dd');
+  const [prePeriod, postPeriod] = buildPeriodsFromMarker(startDate, endDate, aiMarkerDate);
+
   return [
     {
-      period: {
-        startDate: format(subMonths(referenceDate, profile.months.length), 'yyyy-MM-dd'),
-        endDate: aiMarkerDate,
-        label: 'Pre-AI',
-      },
+      period: prePeriod,
       metrics: {
         avgCommitSize: pre.avgCommitSize,
         prFrequency: pre.prFrequency,
@@ -475,12 +478,7 @@ function buildPeriodMetricsFromProfile(
       },
     },
     {
-      period: {
-        startDate: aiMarkerDate,
-        endDate: format(referenceDate, 'yyyy-MM-dd'),
-        label: 'Post-AI',
-        markerDate: aiMarkerDate,
-      },
+      period: postPeriod,
       metrics: {
         avgCommitSize: post.avgCommitSize,
         prFrequency: post.prFrequency,
@@ -904,13 +902,18 @@ export function generateMidSizeCompany(options: GenerateOrgOptions = {}): Export
  * - periodMetrics is null (no AI marker = no period comparison)
  */
 export function generatePreAiBaseline(options: GenerateOrgOptions = {}): ExportBundle {
-  // D-05 regression guard: pre-AI baseline ignores all D-09 toggles for the
-  // structural invariants (aiMarkerDate=null, periodMetrics=null). The toggles
-  // only affect the profile's dominantWindow / headcountSchedule fields, but
-  // the aiMarkerMonth: null below ensures buildPeriodMetricsFromProfile returns null.
+  // D-05 regression guard: pre-AI baseline is the control group and MUST remain
+  // structurally clean regardless of caller-provided options. Three invariants
+  // are enforced below:
+  //   1. aiMarkerDate = null (no AI marker)
+  //   2. periodMetrics = null (buildPeriodMetricsFromProfile returns null when marker is null)
+  //   3. botRatio contains no bot-storm month (`includeBotStormMonth` is ignored here)
+  // `includeDominantWindow` and `includeTeamSizeStep` ARE honored because they
+  // perturb only the dominantWindow / headcountSchedule of the activity profile
+  // and don't violate the control-group contract.
   const {
     includeDominantWindow = false,  // D-09 pre-AI default: false
-    includeBotStormMonth  = false,  // D-05 regression guard: pre-AI baseline must remain clean
+    includeBotStormMonth  = false,  // D-05 regression guard: default false; forcibly ignored below
     includeTeamSizeStep   = false,  // D-09 pre-AI default: false
   } = options;
 
@@ -973,9 +976,11 @@ export function generatePreAiBaseline(options: GenerateOrgOptions = {}): ExportB
   const contributors = buildContributors(contributorCount, cohorts.map(c => ({ key: c.key, weight: c.weight })), null);
 
   const prTurnaround = buildPrTurnaround(months, 18, null);
-  // includeBotStormMonth is false by default for pre-AI baseline (D-05 regression guard — keeps control group clean)
-  const stormMonthIdx = includeBotStormMonth ? Math.floor(months.length * 0.7) : undefined;
-  const botRatio = buildBotRatio(months, 0.12, stormMonthIdx);
+  // D-05 regression guard: pre-AI baseline is the control group — bot storm is
+  // NEVER injected, even if the caller passes includeBotStormMonth: true. This
+  // prevents accidental leakage into the control-group contract.
+  void includeBotStormMonth;  // explicitly ignored; see guard comment above
+  const botRatio = buildBotRatio(months, 0.12, undefined);
   const rolling = buildRolling(referenceDate, 100);
 
   const totalCommits = cohortCommits.reduce((s, r) => s + r.totalCount, 0);

@@ -174,12 +174,12 @@ npm run seed        # Generate realistic fake data for the main app
 npm run dev:seed    # Start the main app with seed data
 ```
 
-Open http://localhost:5173 — all dashboard views populated with synthetic data (3 repos, 31 contributors, AI adoption inflection point).
+Open http://localhost:5173 — all dashboard views populated with synthetic data (3 repos, 34 contributors, AI adoption inflection point).
 
 ### Run Tests
 
 ```bash
-npm run test        # Run all tests across workspaces (520 tests, 42 files)
+npm run test        # Run all tests across workspaces (715 tests, 53 files)
 ```
 
 ### First Use (main app, with real data)
