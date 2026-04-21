@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { db } from '../db/client.js';
+import { safeFetch } from './safe-fetch.js';
 import {
   orgs,
   snapshots,
@@ -454,7 +455,7 @@ export async function importFromUrl(
     if (gistMatch) {
       const gistId = gistMatch[1];
       // Fetch the Gist API to get the raw URL for the first file
-      const apiRes = await fetch(`https://api.github.com/gists/${gistId}`, {
+      const apiRes = await safeFetch(`https://api.github.com/gists/${gistId}`, 3, {
         headers: { Accept: 'application/vnd.github.v3+json' },
       });
       if (!apiRes.ok) {
@@ -471,7 +472,7 @@ export async function importFromUrl(
     }
   }
 
-  const res = await fetch(fetchUrl);
+  const res = await safeFetch(fetchUrl);
   if (!res.ok) {
     throw new Error(`Failed to fetch bundle from URL: HTTP ${res.status}`);
   }
