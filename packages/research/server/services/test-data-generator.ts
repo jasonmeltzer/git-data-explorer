@@ -148,14 +148,17 @@ function buildActivityProfile(p: BuildActivityProfileParams): ActivityProfile {
     const dominantLogin = personas[0].login;
     for (let mi = startIdx; mi <= endIdx; mi++) {
       if (mi >= p.months.length) break;
-      // Re-balance: set dominant to topShare × current total; scale others to (1-topShare) × current total
+      // Re-balance: set dominant to topShare × current total; split the rest evenly across others.
+      // NOTE: values stored as floats — rounding perOther with small denominators (esp. PRs, where
+      // currentTotal can be ~20) previously caused the dominant's share to drift outside [45, 55]
+      // because `dominant + othersCount × round(remainingBudget / othersCount) ≠ currentTotal`.
+      // Exact division preserves `dominant / total = topShare` regardless of persona count.
       for (const bucket of [monthlyCommitsByPersona[mi], monthlyLinesByPersona[mi], monthlyPrsByPersona[mi]]) {
         const currentTotal = Array.from(bucket.values()).reduce((s, v) => s + v, 0);
         if (currentTotal === 0) continue;
-        const dominantValue = Math.round(currentTotal * topShare);
-        const remainingBudget = currentTotal - dominantValue;
+        const dominantValue = currentTotal * topShare;
         const othersCount = bucket.size - 1;
-        const perOther = othersCount > 0 ? Math.max(0, Math.round(remainingBudget / othersCount)) : 0;
+        const perOther = othersCount > 0 ? (currentTotal - dominantValue) / othersCount : 0;
         for (const login of bucket.keys()) {
           if (login === dominantLogin) {
             bucket.set(login, dominantValue);
