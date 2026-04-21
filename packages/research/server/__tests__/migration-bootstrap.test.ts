@@ -249,3 +249,146 @@ describe('migration bootstrap for legacy research.db', () => {
     expect(countAfter).toBe(countBefore);
   });
 });
+
+// ---------------------------------------------------------------------------
+// State B: Partially-migrated legacy DB (the actual real research.db state)
+// industry and ai_tool were already dropped by old try/catch in index.ts,
+// but before_after_json was NEVER dropped (index.ts never touched snapshots).
+// This is the real-world case we must handle without crashing on DROP COLUMN.
+// ---------------------------------------------------------------------------
+
+const STATE_B_DDL = `
+  -- SYNTHETIC partially-migrated legacy DB (State B):
+  -- industry/ai_tool already dropped by old index.ts try/catch,
+  -- but before_after_json still present in snapshots.
+  CREATE TABLE orgs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT NOT NULL,
+    size_category TEXT,
+    import_source TEXT,
+    created_at INTEGER NOT NULL
+  );
+  CREATE TABLE snapshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
+    import_timestamp INTEGER NOT NULL,
+    metadata_json TEXT NOT NULL,
+    tool_version TEXT,
+    start_date TEXT,
+    end_date TEXT,
+    ai_marker_date TEXT,
+    contributor_count INTEGER,
+    repo_count INTEGER,
+    content_hash TEXT,
+    executive_summary_json TEXT,
+    before_after_json TEXT
+  );
+  CREATE TABLE cohort_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
+    metric_type TEXT NOT NULL, cohort TEXT NOT NULL, period TEXT NOT NULL,
+    period_month TEXT NOT NULL, avg_lines_added REAL NOT NULL DEFAULT 0,
+    avg_lines_deleted REAL NOT NULL DEFAULT 0, avg_files_changed REAL NOT NULL DEFAULT 0,
+    total_count INTEGER NOT NULL DEFAULT 0, contributor_count INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE ramp_up (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
+    week_index INTEGER NOT NULL, join_period TEXT NOT NULL,
+    avg_lines_changed REAL NOT NULL DEFAULT 0, avg_files_changed REAL NOT NULL DEFAULT 0,
+    contribution_count INTEGER NOT NULL DEFAULT 0, contributor_count INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE rolling_comparisons (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL, data_json TEXT NOT NULL
+  );
+  CREATE TABLE contributors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
+    author_login TEXT NOT NULL, cohort TEXT NOT NULL, first_commit_at TEXT,
+    pre_json TEXT, post_json TEXT
+  );
+  CREATE TABLE pr_turnaround (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
+    period_month TEXT NOT NULL, avg_hours_to_merge REAL NOT NULL DEFAULT 0,
+    median_hours_to_merge REAL NOT NULL DEFAULT 0, pr_count INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE TABLE bot_ratio (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
+    period_month TEXT NOT NULL, bot_commits INTEGER NOT NULL DEFAULT 0,
+    human_commits INTEGER NOT NULL DEFAULT 0, total_commits INTEGER NOT NULL DEFAULT 0,
+    bot_percentage REAL NOT NULL DEFAULT 0
+  );
+  CREATE TABLE concentration_monthly (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
+    basis TEXT NOT NULL, period_month TEXT NOT NULL,
+    top1_share REAL, top3_share REAL, top5_share REAL,
+    hhi REAL, gini REAL, bus_factor INTEGER,
+    active_devs INTEGER NOT NULL, top_contributor TEXT
+  );
+  CREATE TABLE headcount_monthly (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
+    period_month TEXT NOT NULL, active_devs INTEGER NOT NULL,
+    total_prs INTEGER NOT NULL, total_commits INTEGER NOT NULL,
+    prs_per_dev REAL, commits_per_dev REAL
+  );
+  CREATE TABLE period_metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL, data_json TEXT NOT NULL
+  );
+`;
+
+describe('migration bootstrap — State B (partially-migrated real-world legacy DB)', () => {
+  let stateB: Database.Database;
+
+  beforeEach(() => {
+    stateB = new Database(':memory:');
+    stateB.exec(STATE_B_DDL);
+  });
+
+  afterEach(() => {
+    stateB.close();
+  });
+
+  test('bootstrap on State B DB does not throw (industry/ai_tool already gone)', () => {
+    const db = drizzle(stateB);
+    expect(() => {
+      bootstrapMigrationJournal(stateB, MIGRATIONS_FOLDER);
+      migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+    }).not.toThrow();
+  });
+
+  test('before_after_json is GONE from snapshots after State B bootstrap', () => {
+    const db = drizzle(stateB);
+    bootstrapMigrationJournal(stateB, MIGRATIONS_FOLDER);
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+    const cols = stateB
+      .prepare(`PRAGMA table_info(snapshots)`)
+      .all() as Array<{ name: string }>;
+    expect(cols.map((c) => c.name)).not.toContain('before_after_json');
+  });
+
+  test('State B bootstrap is idempotent (running twice does not add rows)', () => {
+    const db = drizzle(stateB);
+    bootstrapMigrationJournal(stateB, MIGRATIONS_FOLDER);
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+    const countBefore = (stateB
+      .prepare(`SELECT COUNT(*) AS n FROM __drizzle_migrations`)
+      .get() as { n: number }).n;
+
+    bootstrapMigrationJournal(stateB, MIGRATIONS_FOLDER);
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+    const countAfter = (stateB
+      .prepare(`SELECT COUNT(*) AS n FROM __drizzle_migrations`)
+      .get() as { n: number }).n;
+
+    expect(countAfter).toBe(countBefore);
+  });
+});

@@ -1,145 +1,15 @@
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { sqlite } from './db/client.js';
+import { runMigrations } from './db/migrate.js';
 import importRoutes from './routes/import.js';
 import orgRoutes from './routes/orgs.js';
 import { analyticsRoutes } from './routes/analytics.js';
 
-// Create tables if they don't exist (no migration files needed)
-sqlite.exec(`
-  CREATE TABLE IF NOT EXISTS orgs (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    label TEXT NOT NULL,
-    size_category TEXT,
-    import_source TEXT,
-    created_at INTEGER NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS snapshots (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    import_timestamp INTEGER NOT NULL,
-    metadata_json TEXT NOT NULL,
-    tool_version TEXT,
-    start_date TEXT,
-    end_date TEXT,
-    ai_marker_date TEXT,
-    contributor_count INTEGER,
-    repo_count INTEGER,
-    content_hash TEXT,
-    executive_summary_json TEXT,
-    before_after_json TEXT
-  );
-  CREATE TABLE IF NOT EXISTS cohort_metrics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    metric_type TEXT NOT NULL,
-    cohort TEXT NOT NULL,
-    period TEXT NOT NULL,
-    period_month TEXT NOT NULL,
-    avg_lines_added REAL NOT NULL DEFAULT 0,
-    avg_lines_deleted REAL NOT NULL DEFAULT 0,
-    avg_files_changed REAL NOT NULL DEFAULT 0,
-    total_count INTEGER NOT NULL DEFAULT 0,
-    contributor_count INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS ramp_up (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    week_index INTEGER NOT NULL,
-    join_period TEXT NOT NULL,
-    avg_lines_changed REAL NOT NULL DEFAULT 0,
-    avg_files_changed REAL NOT NULL DEFAULT 0,
-    contribution_count INTEGER NOT NULL DEFAULT 0,
-    contributor_count INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS rolling_comparisons (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    data_json TEXT NOT NULL
-  );
-  CREATE TABLE IF NOT EXISTS contributors (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    author_login TEXT NOT NULL,
-    cohort TEXT NOT NULL,
-    first_commit_at TEXT,
-    pre_json TEXT,
-    post_json TEXT
-  );
-  CREATE TABLE IF NOT EXISTS pr_turnaround (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    period_month TEXT NOT NULL,
-    avg_hours_to_merge REAL NOT NULL DEFAULT 0,
-    median_hours_to_merge REAL NOT NULL DEFAULT 0,
-    pr_count INTEGER NOT NULL DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS bot_ratio (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    period_month TEXT NOT NULL,
-    bot_commits INTEGER NOT NULL DEFAULT 0,
-    human_commits INTEGER NOT NULL DEFAULT 0,
-    total_commits INTEGER NOT NULL DEFAULT 0,
-    bot_percentage REAL NOT NULL DEFAULT 0
-  );
-  CREATE TABLE IF NOT EXISTS concentration_monthly (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    basis TEXT NOT NULL,
-    period_month TEXT NOT NULL,
-    top1_share REAL,
-    top3_share REAL,
-    top5_share REAL,
-    hhi REAL,
-    gini REAL,
-    bus_factor INTEGER,
-    active_devs INTEGER NOT NULL,
-    top_contributor TEXT
-  );
-  CREATE TABLE IF NOT EXISTS headcount_monthly (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    period_month TEXT NOT NULL,
-    active_devs INTEGER NOT NULL,
-    total_prs INTEGER NOT NULL,
-    total_commits INTEGER NOT NULL,
-    prs_per_dev REAL,
-    commits_per_dev REAL
-  );
-  CREATE TABLE IF NOT EXISTS period_metrics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
-    org_id INTEGER NOT NULL REFERENCES orgs(id),
-    data_json TEXT NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_snapshots_org_id ON snapshots(org_id);
-  CREATE INDEX IF NOT EXISTS idx_cohort_metrics_snapshot ON cohort_metrics(snapshot_id);
-  CREATE INDEX IF NOT EXISTS idx_cohort_metrics_org ON cohort_metrics(org_id, metric_type);
-  CREATE INDEX IF NOT EXISTS idx_ramp_up_snapshot ON ramp_up(snapshot_id);
-  CREATE INDEX IF NOT EXISTS idx_ramp_up_org ON ramp_up(org_id);
-  CREATE INDEX IF NOT EXISTS idx_rolling_snapshot ON rolling_comparisons(snapshot_id);
-  CREATE INDEX IF NOT EXISTS idx_contributors_snapshot ON contributors(snapshot_id);
-  CREATE INDEX IF NOT EXISTS idx_contributors_org ON contributors(org_id);
-  CREATE INDEX IF NOT EXISTS idx_pr_turnaround_snapshot ON pr_turnaround(snapshot_id);
-  CREATE INDEX IF NOT EXISTS idx_pr_turnaround_org ON pr_turnaround(org_id);
-  CREATE INDEX IF NOT EXISTS idx_bot_ratio_org ON bot_ratio(org_id);
-  CREATE INDEX IF NOT EXISTS idx_concentration_monthly_org ON concentration_monthly(org_id, basis);
-  CREATE INDEX IF NOT EXISTS idx_headcount_monthly_org ON headcount_monthly(org_id);
-`);
-
-// Drop deprecated columns from existing databases (no-op on fresh DBs)
-try { sqlite.exec('ALTER TABLE orgs DROP COLUMN industry'); } catch { /* column already gone */ }
-try { sqlite.exec('ALTER TABLE orgs DROP COLUMN ai_tool'); } catch { /* column already gone */ }
+// Apply Drizzle migrations synchronously before accepting requests.
+// See db/migrate.ts for the __drizzle_migrations bootstrap handling existing DBs.
+runMigrations();
+console.log('Research database migrations applied');
 
 const app = new Hono();
 app.use('/api/*', cors({ origin: 'http://localhost:5174' }));
