@@ -23,7 +23,7 @@ let sqlite: Database.Database;
 beforeAll(() => {
   sqlite = new Database(':memory:');
   const db = drizzle(sqlite);
-  bootstrapMigrationJournal(sqlite);
+  bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
   migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 });
 

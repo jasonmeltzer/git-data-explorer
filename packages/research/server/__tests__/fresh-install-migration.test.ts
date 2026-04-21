@@ -43,7 +43,7 @@ afterEach(() => {
 describe('fresh-install via migration', () => {
   test('all 11 schema.ts tables exist after applying migrations', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const rows = sqlite
@@ -61,7 +61,7 @@ describe('fresh-install via migration', () => {
 
   test('snapshots table has NO before_after_json column after migration', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const cols = sqlite
@@ -74,7 +74,7 @@ describe('fresh-install via migration', () => {
 
   test('orgs table has NO industry column after migration', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const cols = sqlite
@@ -87,7 +87,7 @@ describe('fresh-install via migration', () => {
 
   test('orgs table has NO ai_tool column after migration', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const cols = sqlite
@@ -100,7 +100,7 @@ describe('fresh-install via migration', () => {
 
   test('concentration_monthly index exists after migration', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const indexes = sqlite
@@ -113,7 +113,7 @@ describe('fresh-install via migration', () => {
 
   test('headcount_monthly index exists after migration', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const indexes = sqlite
@@ -126,7 +126,7 @@ describe('fresh-install via migration', () => {
 
   test('positive insert into org + snapshot + concentration_monthly succeeds', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     sqlite.prepare(`INSERT INTO orgs (label, created_at) VALUES (?, ?)`).run('Test Org', Date.now());

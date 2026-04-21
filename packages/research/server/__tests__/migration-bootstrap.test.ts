@@ -177,7 +177,7 @@ describe('migration bootstrap for legacy research.db', () => {
 
   test('before_after_json is GONE from snapshots AFTER runMigrations bootstrap', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const cols = sqlite
@@ -189,7 +189,7 @@ describe('migration bootstrap for legacy research.db', () => {
 
   test('industry is GONE from orgs AFTER runMigrations bootstrap', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const cols = sqlite
@@ -201,7 +201,7 @@ describe('migration bootstrap for legacy research.db', () => {
 
   test('ai_tool is GONE from orgs AFTER runMigrations bootstrap', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const cols = sqlite
@@ -213,7 +213,7 @@ describe('migration bootstrap for legacy research.db', () => {
 
   test('__drizzle_migrations has 2 rows after bootstrap (bootstrapped-0000 + 0001 hash)', () => {
     const db = drizzle(sqlite);
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const rows = sqlite
@@ -231,7 +231,7 @@ describe('migration bootstrap for legacy research.db', () => {
     const db = drizzle(sqlite);
 
     // First run
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const countBefore = (sqlite
@@ -239,7 +239,7 @@ describe('migration bootstrap for legacy research.db', () => {
       .get() as { n: number }).n;
 
     // Second run
-    bootstrapMigrationJournal(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 
     const countAfter = (sqlite
