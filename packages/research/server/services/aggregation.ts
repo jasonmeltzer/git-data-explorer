@@ -12,6 +12,7 @@ import { sql, inArray } from 'drizzle-orm';
 import { db } from '../db/client.js';
 import { orgs, snapshots, cohortMetrics, rampUp } from '../db/schema.js';
 import type { CohortMetricsRow, RampUpBucket } from '@shared/types.js';
+import { sqlIntList } from '@shared/lib/sql-safety.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,12 +37,13 @@ export interface OrgComparisonRow {
 export function getLatestSnapshotIds(orgIds: number[]): Map<number, number> {
   if (orgIds.length === 0) return new Map();
 
-  // SAFETY: orgIds come from internal calls, never raw user input.
-  // Use Drizzle inArray for parameterized query safety.
+  // SAFETY: sqlIntList validates all IDs are positive safe integers before interpolation (SEC-07).
+  const safeOrgList = sqlIntList(orgIds);
+  if (!safeOrgList) return new Map();
   const rows = db.all(sql.raw(`
     SELECT org_id, id AS snapshot_id
     FROM snapshots
-    WHERE org_id IN (${orgIds.join(',')})
+    WHERE org_id IN (${safeOrgList})
       AND import_timestamp = (
         SELECT MAX(s2.import_timestamp)
         FROM snapshots s2
@@ -86,6 +88,8 @@ export function getAggregatedCohortMetrics(
   if (mode === 'weighted') {
     // Weighted: SUM(metric * contributor_count) / NULLIF(SUM(contributor_count), 0)
     // Groups by cohort, period, period_month across all selected snapshots
+    const safeSnapList = sqlIntList(snapshotIds);
+    if (!safeSnapList) return [];
     const rows = db.all(sql.raw(`
       SELECT
         cohort,
@@ -106,7 +110,7 @@ export function getAggregatedCohortMetrics(
         SUM(total_count) AS total_count,
         SUM(contributor_count) AS contributor_count
       FROM cohort_metrics
-      WHERE snapshot_id IN (${snapshotIds.join(',')})
+      WHERE snapshot_id IN (${safeSnapList})
         AND metric_type = '${metricType}'
       GROUP BY cohort, period, period_month
       ORDER BY period_month, cohort, period
@@ -134,6 +138,8 @@ export function getAggregatedCohortMetrics(
   } else {
     // Normalized: compute per-org averages, then AVG across orgs (each org counts equally)
     // Step 1: get per-org per-group metrics
+    const safeSnapList = sqlIntList(snapshotIds);
+    if (!safeSnapList) return [];
     const perOrgRows = db.all(sql.raw(`
       SELECT
         org_id,
@@ -146,7 +152,7 @@ export function getAggregatedCohortMetrics(
         SUM(total_count) AS total_count,
         SUM(contributor_count) AS contributor_count
       FROM cohort_metrics
-      WHERE snapshot_id IN (${snapshotIds.join(',')})
+      WHERE snapshot_id IN (${safeSnapList})
         AND metric_type = '${metricType}'
       GROUP BY org_id, cohort, period, period_month
     `)) as Array<{
@@ -217,6 +223,8 @@ export function getAggregatedRampUp(
   const snapshotIds = Array.from(snapshotMap.values());
 
   if (mode === 'weighted') {
+    const safeSnapList = sqlIntList(snapshotIds);
+    if (!safeSnapList) return [];
     const rows = db.all(sql.raw(`
       SELECT
         week_index,
@@ -232,7 +240,7 @@ export function getAggregatedRampUp(
         SUM(contribution_count) AS contribution_count,
         SUM(contributor_count) AS contributor_count
       FROM ramp_up
-      WHERE snapshot_id IN (${snapshotIds.join(',')})
+      WHERE snapshot_id IN (${safeSnapList})
       GROUP BY week_index, join_period
       ORDER BY join_period, week_index
     `)) as Array<{
@@ -254,6 +262,8 @@ export function getAggregatedRampUp(
     }));
   } else {
     // Normalized: per-org values first, then avg across orgs
+    const safeSnapList = sqlIntList(snapshotIds);
+    if (!safeSnapList) return [];
     const perOrgRows = db.all(sql.raw(`
       SELECT
         org_id,
@@ -264,7 +274,7 @@ export function getAggregatedRampUp(
         SUM(contribution_count) AS contribution_count,
         SUM(contributor_count) AS contributor_count
       FROM ramp_up
-      WHERE snapshot_id IN (${snapshotIds.join(',')})
+      WHERE snapshot_id IN (${safeSnapList})
       GROUP BY org_id, week_index, join_period
     `)) as Array<{
       org_id: number;
@@ -322,10 +332,12 @@ export function getOrgComparisonTable(orgIds: number[]): OrgComparisonRow[] {
   const orgRows = db.select().from(orgs).all().filter(o => orgIds.includes(o.id));
 
   // Get snapshot count per org
+  const safeOrgList = sqlIntList(orgIds);
+  if (!safeOrgList) return [];
   const snapshotCounts = db.all(sql.raw(`
     SELECT org_id, COUNT(*) AS count
     FROM snapshots
-    WHERE org_id IN (${orgIds.join(',')})
+    WHERE org_id IN (${safeOrgList})
     GROUP BY org_id
   `)) as Array<{ org_id: number; count: number }>;
 
@@ -339,6 +351,10 @@ export function getOrgComparisonTable(orgIds: number[]): OrgComparisonRow[] {
     // Get latest snapshot metadata
     let snapshotRow: { contributor_count: number | null; repo_count: number | null; ai_marker_date: string | null } | undefined;
     if (latestSnapshotId !== undefined) {
+      // Defense-in-depth: latestSnapshotId comes from a DB-sourced Map, but guard anyway (A7).
+      if (!Number.isSafeInteger(latestSnapshotId) || latestSnapshotId <= 0) {
+        throw new Error(`Invalid latestSnapshotId: ${String(latestSnapshotId)}`);
+      }
       snapshotRow = db.all(sql.raw(`
         SELECT contributor_count, repo_count, ai_marker_date
         FROM snapshots
@@ -349,6 +365,10 @@ export function getOrgComparisonTable(orgIds: number[]): OrgComparisonRow[] {
     // Get avg commit size from cohort_metrics (latest snapshot)
     let avgCommitSize: number | null = null;
     if (latestSnapshotId !== undefined) {
+      // Defense-in-depth: latestSnapshotId comes from a DB-sourced Map, but guard anyway (A7).
+      if (!Number.isSafeInteger(latestSnapshotId) || latestSnapshotId <= 0) {
+        throw new Error(`Invalid latestSnapshotId: ${String(latestSnapshotId)}`);
+      }
       const sizeRow = db.all(sql.raw(`
         SELECT AVG(avg_lines_added) AS avg_commit_size
         FROM cohort_metrics
@@ -361,6 +381,10 @@ export function getOrgComparisonTable(orgIds: number[]): OrgComparisonRow[] {
     // Get number of ramp-up weeks (max week_index + 1)
     let rampUpWeeks: number | null = null;
     if (latestSnapshotId !== undefined) {
+      // Defense-in-depth: latestSnapshotId comes from a DB-sourced Map, but guard anyway (A7).
+      if (!Number.isSafeInteger(latestSnapshotId) || latestSnapshotId <= 0) {
+        throw new Error(`Invalid latestSnapshotId: ${String(latestSnapshotId)}`);
+      }
       const rampRow = db.all(sql.raw(`
         SELECT MAX(week_index) + 1 AS ramp_up_weeks
         FROM ramp_up
