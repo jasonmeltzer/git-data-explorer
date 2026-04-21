@@ -186,6 +186,105 @@ describe('Test data generator', () => {
     });
   });
 
+  describe('Phase 9.4.2 regression guards', () => {
+    it('topContributor varies across months within a generated small-startup org', () => {
+      const bundle = generateSmallStartup();
+      const tops = new Set(bundle.concentrationMonthly.map(r => r.topContributor).filter(Boolean));
+      expect(tops.size).toBeGreaterThan(1);
+    });
+
+    it('top-1 shares on prs/commits/lines bases are in [45, 55] for dominant-window months (small startup) — W-6', () => {
+      const bundle = generateSmallStartup();
+      // D-07 / truth #3: for the 3 dominant-window months, top1Share on all 3 bases is in [45, 55]
+      // AND the same topContributor wins on all 3 bases (cross-basis consistency).
+      const byMonthBasis = new Map<string, Map<string, { share: number; login: string | null }>>();
+      for (const row of bundle.concentrationMonthly) {
+        if (!byMonthBasis.has(row.month)) byMonthBasis.set(row.month, new Map());
+        byMonthBasis.get(row.month)!.set(row.basis, { share: row.top1Share ?? 0, login: row.topContributor });
+      }
+      // Collect months where ALL 3 bases have top1Share in [45, 55] AND the same topContributor
+      const dominantMonths: string[] = [];
+      for (const [month, shares] of byMonthBasis) {
+        const prs = shares.get('prs');
+        const commits = shares.get('commits');
+        const lines = shares.get('lines');
+        if (!prs || !commits || !lines) continue;
+        const inRange = (v: number) => v >= 45 && v <= 55;
+        const sameLogin = prs.login === commits.login && commits.login === lines.login && prs.login !== null;
+        if (inRange(prs.share) && inRange(commits.share) && inRange(lines.share) && sameLogin) {
+          dominantMonths.push(month);
+        }
+      }
+      expect(
+        dominantMonths.length,
+        `Expected ~3 dominant-window months with top1Share in [45, 55] on all bases; got ${dominantMonths.length}`,
+      ).toBeGreaterThanOrEqual(3);
+    });
+
+    it('D-09 toggle: generateMidSizeCompany has a team-size step (>= 3-dev month-over-month drop) — W-5', () => {
+      const bundle = generateMidSizeCompany();  // default includeTeamSizeStep: true
+      let biggestDrop = 0;
+      for (let i = 1; i < bundle.headcountMonthly.length; i++) {
+        const drop = bundle.headcountMonthly[i - 1].activeDevs - bundle.headcountMonthly[i].activeDevs;
+        if (drop > biggestDrop) biggestDrop = drop;
+      }
+      expect(
+        biggestDrop,
+        `Expected mid-size org to have a month-over-month activeDevs drop >= 3; biggest drop = ${biggestDrop}`,
+      ).toBeGreaterThanOrEqual(3);
+    });
+
+    it('D-09 toggle: generateMidSizeCompany({ includeTeamSizeStep: false }) has no step-drop', () => {
+      const bundle = generateMidSizeCompany({ includeTeamSizeStep: false });
+      // With toggle off, the largest month-over-month activeDevs drop should be small (just jitter)
+      let biggestDrop = 0;
+      for (let i = 1; i < bundle.headcountMonthly.length; i++) {
+        const drop = bundle.headcountMonthly[i - 1].activeDevs - bundle.headcountMonthly[i].activeDevs;
+        if (drop > biggestDrop) biggestDrop = drop;
+      }
+      expect(biggestDrop, `Expected <= 2-dev drop when toggle is off; got ${biggestDrop}`).toBeLessThanOrEqual(2);
+    });
+
+    it('D-09 toggle: generatePreAiBaseline stays clean regardless of options', () => {
+      // D-05 regression guard: forcing every toggle ON must NOT violate the pre-AI
+      // control-group contract: aiMarkerDate=null, periodMetrics=null, no bot-storm month.
+      const bundle = generatePreAiBaseline({ includeDominantWindow: true, includeBotStormMonth: true, includeTeamSizeStep: true });
+      expect(bundle.metadata.aiMarkerDate).toBeNull();
+      expect(bundle.periodMetrics).toBeNull();
+      // includeBotStormMonth must be forcibly ignored for the pre-AI baseline — otherwise
+      // the control group would contain the same >= 50% bot-share month that small and mid orgs get.
+      expect(
+        bundle.botRatio.every(r => r.botPercentage < 50),
+        `Expected pre-AI baseline to ignore includeBotStormMonth: true; got max bot share ${Math.max(...bundle.botRatio.map(r => r.botPercentage))}%`,
+      ).toBe(true);
+    });
+
+    it('periodMetrics values are derived, not hardcoded 150/180', () => {
+      const bundle = generateSmallStartup();
+      expect(bundle.periodMetrics).not.toBeNull();
+      expect(bundle.periodMetrics![0].metrics.avgCommitSize).not.toBe(150);
+      expect(bundle.periodMetrics![1].metrics.avgCommitSize).not.toBe(180);
+    });
+
+    it('generatePreAiBaseline has null aiMarkerDate and null periodMetrics', () => {
+      const bundle = generatePreAiBaseline();
+      expect(bundle.metadata.aiMarkerDate).toBeNull();
+      expect(bundle.periodMetrics).toBeNull();
+    });
+
+    it('small + mid orgs have a bot-storm month (botPercentage >= 50)', () => {
+      const small = generateSmallStartup();
+      const mid = generateMidSizeCompany();
+      expect(small.botRatio.some(r => r.botPercentage >= 50)).toBe(true);
+      expect(mid.botRatio.some(r => r.botPercentage >= 50)).toBe(true);
+    });
+
+    it('pre-AI baseline does NOT have a bot-storm month', () => {
+      const preAi = generatePreAiBaseline();
+      expect(preAi.botRatio.every(r => r.botPercentage < 50)).toBe(true);
+    });
+  });
+
   describe('generateAllTestOrgs', () => {
     it('returns exactly 3 bundles', () => {
       const orgs = generateAllTestOrgs();

@@ -28,6 +28,7 @@ import type {
   RollingComparisonResult,
 } from '@shared/types.js';
 import { DEFAULT_COHORT_CONFIG } from '@shared/cohort-config.js';
+import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 
 // ─── Statistical distribution helpers ────────────────────────────────────────
 
@@ -68,6 +69,135 @@ function pastMonths(count: number, referenceDate: Date = new Date()): string[] {
     months.push(format(subMonths(referenceDate, i), 'yyyy-MM'));
   }
   return months;
+}
+
+// ─── Activity profile: single source of truth for a generated org ─────────
+interface SyntheticPersona {
+  login: string;
+  cohort: 'new' | 'mid' | 'senior';
+  commitsPerMonth: number;
+  linesPerCommit: number;
+  prsPerMonth: number;
+  aiBoostFactor: number;  // 1.0 = no effect; 1.2 = 20% boost when in post-AI month
+}
+
+interface ActivityProfile {
+  personas: SyntheticPersona[];
+  months: string[];
+  aiMarkerMonth: string | null;
+  monthlyCommitsByPersona: Array<Map<string, number>>;
+  monthlyLinesByPersona:   Array<Map<string, number>>;
+  monthlyPrsByPersona:     Array<Map<string, number>>;
+}
+
+interface BuildActivityProfileParams {
+  contributorCount: number;
+  months: string[];
+  aiMarkerMonth: string | null;
+  cohorts: Array<{ key: 'new' | 'mid' | 'senior'; weight: number }>;
+  baseCommitsPerMonth: number;      // center of distribution for per-persona commits
+  baseLinesPerCommit: number;
+  basePrsPerMonth: number;
+  aiBoostMean: number;              // mean of aiBoostFactor across personas (e.g. 1.2)
+  dominantWindow?: { startIdx: number; endIdx: number; topShare: number }; // indices into months array
+  headcountSchedule?: Array<{ monthIdx: number; delta: number }>; // D-09: preserves team-size step (delta < 0 = departures)
+}
+
+function buildActivityProfile(p: BuildActivityProfileParams): ActivityProfile {
+  // 1. Generate personas
+  const personas: SyntheticPersona[] = [];
+  const cohortChoices = p.cohorts.map(c => ({ value: c.key, weight: c.weight }));
+  for (let i = 0; i < p.contributorCount; i++) {
+    const cohort = weightedChoice(cohortChoices);
+    personas.push({
+      login: animalName(i),
+      cohort,
+      commitsPerMonth: Math.max(1, Math.round(jitter(p.baseCommitsPerMonth, p.baseCommitsPerMonth * 0.3))),
+      linesPerCommit: Math.max(10, Math.round(logNormal(Math.log(p.baseLinesPerCommit), 0.4))),
+      prsPerMonth: Math.max(0.5, jitter(p.basePrsPerMonth, p.basePrsPerMonth * 0.25)),
+      aiBoostFactor: jitter(p.aiBoostMean, 0.05),
+    });
+  }
+
+  // 2. Compute monthly activity per persona
+  const monthlyCommitsByPersona = p.months.map(() => new Map<string, number>());
+  const monthlyLinesByPersona   = p.months.map(() => new Map<string, number>());
+  const monthlyPrsByPersona     = p.months.map(() => new Map<string, number>());
+
+  for (let mi = 0; mi < p.months.length; mi++) {
+    const month = p.months[mi];
+    const isPostAI = p.aiMarkerMonth !== null && month > p.aiMarkerMonth;
+
+    for (const persona of personas) {
+      const boost = isPostAI ? persona.aiBoostFactor : 1.0;
+      const commits = Math.max(0, Math.round(persona.commitsPerMonth * boost * jitter(1, 0.1)));
+      const lines = commits * Math.max(10, Math.round(persona.linesPerCommit * jitter(1, 0.1)));
+      const prs = Math.max(0, persona.prsPerMonth * boost * jitter(1, 0.1));
+
+      monthlyCommitsByPersona[mi].set(persona.login, commits);
+      monthlyLinesByPersona[mi].set(persona.login, lines);
+      monthlyPrsByPersona[mi].set(persona.login, prs);
+    }
+  }
+
+  // 3. Apply dominant window override: for the specified months, elevate ONE
+  //    persona to ~`topShare` of that month's activity on all 3 bases.
+  if (p.dominantWindow) {
+    const { startIdx, endIdx, topShare } = p.dominantWindow;
+    // Pick the 0th persona as the "dominant" one; could be any stable choice
+    const dominantLogin = personas[0].login;
+    for (let mi = startIdx; mi <= endIdx; mi++) {
+      if (mi >= p.months.length) break;
+      // Re-balance: set dominant to topShare × current total; split the rest evenly across others.
+      // NOTE: values stored as floats — rounding perOther with small denominators (esp. PRs, where
+      // currentTotal can be ~20) previously caused the dominant's share to drift outside [45, 55]
+      // because `dominant + othersCount × round(remainingBudget / othersCount) ≠ currentTotal`.
+      // Exact division preserves `dominant / total = topShare` regardless of persona count.
+      for (const bucket of [monthlyCommitsByPersona[mi], monthlyLinesByPersona[mi], monthlyPrsByPersona[mi]]) {
+        const currentTotal = Array.from(bucket.values()).reduce((s, v) => s + v, 0);
+        if (currentTotal === 0) continue;
+        const dominantValue = currentTotal * topShare;
+        const othersCount = bucket.size - 1;
+        const perOther = othersCount > 0 ? (currentTotal - dominantValue) / othersCount : 0;
+        for (const login of bucket.keys()) {
+          if (login === dominantLogin) {
+            bucket.set(login, dominantValue);
+          } else {
+            bucket.set(login, perOther);
+          }
+        }
+      }
+    }
+  }
+
+  // 4. Apply headcountSchedule (D-09 team-size step): deactivate N personas
+  //    starting at the given monthIdx. Deactivation means zeroing out their
+  //    commits/lines/prs for that month and all later months. delta must be
+  //    negative (departure scenario); positive deltas are rejected.
+  if (p.headcountSchedule) {
+    for (const step of p.headcountSchedule) {
+      if (step.delta >= 0) continue;  // only departures supported — additions come from month-1 onwards naturally
+      const departingCount = Math.abs(step.delta);
+      // Pick the last-N personas as "departing" (stable, predictable choice)
+      const departingLogins = personas.slice(-departingCount).map(pp => pp.login);
+      for (let mi = step.monthIdx; mi < p.months.length; mi++) {
+        for (const login of departingLogins) {
+          monthlyCommitsByPersona[mi].set(login, 0);
+          monthlyLinesByPersona[mi].set(login, 0);
+          monthlyPrsByPersona[mi].set(login, 0);
+        }
+      }
+    }
+  }
+
+  return {
+    personas,
+    months: p.months,
+    aiMarkerMonth: p.aiMarkerMonth,
+    monthlyCommitsByPersona,
+    monthlyLinesByPersona,
+    monthlyPrsByPersona,
+  };
 }
 
 // ─── Base ExportMetadata builder ──────────────────────────────────────────────
@@ -278,59 +408,169 @@ function buildPrTurnaround(months: string[], baseHours: number, aiMarkerMonth: s
   });
 }
 
-// ─── Concentration monthly builder ───────────────────────────────────────────
+// ─── Period metrics helper (profile-driven) ───────────────────────────────────
 
-type OrgType = 'small' | 'mid' | 'large';
+function buildPeriodMetricsFromProfile(
+  profile: ActivityProfile,
+  aiMarkerDate: string | null,
+  referenceDate: Date
+): PeriodMetric[] | null {
+  if (aiMarkerDate === null || profile.aiMarkerMonth === null) return null;
 
-interface ConcentrationProfile {
-  top1ShareBase: number;
-  top1ShareStdDev: number;
-  hhiBase: number;
-  giniBase: number;
-  busFactorBase: number;
-  activeDevsBase: number;
-  activeDevsRange: number;
+  const preIdxs:  number[] = [];
+  const postIdxs: number[] = [];
+  for (let mi = 0; mi < profile.months.length; mi++) {
+    if (profile.months[mi] <= profile.aiMarkerMonth) preIdxs.push(mi);
+    else postIdxs.push(mi);
+  }
+
+  function agg(indexes: number[]): { avgCommitSize: number; prFrequency: number; activeContributors: number } {
+    if (indexes.length === 0) {
+      return { avgCommitSize: 0, prFrequency: 0, activeContributors: 0 };
+    }
+    let totalCommits = 0;
+    let totalLines = 0;
+    let totalPrs = 0;
+    const activeLogins = new Set<string>();
+    for (const mi of indexes) {
+      for (const [login, commits] of profile.monthlyCommitsByPersona[mi]) {
+        totalCommits += commits;
+        if (commits > 0) activeLogins.add(login);
+      }
+      for (const [, lines] of profile.monthlyLinesByPersona[mi]) {
+        totalLines += lines;
+      }
+      for (const [, prs] of profile.monthlyPrsByPersona[mi]) {
+        totalPrs += prs;
+      }
+    }
+    const avgCommitSize = totalCommits > 0 ? Math.round(totalLines / totalCommits) : 0;
+    // PRs per week per contributor — approximate by dividing by months × 4.33 weeks × activeContributors
+    const weeks = indexes.length * 4.33;
+    const prFrequency = activeLogins.size > 0 && weeks > 0
+      ? Math.round((totalPrs / weeks / activeLogins.size) * 100) / 100
+      : 0;
+    return { avgCommitSize, prFrequency, activeContributors: activeLogins.size };
+  }
+
+  const pre = agg(preIdxs);
+  const post = agg(postIdxs);
+
+  // D-08 (CONTEXT.md): "rampUpSpeed = (hardcoded for now — ramp-up requires a different
+  // data shape; leave at reasonable constants with a comment pointing at Phase 9.5 for the
+  // real derivation)". The CONTEXT decision itself grants rampUpSpeed a literal-constant
+  // exemption from the "compute from profile" rule. Phase 9.5 is where per-persona per-week
+  // ramp-up gets properly derived from time-series data.
+  const preRampUp = 8;
+  const postRampUp = 6;
+
+  // Delegate period boundaries to the canonical buildPeriodsFromMarker so Pre-AI
+  // endDate is the day before the marker (non-overlapping with Post-AI startDate).
+  const startDate = format(subMonths(referenceDate, profile.months.length), 'yyyy-MM-dd');
+  const endDate = format(referenceDate, 'yyyy-MM-dd');
+  const [prePeriod, postPeriod] = buildPeriodsFromMarker(startDate, endDate, aiMarkerDate);
+
+  return [
+    {
+      period: prePeriod,
+      metrics: {
+        avgCommitSize: pre.avgCommitSize,
+        prFrequency: pre.prFrequency,
+        rampUpSpeed: preRampUp,
+        activeContributors: pre.activeContributors,
+      },
+    },
+    {
+      period: postPeriod,
+      metrics: {
+        avgCommitSize: post.avgCommitSize,
+        prFrequency: post.prFrequency,
+        rampUpSpeed: postRampUp,
+        activeContributors: post.activeContributors,
+      },
+    },
+  ];
 }
 
-const CONCENTRATION_PROFILES: Record<OrgType, ConcentrationProfile> = {
-  small: { top1ShareBase: 47, top1ShareStdDev: 5, hhiBase: 0.32, giniBase: 0.4, busFactorBase: 1, activeDevsBase: 4, activeDevsRange: 2 },
-  mid:   { top1ShareBase: 25, top1ShareStdDev: 4, hhiBase: 0.15, giniBase: 0.2, busFactorBase: 4, activeDevsBase: 11, activeDevsRange: 4 },
-  large: { top1ShareBase: 12, top1ShareStdDev: 2, hhiBase: 0.07, giniBase: 0.12, busFactorBase: 6, activeDevsBase: 25, activeDevsRange: 5 },
-};
+// ─── D-09 generator options ────────────────────────────────────────────────────
 
-function buildConcentrationMonthly(months: string[], orgType: OrgType): ConcentrationMonthlyRow[] {
-  const profile = CONCENTRATION_PROFILES[orgType];
+export interface GenerateOrgOptions {
+  includeDominantWindow?: boolean;   // default true for small, false otherwise
+  includeBotStormMonth?: boolean;    // default true for small and mid, false for pre-AI baseline
+  includeTeamSizeStep?: boolean;     // default true for mid (new mid-org behavior per D-09), false for small and pre-AI
+}
+
+// ─── Concentration monthly builder (profile-driven) ───────────────────────────
+
+function buildConcentrationMonthly(profile: ActivityProfile): ConcentrationMonthlyRow[] {
   const rows: ConcentrationMonthlyRow[] = [];
   const bases: Array<'prs' | 'commits' | 'lines'> = ['prs', 'commits', 'lines'];
 
-  // For small startup: include a dominant-contributor window (3 months) per D-16
-  const dominantWindowStart = orgType === 'small' ? Math.floor(months.length * 0.3) : -1;
-  const dominantWindowEnd = dominantWindowStart + 3;
-
-  for (const month of months) {
-    const monthIdx = months.indexOf(month);
-    const isDominantWindow = monthIdx >= dominantWindowStart && monthIdx < dominantWindowEnd;
+  for (let mi = 0; mi < profile.months.length; mi++) {
+    const month = profile.months[mi];
 
     for (const basis of bases) {
-      const top1 = isDominantWindow
-        ? jitter(50, 3)
-        : jitter(profile.top1ShareBase, profile.top1ShareStdDev);
-      const top1Clamped = Math.max(0, Math.min(100, top1));
-      const top3 = Math.min(100, top1Clamped + jitter(15, 3));
-      const top5 = Math.min(100, top3 + jitter(10, 2));
-      const activeDevs = Math.max(1, Math.round(jitter(profile.activeDevsBase, profile.activeDevsRange / 2)));
+      const bucket =
+        basis === 'prs'    ? profile.monthlyPrsByPersona[mi]
+        : basis === 'lines' ? profile.monthlyLinesByPersona[mi]
+                            : profile.monthlyCommitsByPersona[mi];
+
+      const entries = Array.from(bucket.entries())
+        .filter(([, v]) => v > 0)
+        .sort((a, b) => b[1] - a[1]);
+
+      const total = entries.reduce((s, [, v]) => s + v, 0);
+      if (entries.length === 0 || total === 0) {
+        rows.push({
+          month, basis,
+          top1Share: null, top3Share: null, top5Share: null,
+          hhi: null, gini: null, busFactor: null, activeDevs: 0,
+          topContributor: null,
+        });
+        continue;
+      }
+
+      const top1 = entries[0][1];
+      const top3 = entries.slice(0, 3).reduce((s, [, v]) => s + v, 0);
+      const top5 = entries.slice(0, 5).reduce((s, [, v]) => s + v, 0);
+
+      const top1Share = (top1 / total) * 100;
+      const top3Share = (top3 / total) * 100;
+      const top5Share = (top5 / total) * 100;
+
+      // HHI: sum of squared shares (share as fraction 0-1)
+      const hhi = entries.reduce((s, [, v]) => {
+        const share = v / total;
+        return s + share * share;
+      }, 0);
+
+      // Gini coefficient — approximate via the standard Lorenz curve formula
+      const sorted = entries.map(([, v]) => v).sort((a, b) => a - b);
+      const n = sorted.length;
+      const cumulative = sorted.reduce((sum, v, i) => sum + (2 * (i + 1) - n - 1) * v, 0);
+      const gini = total > 0 ? Math.abs(cumulative / (n * total)) : 0;
+
+      // Bus factor: smallest k such that sum(top k shares) >= 0.5
+      let busFactor = 1;
+      let running = 0;
+      for (let i = 0; i < entries.length; i++) {
+        running += entries[i][1];
+        if (running / total >= 0.5) {
+          busFactor = i + 1;
+          break;
+        }
+      }
 
       rows.push({
-        month,
-        basis,
-        top1Share: top1Clamped,
-        top3Share: top3,
-        top5Share: top5,
-        hhi: Math.max(0, Math.min(1, jitter(profile.hhiBase, profile.hhiBase * 0.15))),
-        gini: Math.max(0, Math.min(1, jitter(profile.giniBase, profile.giniBase * 0.1))),
-        busFactor: Math.max(1, profile.busFactorBase + Math.round(jitter(0, 1))),
-        activeDevs,
-        topContributor: `${ADJECTIVES[0]} ${ANIMALS[0]}`,  // synthetic top contributor
+        month, basis,
+        top1Share,
+        top3Share: Math.min(100, top3Share),
+        top5Share: Math.min(100, top5Share),
+        hhi: Math.min(1, hhi),
+        gini: Math.min(1, gini),
+        busFactor,
+        activeDevs: entries.length,
+        topContributor: entries[0][0],  // login of top-1 persona
       });
     }
   }
@@ -338,25 +578,16 @@ function buildConcentrationMonthly(months: string[], orgType: OrgType): Concentr
   return rows;
 }
 
-// ─── Headcount monthly builder ────────────────────────────────────────────────
+// ─── Headcount monthly builder (profile-driven) ───────────────────────────────
 
-function buildHeadcountMonthly(months: string[], orgType: OrgType): HeadcountMonthlyRow[] {
-  const profiles: Record<OrgType, { baseDevs: number; basePrs: number; baseCommits: number }> = {
-    small: { baseDevs: 4, basePrs: 10, baseCommits: 40 },
-    mid:   { baseDevs: 10, basePrs: 60, baseCommits: 200 },
-    large: { baseDevs: 24, basePrs: 200, baseCommits: 600 },
-  };
-  const p = profiles[orgType];
+function buildHeadcountMonthly(profile: ActivityProfile): HeadcountMonthlyRow[] {
+  return profile.months.map((month, mi) => {
+    const commitsBucket = profile.monthlyCommitsByPersona[mi];
+    const prsBucket = profile.monthlyPrsByPersona[mi];
 
-  return months.map((month, idx) => {
-    // Mid-size: team ramp-up over first 3 months (activeDevs goes from baseDevs to baseDevs+2)
-    const midRamp = orgType === 'mid' && idx < 3 ? idx * 0.7 : 0;
-    // Large: one-month team shrink around month 8
-    const largeShrink = orgType === 'large' && idx === 8 ? -5 : 0;
-
-    const activeDevs = Math.max(1, Math.round(p.baseDevs + midRamp + largeShrink + jitter(0, 0.5)));
-    const totalPrs = Math.max(1, Math.round(p.basePrs * jitter(1, 0.1)));
-    const totalCommits = Math.max(1, Math.round(p.baseCommits * jitter(1, 0.1)));
+    const activeDevs = Array.from(commitsBucket.values()).filter(v => v > 0).length;
+    const totalCommits = Array.from(commitsBucket.values()).reduce((s, v) => s + v, 0);
+    const totalPrs = Math.round(Array.from(prsBucket.values()).reduce((s, v) => s + v, 0));
 
     return {
       month,
@@ -371,10 +602,12 @@ function buildHeadcountMonthly(months: string[], orgType: OrgType): HeadcountMon
 
 // ─── Bot ratio builder ────────────────────────────────────────────────────────
 
-function buildBotRatio(months: string[], botPct: number): BotRatioRow[] {
-  return months.map(month => {
+function buildBotRatio(months: string[], botPct: number, stormMonthIdx?: number): BotRatioRow[] {
+  return months.map((month, idx) => {
     const totalCommits = logNormal(5, 0.5);
-    const botCommits = Math.round(totalCommits * jitter(botPct, 0.01));
+    const isStorm = stormMonthIdx !== undefined && idx === stormMonthIdx;
+    const effectivePct = isStorm ? 0.60 : botPct;
+    const botCommits = Math.round(totalCommits * jitter(effectivePct, 0.02));
     const humanCommits = totalCommits - botCommits;
     return {
       periodMonth: month,
@@ -457,7 +690,13 @@ function buildExecutiveSummary(
  * - AI marker set 6 months ago
  * - High per-person commit rate
  */
-export function generateSmallStartup(): ExportBundle {
+export function generateSmallStartup(options: GenerateOrgOptions = {}): ExportBundle {
+  const {
+    includeDominantWindow = true,   // D-09 small-org default: true
+    includeBotStormMonth  = true,   // D-09 small-org default: true
+    includeTeamSizeStep   = false,  // D-09 small-org default: false
+  } = options;
+
   const referenceDate = new Date();
   const aiMarkerDate = format(subMonths(referenceDate, 6), 'yyyy-MM-dd');
   const aiMarkerMonth = format(subMonths(referenceDate, 6), 'yyyy-MM');
@@ -466,10 +705,27 @@ export function generateSmallStartup(): ExportBundle {
   const contributorCount = 8;
   const repoCount = 2;
   const cohorts = [
-    { key: 'new', contributorFraction: 0.25, weight: 0.25 },
-    { key: 'mid', contributorFraction: 0.35, weight: 0.35 },
-    { key: 'senior', contributorFraction: 0.40, weight: 0.40 },
+    { key: 'new' as const, contributorFraction: 0.25, weight: 0.25 },
+    { key: 'mid' as const, contributorFraction: 0.35, weight: 0.35 },
+    { key: 'senior' as const, contributorFraction: 0.40, weight: 0.40 },
   ];
+
+  const profile = buildActivityProfile({
+    contributorCount,
+    months,
+    aiMarkerMonth,
+    cohorts: cohorts.map(c => ({ key: c.key, weight: c.weight })),
+    baseCommitsPerMonth: 12,
+    baseLinesPerCommit: 150,
+    basePrsPerMonth: 4,
+    aiBoostMean: 1.2,
+    dominantWindow: includeDominantWindow ? {
+      startIdx: Math.floor(months.length * 0.3),
+      endIdx:   Math.floor(months.length * 0.3) + 2,
+      topShare: 0.50,
+    } : undefined,
+    headcountSchedule: includeTeamSizeStep ? [{ monthIdx: Math.floor(months.length * 0.6), delta: -3 }] : undefined,
+  });
 
   const cohortCommits = buildCohortMetrics('commits', {
     months,
@@ -505,25 +761,17 @@ export function generateSmallStartup(): ExportBundle {
   );
 
   const prTurnaround = buildPrTurnaround(months, 12, aiMarkerMonth);
-  const botRatio = buildBotRatio(months, 0.05);
+  const stormMonthIdx = includeBotStormMonth ? Math.floor(months.length * 0.7) : undefined;
+  const botRatio = buildBotRatio(months, 0.05, stormMonthIdx);
   const rolling = buildRolling(referenceDate, 150);
 
   const totalCommits = cohortCommits.reduce((s, r) => s + r.totalCount, 0);
   const executiveSummary = buildExecutiveSummary(totalCommits, contributorCount, true);
 
-  const periodMetrics: PeriodMetric[] = [
-    {
-      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Pre-AI' },
-      metrics: { avgCommitSize: 150, prFrequency: 4, rampUpSpeed: 4, activeContributors: contributorCount },
-    },
-    {
-      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'Post-AI', markerDate: aiMarkerDate },
-      metrics: { avgCommitSize: 180, prFrequency: 5, rampUpSpeed: 3, activeContributors: contributorCount },
-    },
-  ];
+  const periodMetrics = buildPeriodMetricsFromProfile(profile, aiMarkerDate, referenceDate);
 
-  const concentrationMonthly = buildConcentrationMonthly(months, 'small');
-  const headcountMonthly = buildHeadcountMonthly(months, 'small');
+  const concentrationMonthly = buildConcentrationMonthly(profile);
+  const headcountMonthly = buildHeadcountMonthly(profile);
 
   return {
     metadata: buildMetadata(repoCount, aiMarkerDate, referenceDate),
@@ -548,7 +796,15 @@ export function generateSmallStartup(): ExportBundle {
  * - AI marker set 4 months ago
  * - More gradual AI adoption curve
  */
-export function generateMidSizeCompany(): ExportBundle {
+export function generateMidSizeCompany(options: GenerateOrgOptions = {}): ExportBundle {
+  const {
+    includeDominantWindow = false,  // D-09 mid-org default: false (no forced dominant window)
+    includeBotStormMonth  = true,   // D-09 mid-org default: true
+    includeTeamSizeStep   = true,   // D-09 mid-org default: true — introduces a mid-size team-size step
+    // monthIdx: 8, delta: -5 mirrors the `idx === 8 ? -5 : 0` shape from the prior (unused-for-mid)
+    // largeShrink branch — it's new mid-org behavior motivated by D-09, not preserved prior behavior.
+  } = options;
+
   const referenceDate = new Date();
   const aiMarkerDate = format(subMonths(referenceDate, 4), 'yyyy-MM-dd');
   const aiMarkerMonth = format(subMonths(referenceDate, 4), 'yyyy-MM');
@@ -557,10 +813,27 @@ export function generateMidSizeCompany(): ExportBundle {
   const contributorCount = 80;
   const repoCount = 15;
   const cohorts = [
-    { key: 'new', contributorFraction: 0.20, weight: 0.20 },
-    { key: 'mid', contributorFraction: 0.30, weight: 0.30 },
-    { key: 'senior', contributorFraction: 0.50, weight: 0.50 },
+    { key: 'new' as const, contributorFraction: 0.20, weight: 0.20 },
+    { key: 'mid' as const, contributorFraction: 0.30, weight: 0.30 },
+    { key: 'senior' as const, contributorFraction: 0.50, weight: 0.50 },
   ];
+
+  const profile = buildActivityProfile({
+    contributorCount,
+    months,
+    aiMarkerMonth,
+    cohorts: cohorts.map(c => ({ key: c.key, weight: c.weight })),
+    baseCommitsPerMonth: 8,
+    baseLinesPerCommit: 120,
+    basePrsPerMonth: 3,
+    aiBoostMean: 1.1,
+    dominantWindow: includeDominantWindow ? {
+      startIdx: Math.floor(months.length * 0.3),
+      endIdx:   Math.floor(months.length * 0.3) + 2,
+      topShare: 0.50,
+    } : undefined,
+    headcountSchedule: includeTeamSizeStep ? [{ monthIdx: 8, delta: -5 }] : undefined,
+  });
 
   const cohortCommits = buildCohortMetrics('commits', {
     months,
@@ -596,25 +869,17 @@ export function generateMidSizeCompany(): ExportBundle {
   );
 
   const prTurnaround = buildPrTurnaround(months, 24, aiMarkerMonth);
-  const botRatio = buildBotRatio(months, 0.15);
+  const stormMonthIdx = includeBotStormMonth ? Math.floor(months.length * 0.6) : undefined;
+  const botRatio = buildBotRatio(months, 0.15, stormMonthIdx);
   const rolling = buildRolling(referenceDate, 120);
 
   const totalCommits = cohortCommits.reduce((s, r) => s + r.totalCount, 0);
   const executiveSummary = buildExecutiveSummary(totalCommits, contributorCount, true);
 
-  const periodMetrics: PeriodMetric[] = [
-    {
-      period: { startDate: format(subMonths(referenceDate, 12), 'yyyy-MM-dd'), endDate: aiMarkerDate, label: 'Pre-AI' },
-      metrics: { avgCommitSize: 120, prFrequency: 3, rampUpSpeed: 9, activeContributors: contributorCount },
-    },
-    {
-      period: { startDate: aiMarkerDate, endDate: format(referenceDate, 'yyyy-MM-dd'), label: 'Post-AI', markerDate: aiMarkerDate },
-      metrics: { avgCommitSize: 132, prFrequency: 3.5, rampUpSpeed: 7, activeContributors: contributorCount },
-    },
-  ];
+  const periodMetrics = buildPeriodMetricsFromProfile(profile, aiMarkerDate, referenceDate);
 
-  const concentrationMonthly = buildConcentrationMonthly(months, 'mid');
-  const headcountMonthly = buildHeadcountMonthly(months, 'mid');
+  const concentrationMonthly = buildConcentrationMonthly(profile);
+  const headcountMonthly = buildHeadcountMonthly(profile);
 
   return {
     metadata: buildMetadata(repoCount, aiMarkerDate, referenceDate),
@@ -639,17 +904,49 @@ export function generateMidSizeCompany(): ExportBundle {
  * - Flat, steady metrics with no inflection point
  * - periodMetrics is null (no AI marker = no period comparison)
  */
-export function generatePreAiBaseline(): ExportBundle {
+export function generatePreAiBaseline(options: GenerateOrgOptions = {}): ExportBundle {
+  // D-05 regression guard: pre-AI baseline is the control group and MUST remain
+  // structurally clean regardless of caller-provided options. Three invariants
+  // are enforced below:
+  //   1. aiMarkerDate = null (no AI marker)
+  //   2. periodMetrics = null (buildPeriodMetricsFromProfile returns null when marker is null)
+  //   3. botRatio contains no bot-storm month (`includeBotStormMonth` is ignored here)
+  // `includeDominantWindow` and `includeTeamSizeStep` ARE honored because they
+  // perturb only the dominantWindow / headcountSchedule of the activity profile
+  // and don't violate the control-group contract.
+  const {
+    includeDominantWindow = false,  // D-09 pre-AI default: false
+    includeBotStormMonth  = false,  // D-05 regression guard: default false; forcibly ignored below
+    includeTeamSizeStep   = false,  // D-09 pre-AI default: false
+  } = options;
+
   const referenceDate = new Date();
   const months = pastMonths(12, referenceDate);
 
   const contributorCount = 30;
   const repoCount = 8;
   const cohorts = [
-    { key: 'new', contributorFraction: 0.25, weight: 0.25 },
-    { key: 'mid', contributorFraction: 0.35, weight: 0.35 },
-    { key: 'senior', contributorFraction: 0.40, weight: 0.40 },
+    { key: 'new' as const, contributorFraction: 0.25, weight: 0.25 },
+    { key: 'mid' as const, contributorFraction: 0.35, weight: 0.35 },
+    { key: 'senior' as const, contributorFraction: 0.40, weight: 0.40 },
   ];
+
+  const profile = buildActivityProfile({
+    contributorCount,
+    months,
+    aiMarkerMonth: null,   // CRITICAL: no AI marker — keeps periodMetrics=null via helper
+    cohorts: cohorts.map(c => ({ key: c.key, weight: c.weight })),
+    baseCommitsPerMonth: 6,
+    baseLinesPerCommit: 100,
+    basePrsPerMonth: 2,
+    aiBoostMean: 1.0,      // no AI boost (control group)
+    dominantWindow: includeDominantWindow ? {
+      startIdx: Math.floor(months.length * 0.3),
+      endIdx:   Math.floor(months.length * 0.3) + 2,
+      topShare: 0.50,
+    } : undefined,
+    headcountSchedule: includeTeamSizeStep ? [{ monthIdx: Math.floor(months.length * 0.6), delta: -3 }] : undefined,
+  });
 
   const cohortCommits = buildCohortMetrics('commits', {
     months,
@@ -682,7 +979,11 @@ export function generatePreAiBaseline(): ExportBundle {
   const contributors = buildContributors(contributorCount, cohorts.map(c => ({ key: c.key, weight: c.weight })), null);
 
   const prTurnaround = buildPrTurnaround(months, 18, null);
-  const botRatio = buildBotRatio(months, 0.12);
+  // D-05 regression guard: pre-AI baseline is the control group — bot storm is
+  // NEVER injected, even if the caller passes includeBotStormMonth: true. This
+  // prevents accidental leakage into the control-group contract.
+  void includeBotStormMonth;  // explicitly ignored; see guard comment above
+  const botRatio = buildBotRatio(months, 0.12, undefined);
   const rolling = buildRolling(referenceDate, 100);
 
   const totalCommits = cohortCommits.reduce((s, r) => s + r.totalCount, 0);
@@ -692,6 +993,9 @@ export function generatePreAiBaseline(): ExportBundle {
     rampUpTrend: 'Stable',
     aiAdoptionDelta: null,  // CRITICAL: null because no AI marker
   };
+
+  // buildPeriodMetricsFromProfile returns null because profile.aiMarkerMonth === null (D-05 regression guard)
+  const periodMetrics = buildPeriodMetricsFromProfile(profile, null, referenceDate);
 
   return {
     metadata: buildMetadata(repoCount, null, referenceDate),  // null aiMarkerDate
@@ -703,12 +1007,11 @@ export function generatePreAiBaseline(): ExportBundle {
     prTurnaround,
     botRatio,
     executiveSummary,
-    periodMetrics: null,        // CRITICAL: null because no AI marker
+    periodMetrics,        // CRITICAL: null because aiMarkerMonth is null — guaranteed by buildPeriodMetricsFromProfile
     // generatePreAiBaseline produces a mid-size org (30 contributors, 8 repos);
-    // use the 'mid' profile so cross-org analysis in Phase 9.7 sees consistent
-    // concentration characteristics per sizeCategory.
-    concentrationMonthly: buildConcentrationMonthly(months, 'mid'),
-    headcountMonthly: buildHeadcountMonthly(months, 'mid'),
+    // profile-driven concentration/headcount for cross-org analysis consistency.
+    concentrationMonthly: buildConcentrationMonthly(profile),
+    headcountMonthly: buildHeadcountMonthly(profile),
   };
 }
 

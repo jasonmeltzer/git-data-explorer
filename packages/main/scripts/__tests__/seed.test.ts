@@ -240,6 +240,423 @@ d('seed data multi-cohort coverage (D-16)', () => {
   });
 });
 
+// ── seed data commit-only persona (9.4.2) ──────────────────────────────────
+
+d('seed data commit-only persona (9.4.2)', () => {
+  test('at least one human author has >0 commits AND 0 authored PRs', () => {
+    const db = openSeedDb();
+    try {
+      const rows = db.prepare(`
+        SELECT
+          a.github_login AS login,
+          COUNT(DISTINCT c.id) AS commit_count,
+          COUNT(DISTINCT p.id) AS pr_count
+        FROM authors a
+        LEFT JOIN commits c ON c.author_id = a.id
+        LEFT JOIN pull_requests p ON p.author_id = a.id
+        WHERE a.is_bot = 0
+        GROUP BY a.id
+      `).all() as Array<{ login: string; commit_count: number; pr_count: number }>;
+
+      const commitOnly = rows.filter(r => r.commit_count > 0 && r.pr_count === 0);
+      expect(
+        commitOnly.length,
+        `Expected at least 1 commit-only human author; got: ${JSON.stringify(commitOnly)}`,
+      ).toBeGreaterThanOrEqual(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('commit-only persona is direct-devon (the D-01 persona)', () => {
+    const db = openSeedDb();
+    try {
+      const row = db.prepare(`
+        SELECT
+          COUNT(DISTINCT c.id) AS commit_count,
+          COUNT(DISTINCT p.id) AS pr_count
+        FROM authors a
+        LEFT JOIN commits c ON c.author_id = a.id
+        LEFT JOIN pull_requests p ON p.author_id = a.id
+        WHERE a.github_login = 'direct-devon'
+      `).get() as { commit_count: number; pr_count: number };
+
+      expect(row.commit_count).toBeGreaterThan(0);
+      expect(row.pr_count).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// ── seed data PR-reviewer persona (9.4.2) ──────────────────────────────────
+
+d('seed data PR-reviewer persona (9.4.2)', () => {
+  test('at least one month has a human author with >=1 authored PR but 0 commits', () => {
+    const db = openSeedDb();
+    try {
+      // For each (author, month), count commits AND PRs authored IN that month
+      // (using PR.createdAt for authorship month). Find any row where pr_count >= 1
+      // AND commit_count = 0.
+      const rows = db.prepare(`
+        WITH commit_months AS (
+          SELECT
+            a.id AS author_id,
+            a.github_login AS login,
+            strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            COUNT(*) AS commit_count
+          FROM commits c
+          JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0
+          GROUP BY a.id, month
+        ),
+        pr_months AS (
+          SELECT
+            a.id AS author_id,
+            a.github_login AS login,
+            strftime('%Y-%m', p.created_at, 'unixepoch') AS month,
+            COUNT(*) AS pr_count
+          FROM pull_requests p
+          JOIN authors a ON a.id = p.author_id
+          WHERE a.is_bot = 0
+          GROUP BY a.id, month
+        )
+        SELECT
+          pr.login,
+          pr.month,
+          pr.pr_count,
+          COALESCE(cm.commit_count, 0) AS commit_count
+        FROM pr_months pr
+        LEFT JOIN commit_months cm
+          ON cm.author_id = pr.author_id AND cm.month = pr.month
+        WHERE pr.pr_count >= 1
+          AND COALESCE(cm.commit_count, 0) = 0
+      `).all() as Array<{ login: string; month: string; pr_count: number; commit_count: number }>;
+
+      expect(
+        rows.length,
+        `Expected at least one (author, month) with PRs authored but 0 commits; got: ${JSON.stringify(rows.slice(0, 5))}`,
+      ).toBeGreaterThanOrEqual(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('PR-reviewer persona is reviewer-riley with >= 10 authored PRs', () => {
+    const db = openSeedDb();
+    try {
+      const row = db.prepare(`
+        SELECT COUNT(*) AS pr_count
+        FROM pull_requests p
+        JOIN authors a ON a.id = p.author_id
+        WHERE a.github_login = 'reviewer-riley'
+      `).get() as { pr_count: number };
+      expect(row.pr_count).toBeGreaterThanOrEqual(10);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// ── seed data refactor wave (9.4.2) ─────────────────────────────────────────
+
+d('seed data refactor wave (9.4.2)', () => {
+  test('at least one month has lines-basis top-1 >= 70% AND commits-basis top-1 < 40% (cross-basis divergence)', () => {
+    const db = openSeedDb();
+    try {
+      // Lines basis: sum (linesAdded + linesDeleted) per (author, month)
+      const linesRows = db.prepare(`
+        WITH per_author AS (
+          SELECT
+            strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            a.github_login AS login,
+            SUM(c.lines_added + c.lines_deleted) AS total_lines
+          FROM commits c
+          JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
+          GROUP BY month, a.id
+        ),
+        totals AS (
+          SELECT month, SUM(total_lines) AS lines_total
+          FROM per_author
+          GROUP BY month
+        ),
+        ranked AS (
+          SELECT
+            pa.month,
+            pa.login,
+            pa.total_lines,
+            t.lines_total,
+            CAST(pa.total_lines AS REAL) / t.lines_total AS share,
+            ROW_NUMBER() OVER (PARTITION BY pa.month ORDER BY pa.total_lines DESC) AS rank
+          FROM per_author pa
+          JOIN totals t ON t.month = pa.month
+          WHERE t.lines_total > 0
+        )
+        SELECT month, login, share FROM ranked WHERE rank = 1
+      `).all() as Array<{ month: string; login: string; share: number }>;
+
+      // Commits basis for the SAME (month, login) pairs
+      const commitsRows = db.prepare(`
+        WITH per_author AS (
+          SELECT
+            strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            a.github_login AS login,
+            COUNT(*) AS total_commits
+          FROM commits c
+          JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
+          GROUP BY month, a.id
+        ),
+        totals AS (
+          SELECT month, SUM(total_commits) AS commits_total
+          FROM per_author
+          GROUP BY month
+        )
+        SELECT
+          pa.month,
+          pa.login,
+          CAST(pa.total_commits AS REAL) / t.commits_total AS share
+        FROM per_author pa
+        JOIN totals t ON t.month = pa.month
+        WHERE t.commits_total > 0
+      `).all() as Array<{ month: string; login: string; share: number }>;
+
+      const commitsShareByKey = new Map<string, number>();
+      for (const r of commitsRows) {
+        commitsShareByKey.set(`${r.month}:${r.login}`, r.share);
+      }
+
+      // Find any top-1-lines month where SAME author has < 40% commits share
+      const divergentMonths = linesRows.filter(l => {
+        if (l.share < 0.70) return false;
+        const commitShare = commitsShareByKey.get(`${l.month}:${l.login}`) ?? 0;
+        return commitShare < 0.40;
+      });
+
+      expect(
+        divergentMonths.length,
+        `Expected >= 1 month with lines-top1 >= 70% AND that author's commits share < 40%; ` +
+        `top-lines rows were: ${JSON.stringify(linesRows.map(r => ({ month: r.month, login: r.login, linesShare: Math.round(r.share * 1000) / 10 })))}`,
+      ).toBeGreaterThanOrEqual(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('refactor-wave month attributes to lwilson (the D-03 persona)', () => {
+    const db = openSeedDb();
+    try {
+      // Find the refactor-wave signature month: top-1-lines-share >= 70% AND the same
+      // author's commits-share < 40% (cross-basis divergence). This disambiguates lwilson's
+      // deletion-heavy wave from alexpower's 3-month dominant window — alexpower dominates
+      // BOTH lines and commits, so cross-basis divergence isolates the wave.
+      const row = db.prepare(`
+        WITH per_author_lines AS (
+          SELECT
+            strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            a.id AS author_id,
+            a.github_login AS login,
+            SUM(c.lines_added + c.lines_deleted) AS total_lines
+          FROM commits c
+          JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
+          GROUP BY month, a.id
+        ),
+        per_author_commits AS (
+          SELECT
+            strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            a.id AS author_id,
+            COUNT(*) AS total_commits
+          FROM commits c
+          JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
+          GROUP BY month, a.id
+        ),
+        month_lines_totals AS (SELECT month, SUM(total_lines) AS lines_total FROM per_author_lines GROUP BY month),
+        month_commits_totals AS (SELECT month, SUM(total_commits) AS commits_total FROM per_author_commits GROUP BY month),
+        ranked_lines AS (
+          SELECT pa.month, pa.author_id, pa.login,
+                 CAST(pa.total_lines AS REAL) / mt.lines_total AS lines_share,
+                 ROW_NUMBER() OVER (PARTITION BY pa.month ORDER BY pa.total_lines DESC) AS rank
+          FROM per_author_lines pa JOIN month_lines_totals mt ON mt.month = pa.month
+          WHERE mt.lines_total > 0
+        )
+        SELECT rl.month, rl.login, rl.lines_share,
+               CAST(pac.total_commits AS REAL) / mct.commits_total AS commits_share
+        FROM ranked_lines rl
+        JOIN per_author_commits pac ON pac.month = rl.month AND pac.author_id = rl.author_id
+        JOIN month_commits_totals mct ON mct.month = rl.month
+        WHERE rl.rank = 1
+          AND rl.lines_share >= 0.70
+          AND CAST(pac.total_commits AS REAL) / mct.commits_total < 0.40
+        ORDER BY rl.lines_share DESC LIMIT 1
+      `).get() as { month: string; login: string; lines_share: number; commits_share: number } | undefined;
+
+      expect(row, 'no month has refactor-wave signature (lines-top1 >= 70% AND commits-share < 40%)').toBeDefined();
+      expect(row!.login).toBe('lwilson');
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// ── seed data bot storm (9.4.2) ─────────────────────────────────────────────
+
+d('seed data bot storm (9.4.2)', () => {
+  test('at least one month has bot_commits / total_commits >= 50%', () => {
+    const db = openSeedDb();
+    try {
+      const rows = db.prepare(`
+        SELECT
+          strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+          SUM(CASE WHEN a.is_bot = 1 THEN 1 ELSE 0 END) AS bot_commits,
+          SUM(CASE WHEN a.is_bot = 0 THEN 1 ELSE 0 END) AS human_commits,
+          COUNT(*) AS total_commits
+        FROM commits c
+        JOIN authors a ON a.id = c.author_id
+        GROUP BY month
+        ORDER BY month
+      `).all() as Array<{ month: string; bot_commits: number; human_commits: number; total_commits: number }>;
+
+      const stormMonths = rows.filter(r => r.total_commits > 0 && (r.bot_commits / r.total_commits) >= 0.50);
+      expect(
+        stormMonths.length,
+        `Expected >= 1 month with bot share >= 50%; monthly bot percentages: ${JSON.stringify(rows.map(r => ({ month: r.month, botPct: r.total_commits > 0 ? Math.round((r.bot_commits / r.total_commits) * 1000) / 10 : 0 })))}`,
+      ).toBeGreaterThanOrEqual(1);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('the bot-storm surge is driven by dependabot (the D-04 persona)', () => {
+    const db = openSeedDb();
+    try {
+      // In the highest-bot-ratio month, at least 50% of bot commits come from dependabot[bot]
+      const peak = db.prepare(`
+        WITH monthly AS (
+          SELECT
+            strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+            a.github_login AS login,
+            a.is_bot AS is_bot,
+            COUNT(*) AS commits
+          FROM commits c JOIN authors a ON a.id = c.author_id
+          GROUP BY month, a.id
+        ),
+        monthly_bots AS (
+          SELECT month, SUM(commits) AS total_bot_commits
+          FROM monthly WHERE is_bot = 1 GROUP BY month
+        ),
+        monthly_depbot AS (
+          SELECT month, commits AS dependabot_commits
+          FROM monthly WHERE login = 'dependabot[bot]'
+        )
+        SELECT mb.month,
+               mb.total_bot_commits,
+               COALESCE(md.dependabot_commits, 0) AS dependabot_commits,
+               CAST(COALESCE(md.dependabot_commits, 0) AS REAL) / mb.total_bot_commits AS dep_share
+        FROM monthly_bots mb
+        LEFT JOIN monthly_depbot md ON md.month = mb.month
+        WHERE mb.total_bot_commits > 0
+        ORDER BY mb.total_bot_commits DESC
+        LIMIT 1
+      `).get() as { month: string; total_bot_commits: number; dependabot_commits: number; dep_share: number } | undefined;
+
+      expect(peak, 'no month has bot commits').toBeDefined();
+      expect(peak!.dep_share, `dependabot share in peak bot month = ${peak!.dep_share}`).toBeGreaterThanOrEqual(0.50);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// ── seed data 9.4.2 × D-16 window non-overlap (9.4.2) ──────────────────────
+
+d('seed data 9.4.2 × D-16 window non-overlap (9.4.2)', () => {
+  // These week numbers come from seed.ts:
+  // - alexpower dominant window: weeks 6-22
+  // - team-size events (arrivals + departures): weeks 30-33
+  // - refactor wave (lwilson): week 40
+  // - bot storm (dependabot): weeks 34-37
+  // - PR-reviewer (reviewer-riley) active: weeks 10-52 (but extra PRs only weeks 20-48)
+  const ALEX_WINDOW: [number, number] = [6, 22];
+  const TEAM_SIZE_WINDOW: [number, number] = [30, 33];
+  const REFACTOR_WEEK = 40;
+  const BOT_STORM_WINDOW: [number, number] = [34, 37];
+
+  function weeksOverlap(a: [number, number], b: [number, number]): boolean {
+    return a[0] <= b[1] && b[0] <= a[1];
+  }
+
+  test('refactor-wave week 40 is outside alexpower dominant window (weeks 6-22)', () => {
+    expect(REFACTOR_WEEK).toBeGreaterThan(ALEX_WINDOW[1]);
+  });
+
+  test('refactor-wave week 40 is outside team-size events (weeks 30-33)', () => {
+    expect(REFACTOR_WEEK).toBeGreaterThan(TEAM_SIZE_WINDOW[1]);
+  });
+
+  test('bot-storm window (34-37) does NOT overlap alexpower dominant window (6-22)', () => {
+    expect(weeksOverlap(BOT_STORM_WINDOW, ALEX_WINDOW)).toBe(false);
+  });
+
+  test('bot-storm window (34-37) does NOT overlap team-size events (30-33)', () => {
+    expect(weeksOverlap(BOT_STORM_WINDOW, TEAM_SIZE_WINDOW)).toBe(false);
+  });
+
+  test('the calendar month containing the refactor wave is distinct from alexpower dominant months', () => {
+    const db = openSeedDb();
+    try {
+      // Compute alexpower's top-1-commits-share months (>= 45%)
+      const alexMonths = db.prepare(`
+        WITH per_author AS (
+          SELECT strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+                 a.github_login AS login,
+                 COUNT(*) AS commits
+          FROM commits c JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%'
+          GROUP BY month, a.id
+        ),
+        totals AS (SELECT month, SUM(commits) AS total FROM per_author GROUP BY month),
+        ranked AS (
+          SELECT pa.month, pa.login,
+                 CAST(pa.commits AS REAL) / t.total AS share,
+                 ROW_NUMBER() OVER (PARTITION BY pa.month ORDER BY pa.commits DESC) AS rank
+          FROM per_author pa JOIN totals t ON t.month = pa.month
+          WHERE t.total > 0
+        )
+        SELECT month FROM ranked WHERE rank = 1 AND login = 'alexpower' AND share >= 0.45
+      `).all() as Array<{ month: string }>;
+
+      // Find the month where lwilson has lines-top-1 >= 70% (the refactor-wave month)
+      const waveRow = db.prepare(`
+        WITH per_author AS (
+          SELECT strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+                 a.github_login AS login,
+                 SUM(c.lines_added + c.lines_deleted) AS total_lines
+          FROM commits c JOIN authors a ON a.id = c.author_id
+          WHERE a.is_bot = 0 AND c.sha NOT LIKE 'seed-early-%' GROUP BY month, a.id
+        ),
+        totals AS (SELECT month, SUM(total_lines) AS lines_total FROM per_author GROUP BY month),
+        ranked AS (
+          SELECT pa.month, pa.login,
+                 CAST(pa.total_lines AS REAL) / t.lines_total AS share,
+                 ROW_NUMBER() OVER (PARTITION BY pa.month ORDER BY pa.total_lines DESC) AS rank
+          FROM per_author pa JOIN totals t ON t.month = pa.month
+          WHERE t.lines_total > 0
+        )
+        SELECT month FROM ranked WHERE rank = 1 AND login = 'lwilson' AND share >= 0.70
+        ORDER BY share DESC LIMIT 1
+      `).get() as { month: string } | undefined;
+
+      expect(waveRow, 'refactor-wave month not found').toBeDefined();
+      expect(alexMonths.map(r => r.month)).not.toContain(waveRow!.month);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function isAdjacentMonth(a: string, b: string): boolean {
