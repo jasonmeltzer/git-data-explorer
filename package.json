@@ -6,6 +6,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "engines": {
+    "node": ">=22.0.0 <23.0.0"
+  },
   "scripts": {
     "dev": "npm run dev -w @git-data-explorer/main",
     "research": "npm run dev -w @git-data-explorer/research",
