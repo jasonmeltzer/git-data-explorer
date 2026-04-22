@@ -114,17 +114,30 @@ Single-page React app using hash-based routing. Three pages:
 
 Hono HTTP server. No GitHub API dependency — all data from imported ExportBundle files.
 
+**Migration management (Phase 9.4.3, MIG-01 / MIG-02):**
+- The research DB is managed via drizzle-kit migrations at `packages/research/drizzle/migrations/`. Startup calls `runMigrations()` (see `server/db/migrate.ts`) instead of the old raw `sqlite.exec(...DDL...)` block.
+- Migration `0000_initial.sql` is authored as the LEGACY+CURRENT union — it includes the pre-9.4 columns (`industry`, `ai_tool`, `before_after_json`) so both fresh installs and the existing `packages/research/data/research.db` apply it without failing on "table already exists".
+- Migration `0001_drop_legacy_columns.sql` drops the 3 legacy columns.
+- `bootstrapMigrationJournal()` handles four legacy-DB states (all columns present, partially migrated, fully migrated, fresh install) by pre-seeding `__drizzle_migrations` so drizzle skips migrations that have effectively already run.
+- `packages/research/server/__tests__/schema-parity.test.ts` asserts that every table's runtime columns match `server/db/schema.ts` exactly, failing CI on silent schema drift. `drizzle-journal-shape.test.ts` machine-verifies the `__drizzle_migrations` journal schema at the installed drizzle-orm version.
+
+**Security subsystem (Phase 9.4.3):**
+- `services/url-safety.ts` — pre-DNS URL parse, scheme allowlist, IPv4/IPv6 blocked-CIDR lists, `resolveAndValidateHost` that checks every `A`/`AAAA` record returned by DNS (SEC-05, T-09.4.3-01/06).
+- `services/safe-fetch.ts` — undici `Agent` with a `connect` hook that re-validates the peer IP at TCP-connect time (DNS-rebinding defense) and `redirect: 'manual'` handling that re-runs `isSafeUrl` + `resolveAndValidateHost` on each hop (SEC-05, T-09.4.3-05).
+- `services/path-safety.ts` — `sandboxPath(base, candidate)` uses `fs.realpath` + `startsWith(base + path.sep)` to reject `..`, absolute, and symlink-escape paths for the `POST /api/import/batch` endpoint (SEC-06, T-09.4.3-02). Requires `RESEARCH_IMPORT_BASE_DIR`.
+- `@shared/lib/sql-safety.js` (file at `packages/shared/lib/sql-safety.ts`) — `assertIntegerArray(ids)` throws on non-integer input; `sqlIntList(ids)` returns a validated `"1,2,3"` literal for safe interpolation at `sql.raw` sites. Wired into every array site in `aggregation.ts`, all three analytics route handlers, and `packages/main/server/services/analytics-utils.ts` (symmetry: the main package's inline guard now delegates here so there's one implementation) (SEC-07, T-09.4.3-03).
+
 **Routes** (`server/routes/`):
 - `health.ts` — `GET /api/health`
-- `import.ts` — `POST /api/import/file`, `POST /api/import/url`, `POST /api/import/batch`
+- `import.ts` — `POST /api/import/file`, `POST /api/import/url`, `POST /api/import/batch` (URL endpoint uses `url-safety` + `safe-fetch`; batch endpoint uses `path-safety.sandboxPath`)
 - `orgs.ts` — `GET /api/orgs`, `GET /api/orgs/:id`, `PATCH /api/orgs/:id`, `DELETE /api/orgs/:id`, `DELETE /api/orgs/:orgId/snapshots/:snapshotId`, `GET /api/orgs/:orgId/snapshots/:snapshotId/data`, `GET /api/orgs/:orgId/concentration`, `GET /api/orgs/:orgId/headcount`, `GET /api/orgs/:orgId/period-metrics`
-- `analytics.ts` — `GET /api/analytics/cross-org/cohort-metrics`, `GET /api/analytics/cross-org/ramp-up`, `GET /api/analytics/cross-org/comparison`
+- `analytics.ts` — `GET /api/analytics/cross-org/cohort-metrics`, `GET /api/analytics/cross-org/ramp-up`, `GET /api/analytics/cross-org/comparison` (integer params validated via `assertIntegerArray` before reaching aggregation service)
 
 **Services** (`server/services/`):
-- `import-service.ts` — ZIP parsing (fflate), bundle validation, org auto-creation, DB insertion, duplicate detection by SHA-256 content hash, cross-org duplicate detection (exact hash match + fuzzy match on overlapping owners/repos/dates). When the caller passes `orgId=null` (the `/api/import/file` path), a contentHash match against any existing snapshot auto-attaches the new snapshot to that org rather than creating a parallel duplicate org — re-importing the same ZIP produces a new snapshot on the original org.
+- `import-service.ts` — ZIP parsing (fflate), bundle validation, org auto-creation, DB insertion, duplicate detection by SHA-256 content hash, cross-org duplicate detection (exact hash match + fuzzy match on overlapping owners/repos/dates). URL ingestion path uses `safeFetch` instead of raw `fetch`. When the caller passes `orgId=null` (the `/api/import/file` path), a contentHash match against any existing snapshot auto-attaches the new snapshot to that org rather than creating a parallel duplicate org — re-importing the same ZIP produces a new snapshot on the original org.
 - `validation.ts` — Zod schema for ExportBundle; validates shape, warns on null/empty optional sections; backward-compatible with old toolVersion bundles
 - `org-service.ts` — Org and snapshot CRUD (create, list, get, update, delete with cascade)
-- `aggregation.ts` — Cross-org aggregation engine: `getAggregatedCohortMetrics`, `getAggregatedRampUp`, `getOrgComparisonTable`; uses latest snapshot per org
+- `aggregation.ts` — Cross-org aggregation engine: `getAggregatedCohortMetrics`, `getAggregatedRampUp`, `getOrgComparisonTable`; uses latest snapshot per org. All `sql.raw` sites use `sqlIntList` for array ids + `Number.isSafeInteger` guards for scalar ids.
 - `test-data-generator.ts` — Synthetic ExportBundle generator (small startup, mid-size company, pre-AI baseline); used by tests. **Phase 9.4.2:** rebuilt around a single `ActivityProfile` per generated org — every section (concentration, headcount, bot ratio, period metrics) now derives from one synthetic activity source, so `topContributor` rotates across generated logins and cross-basis top-1 shares are consistent for dominant-window months. Each generator accepts a `GenerateOrgOptions` parameter with D-09 boolean toggles (`includeDominantWindow`, `includeBotStormMonth`, `includeTeamSizeStep`) defaulting per-orgType. `buildPeriodMetricsFromProfile` computes `avgCommitSize` / `prFrequency` / `activeContributors` from profile activity; `rampUpSpeed` stays a literal constant per D-08's hardcoded-for-now exemption (Phase 9.5 derives it properly).
 
 ### Shared Package (`packages/shared/`)
@@ -280,6 +293,10 @@ Vitest 4.x drives the test suite — **715 tests across 53 files** as of Phase 9
 
 Round-trip coverage: `packages/research/server/__tests__/round-trip-phase9.4.test.ts` exercises export → fflate ZIP → `parseZipBundle` → `importBundle` → Hono reconstruction with field-level equality assertions, so any future break in the Phase 9.4 data pipeline surfaces as a test failure.
 
+## Recently Closed
+
+- **Phase 9.4.3 (2026-04-21 external audit)** — 8 items closed: SSRF on `/api/import/url` (SEC-05), path sandbox on `/api/import/batch` (SEC-06), `sql.raw` integer guard across research + main (SEC-07), research DB drizzle-kit migration adoption (MIG-01, MIG-02), better-sqlite3 pin to `^11.10.0` and `@types/node` to `^22.19.17` (COMP-01, COMP-02), `export-service.ts` section-count comment + parity test (DOC-01).
+
 ## What's Not Built Yet
 
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
@@ -361,9 +378,16 @@ packages/
 │   ├── export-types.ts               # ExportBundle, ExportMetadata, etc.
 │   ├── cohort-config.ts              # CohortConfig, DEFAULT_COHORT_CONFIG
 │   ├── lib/utils.ts                  # cn() class merge helper
+│   ├── lib/sql-safety.ts             # Phase 9.4.3: assertIntegerArray + sqlIntList for sql.raw guards (SEC-07)
 │   └── components/ui/               # shadcn/ui primitives
 │
 └── research/
+    ├── drizzle.config.ts              # Phase 9.4.3: drizzle-kit config (out='./drizzle/migrations', schema=server/db/schema.ts)
+    ├── drizzle/
+    │   └── migrations/                # Phase 9.4.3: drizzle-kit generated migrations (MIG-01)
+    │       ├── 0000_initial.sql       # Baseline table DDL including pre-9.4 legacy columns
+    │       ├── 0001_drop_legacy_columns.sql  # Drops industry, ai_tool, before_after_json (MIG-02)
+    │       └── meta/                  # _journal.json + per-migration snapshots
     ├── client/
     │   ├── main.tsx                  # Entry point
     │   ├── App.tsx                   # Hash router + NavBar
@@ -374,17 +398,20 @@ packages/
     │       ├── OrgDashboard.tsx      # Per-org trend charts + snapshot history
     │       └── CrossOrgPage.tsx      # Multi-org comparison with mode toggle
     └── server/
-        ├── index.ts                  # Hono app (port 3002)
+        ├── index.ts                  # Hono app (port 3002). Phase 9.4.3: sqlite.exec(...DDL...) block removed; startup now calls runMigrations()
         ├── db/
         │   ├── schema.ts             # Drizzle table definitions (11 tables: Phase 9.4 added concentration_monthly, headcount_monthly, period_metrics)
         │   ├── client.ts             # DB singleton (data/research.db)
-        │   └── migrate.ts            # Migration runner
+        │   └── migrate.ts            # Phase 9.4.3: runMigrations() + bootstrapMigrationJournal() for legacy DB upgrades
         ├── routes/
         │   ├── health.ts / import.ts / orgs.ts / analytics.ts
         └── services/
-            ├── import-service.ts     # ZIP/JSON ingestion, validation, DB write, cross-org dup detection
+            ├── import-service.ts     # ZIP/JSON ingestion, validation, DB write, cross-org dup detection. Phase 9.4.3: URL fetch now via safeFetch
             ├── validation.ts         # Zod ExportBundle schema (orgName optional for backward compat)
             ├── org-service.ts        # Org/snapshot CRUD
-            ├── aggregation.ts        # Weighted/normalized cross-org aggregation
+            ├── aggregation.ts        # Weighted/normalized cross-org aggregation. Phase 9.4.3: all sql.raw array sites via sqlIntList; scalar sites guarded by Number.isSafeInteger
+            ├── url-safety.ts         # Phase 9.4.3: isSafeUrl + resolveAndValidateHost for SSRF defense (SEC-05)
+            ├── safe-fetch.ts         # Phase 9.4.3: undici Agent connect-hook + manual-redirect re-validation (SEC-05)
+            ├── path-safety.ts        # Phase 9.4.3: sandboxPath realpath + startsWith(base + sep) (SEC-06)
             └── test-data-generator.ts  # Synthetic org bundle generator
 ```
