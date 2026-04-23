@@ -113,3 +113,67 @@ describe('safeFetch URL pre-validation', () => {
     }
   });
 });
+
+describe('safeFetch redirect boundary (maxRedirects semantics)', () => {
+  // Build a mock fetch that returns a 302 pointing at the next URL in a chain,
+  // or a 200 terminal response. Each call consumes one entry from the queue.
+  function chainedFetch(statuses: Array<{ status: number; location?: string }>) {
+    let callIndex = 0;
+    return vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      const entry = statuses[callIndex++] ?? { status: 200 };
+      return {
+        status: entry.status,
+        headers: {
+          get: (h: string) => (h === 'location' && entry.location ? entry.location : null),
+        },
+      } as any;
+    });
+  }
+
+  it('7. maxRedirects=0 disables redirect following (first 3xx throws too_many_redirects)', async () => {
+    const mock = chainedFetch([
+      { status: 302, location: 'https://example.com/next' },
+    ]);
+    try {
+      await expect(
+        safeFetch('https://example.com/start', 0)
+      ).rejects.toThrow('too_many_redirects');
+      // Exactly 1 fetch attempt — the initial. The 302 triggers the loop-exit throw.
+      expect(mock).toHaveBeenCalledTimes(1);
+    } finally {
+      mock.mockRestore();
+    }
+  });
+
+  it('8. maxRedirects=2 follows exactly 2 redirects then throws on the 3rd', async () => {
+    const mock = chainedFetch([
+      { status: 302, location: 'https://example.com/hop1' },
+      { status: 302, location: 'https://example.com/hop2' },
+      { status: 302, location: 'https://example.com/hop3' },
+    ]);
+    try {
+      await expect(
+        safeFetch('https://example.com/start', 2)
+      ).rejects.toThrow('too_many_redirects');
+      // 3 total fetches: initial + 2 followed redirects. The 3rd redirect is NOT followed.
+      expect(mock).toHaveBeenCalledTimes(3);
+    } finally {
+      mock.mockRestore();
+    }
+  });
+
+  it('9. maxRedirects=2 with a terminal 200 on the 3rd fetch succeeds', async () => {
+    const mock = chainedFetch([
+      { status: 302, location: 'https://example.com/hop1' },
+      { status: 302, location: 'https://example.com/hop2' },
+      { status: 200 },
+    ]);
+    try {
+      const res = await safeFetch('https://example.com/start', 2);
+      expect(res.status).toBe(200);
+      expect(mock).toHaveBeenCalledTimes(3);
+    } finally {
+      mock.mockRestore();
+    }
+  });
+});

@@ -29,10 +29,19 @@ export const ssrfSafeAgent = new Agent({
  * Validates the URL string before DNS lookup, validates all DNS records,
  * uses ssrfSafeAgent for connect-time IP re-check (DNS-rebinding defense),
  * and re-validates each redirect hop (redirect:'manual' + per-hop re-check).
+ *
+ * maxRedirects (default 3) — maximum number of redirects to follow.
+ * Total fetch attempts = maxRedirects + 1 (initial request + each follow).
+ * Matches the axios/undici/python-requests convention. Set to 0 to disable
+ * redirect following entirely (any 3xx response becomes `too_many_redirects`).
  */
-export async function safeFetch(startUrl: string, maxHops = 3, init?: RequestInit): Promise<Response> {
+export async function safeFetch(
+  startUrl: string,
+  maxRedirects = 3,
+  init?: RequestInit
+): Promise<Response> {
   let current = startUrl;
-  for (let hop = 0; hop <= maxHops; hop++) {
+  for (let hop = 0; hop <= maxRedirects; hop++) {
     const check = isSafeUrl(current);
     if (!check.ok) throw new Error(`ssrf_rejected:${check.reason}`);
     await resolveAndValidateHost(check.url.hostname);
