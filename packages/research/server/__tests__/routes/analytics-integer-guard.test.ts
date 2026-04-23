@@ -7,19 +7,26 @@
  *   handles every input variant — that is covered by packages/shared/lib/__tests__/sql-safety.test.ts
  *   (13-case unit rejection matrix from Wave 0 Plan 00 Task 1).
  *
- *   We do NOT override process.env.RESEARCH_DB_PATH=':memory:' because the `db` singleton in
- *   packages/research/server/db/client.ts is opened at module-load time; rewiring it would require
- *   vi.resetModules() + dynamic import in every test, tripling boilerplate for the same proof.
- *
- *   Accepted consequence: tests tolerate [200, 400] because a shared dev research.db may or may
- *   not contain an org with id=1. The load-bearing assertion is `res.status !== 500`.
+ *   Aggregation service is mocked so the route logic is the subject-under-test. Without the mock,
+ *   CI (fresh install, migrations not run at test-import time) would throw "no such table:
+ *   snapshots" and the route's try/catch would return 500, producing false-positive failures
+ *   that hide the real signal: did the route reject un-sanitized input before it reached the
+ *   service layer?
  *
  * Strictly-sanitized inputs (abc, empty, zero, negatives) still assert .toBe(400) — those paths
- * short-circuit before any DB query.
+ * short-circuit in the route before any service call.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
+
+// Mock aggregation service: route smoke test doesn't exercise DB, it exercises input validation.
+vi.mock('../../services/aggregation.js', () => ({
+  getAggregatedCohortMetrics: vi.fn().mockReturnValue([]),
+  getAggregatedRampUp: vi.fn().mockReturnValue([]),
+  getOrgComparisonTable: vi.fn().mockReturnValue([]),
+}));
+
 import { analyticsRoutes } from '../../routes/analytics.js';
 
 function getApp(): Hono {
