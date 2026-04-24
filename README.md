@@ -30,6 +30,8 @@ After adopting Claude Code, the founder saw dramatic shifts in contribution patt
 
 ## Current Status
 
+**Phase 9.4.3 complete** — Security and research schema hardening. Closes 8 items from the 2026-04-21 external audit with regression tests so each class of issue fails loudly in CI if reintroduced. (1) SSRF mitigation on `POST /api/import/url` via pre-DNS URL validation, DNS all-records check, and an undici Agent with connect-hook re-validation (DNS-rebinding defense) plus per-hop manual redirect handling (SEC-05). (2) Path sandbox on `POST /api/import/batch` via `realpath` + `startsWith(base + sep)` check (SEC-06). (3) Shared `assertIntegerArray` / `sqlIntList` module wired into every `sql.raw` site in `packages/research/server/services/aggregation.ts` and at the analytics route boundaries; the duplicate inline guard in `packages/main/server/services/analytics-utils.ts` now delegates to the shared primitive (SEC-07). (4) Research DB now managed via drizzle-kit migrations — the startup `sqlite.exec(...DDL...)` block was removed in favor of `runMigrations()`, with a `bootstrapMigrationJournal()` helper that handles four legacy-DB states so fresh installs AND the existing `packages/research/data/research.db` upgrade cleanly (MIG-01, MIG-02). (5) `better-sqlite3` pinned to `^11.10.0` and `@types/node` aligned to `^22.19.17` per CLAUDE.md Node 22 LTS target (COMP-01, COMP-02). (6) `export-service.ts` header comment corrected from "8 dashboard data sections" to "11"; a doc-code parity test compares the documented count against `Object.keys(ExportBundle).length - 1` so future field drift fails CI (DOC-01). Added ~120 new tests: url-safety, safe-fetch, path-safety, import-ssrf, import-batch-sandbox, analytics-integer-guard, fresh-install-migration, migration-bootstrap, schema-parity, drizzle-journal-shape (A2 verification), sql-safety rejection matrix, export-service-parity.
+
 **Phase 9.4.2 complete** — Seed sample data robustness. Extended `packages/main/scripts/seed.ts` with 4 new scenarios that exercise Phase 9.4 UI code paths previously unreachable from seeded data: a commit-only persona (`direct-devon` — commits but zero PRs, exercises ScaryRealPanel's zero-PR null guard), a PR-reviewer persona (`reviewer-riley` — many PRs spanning month boundaries with minimal own commits, exercises D-10 merged_at author-set semantics), a refactor wave (`lwilson` week-40 deletion burst producing a month with ≥70% top-1 lines share and <40% commits share — the HelpPanel "lines are dominated by refactors" caveat), and a bot storm (dependabot 14× weeks 34-37 producing a ≥50% bot-share month). Research tool's `test-data-generator.ts` reworked around a single `ActivityProfile` concept so concentration/headcount/botRatio/periodMetrics derive from one synthetic activity source — `topContributor` rotates (no more hardcoded "Amber Bear"), periodMetrics computed from profile activity (no more literal 150/180), and D-09 boolean toggles (`includeDominantWindow`, `includeBotStormMonth`, `includeTeamSizeStep`) expose per-scenario controls on each generator. Added 21 new tests: 12 seed assertions in `packages/main/scripts/__tests__/seed.test.ts` (commit-only, PR-reviewer, refactor-wave, bot-storm, D-16 non-overlap regression) and 9 regression guards in `packages/research/server/__tests__/test-data-gen.test.ts`.
 
 **Phase 9.4.1 complete** — Test coverage completion for Phase 9.4. Added 173 tests (from 521 to 694 across 53 files): route integration tests for all 6 new HTTP endpoints (main + research), unit tests for 4 shared chart components (TeamDistributionChart/Table, ScaryRealPanel, BeforeAfterComparison's four render branches), hook tests for the 3 new DashboardPage `useQuery` calls, and an end-to-end bundle round-trip (export → ZIP → import → DB → reconstruct) verifying Phase 9.4 data sections survive the pipeline with exact field equality. First jsdom component tests in the repo — `@testing-library/react` + `@vitest-environment jsdom` docblock pattern established.
@@ -61,7 +63,7 @@ What works today:
 - **9-section dashboard** — Executive Summary KPI tiles, Team Distribution, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
 - **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle with anonymization
 - **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download
-- **715 passing tests** across 53 test files (including D-16 and Phase 9.4.2 seed-scenario assertions when `npm run seed` has run)
+- **840 passing tests** across 64 test files (including D-16, Phase 9.4.2 seed-scenario assertions when `npm run seed` has run, and the Phase 9.4.3 security + migration regression suite)
 
 ### Research Tool (`packages/research/`)
 A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
@@ -86,7 +88,7 @@ The project is organized as an npm workspaces monorepo:
 
 ### Code Quality
 - **ESLint configured** — flat config with typescript-eslint parser; includes `no-restricted-syntax` rule banning `asChild` prop on `@base-ui/react` components (prevents regression of resolved console warnings)
-- **715 passing tests** across 53 test files (including D-16 and Phase 9.4.2 seed-scenario assertions when `npm run seed` has run)
+- **840 passing tests** across 64 test files (including D-16, Phase 9.4.2 seed-scenario assertions when `npm run seed` has run, and the Phase 9.4.3 security + migration regression suite)
 
 What's next:
 - **Phase 9.5: Contribution Patterns** — per-developer monthly time series with privacy framing
@@ -103,7 +105,7 @@ What's next:
 | Language | TypeScript 5 |
 | Frontend | React 19, Vite 8, Tailwind CSS 4, shadcn/ui |
 | Backend | Hono 4 |
-| Database | SQLite via better-sqlite3 11, Drizzle ORM |
+| Database | SQLite via better-sqlite3 ^11.10.0, Drizzle ORM (drizzle-kit migrations for the research DB since 9.4.3) |
 | GitHub API | @octokit/rest 21 with throttling plugin |
 | Data fetching | TanStack Query 5 |
 | Testing | Vitest |
@@ -167,6 +169,14 @@ npm run research
 
 This starts the research tool API server (port 3002) and Vite dev server (port 5174). No GitHub token required. Open http://localhost:5174 in your browser.
 
+#### Research tool environment variables
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `RESEARCH_PORT` | Hono server port | `3002` |
+| `RESEARCH_DB_PATH` | SQLite DB path | `./packages/research/data/research.db` |
+| `RESEARCH_IMPORT_BASE_DIR` | **Required** for `POST /api/import/batch`. Paths submitted to the batch import endpoint are sandboxed to this directory (no traversal or symlink escape). If unset, batch import returns HTTP 400. | _(unset — must be configured)_ |
+
 ### Try It Without GitHub
 
 ```bash
@@ -179,7 +189,7 @@ Open http://localhost:5173 — all dashboard views populated with synthetic data
 ### Run Tests
 
 ```bash
-npm run test        # Run all tests across workspaces (715 tests, 53 files)
+npm run test        # Run all tests across workspaces (840 tests, 64 files)
 ```
 
 ### First Use (main app, with real data)

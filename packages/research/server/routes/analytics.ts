@@ -5,6 +5,7 @@
 
 import { Hono } from 'hono';
 import { getAggregatedCohortMetrics, getAggregatedRampUp, getOrgComparisonTable } from '../services/aggregation.js';
+import { assertIntegerArray } from '@shared/lib/sql-safety.js';
 
 const analyticsRoutes = new Hono();
 
@@ -34,7 +35,7 @@ analyticsRoutes.get('/api/analytics/cross-org/cohort-metrics', (c) => {
   if (!orgIdsParam) {
     return c.json({ error: 'orgIds is required' }, 400);
   }
-  const orgIds = orgIdsParam.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+  const orgIds = assertIntegerArray(orgIdsParam.split(',').map(id => parseInt(id.trim(), 10)));
   if (orgIds.length === 0) {
     return c.json({ error: 'orgIds must contain valid integers' }, 400);
   }
@@ -69,7 +70,7 @@ analyticsRoutes.get('/api/analytics/cross-org/ramp-up', (c) => {
   if (!orgIdsParam) {
     return c.json({ error: 'orgIds is required' }, 400);
   }
-  const orgIds = orgIdsParam.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+  const orgIds = assertIntegerArray(orgIdsParam.split(',').map(id => parseInt(id.trim(), 10)));
   if (orgIds.length === 0) {
     return c.json({ error: 'orgIds must contain valid integers' }, 400);
   }
@@ -97,7 +98,7 @@ analyticsRoutes.get('/api/analytics/cross-org/comparison', (c) => {
   if (!orgIdsParam) {
     return c.json({ error: 'orgIds is required' }, 400);
   }
-  const orgIds = orgIdsParam.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+  const orgIds = assertIntegerArray(orgIdsParam.split(',').map(id => parseInt(id.trim(), 10)));
   if (orgIds.length === 0) {
     return c.json({ error: 'orgIds must contain valid integers' }, 400);
   }
