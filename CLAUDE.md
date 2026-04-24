@@ -23,12 +23,12 @@ A local-first web application for engineering leaders to understand how AI tools
 ### Core Technologies
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| Node.js | 22.x LTS | Runtime for the local server process | LTS stability, ships with native ESM, good SQLite support. Avoid Node 24/25 — better-sqlite3 has active build issues on those. |
+| Node.js | 24.x LTS | Runtime for the local server process | LTS stability, ships with native ESM, good SQLite support. Pinned via `.nvmrc` + `engines.node` range. Avoid Node 25 (non-LTS, EOL 2026-06); if upgrading past 24, jump to Node 26 LTS when it lands (~Oct 2026) for maximum support runway. |
 | TypeScript | 5.x | Type safety across frontend and backend | Shared types between API layer and UI are essential for this project — DB schema types flow directly to chart components. |
 | Vite | 8.x | Frontend dev server and build tool | No SSR needed for a local app. Vite 8 uses Rolldown (Rust-based), delivers 10-30x faster builds than Webpack. Much lighter than Next.js for a local SPA. |
 | React | 19.x | UI framework | Current stable; has concurrent features, improved hooks. shadcn/ui and Recharts both support React 19. |
 | Hono | 4.x | Local HTTP API server (Node.js adapter) | TypeScript-first, 4x faster than Express, same simple routing model. Perfect for the local REST API layer between SQLite and the React frontend. Express is a fine fallback but Hono is clearly the modern choice for new projects. |
-| better-sqlite3 | 11.x | SQLite driver | Synchronous API is ideal here — no async complexity for what is essentially a local file database. Use v11.x on Node 22 (v12.x has active build issues on Node 22+). |
+| better-sqlite3 | 12.x | SQLite driver | Synchronous API is ideal here — no async complexity for what is essentially a local file database. Use v12.x on Node 24 (v11.x supports Node 20/22 only; v12 is required for Node 24+ prebuilds). |
 | Drizzle ORM | 0.45.x | Schema definition, migrations, typed queries | SQL-first design means the generated SQL is predictable and debuggable. ~7kb, zero runtime dependencies. Drizzle Kit handles schema migrations automatically. Far better TypeScript inference than Prisma for SQLite. |
 | @octokit/rest | 21.x | GitHub REST API client | Official GitHub client. Provides typed response shapes for PRs, commits, and rate limit headers. Use with the throttling plugin — do not roll your own rate-limit handling. |
 | @octokit/plugin-throttling | 9.x | Automatic GitHub rate-limit handling | Automatically backs off on 429/403 rate-limit responses. Setting `onRateLimit` to return `true` enables automatic retry. Required for the incremental-collection architecture. |
@@ -77,7 +77,7 @@ A local-first web application for engineering leaders to understand how AI tools
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
 | `sqlite3` (async callback driver) | Callback-based async adds complexity with no benefit for a local server where concurrent SQLite writes don't occur | `better-sqlite3` (synchronous) |
-| Node.js `node:sqlite` (experimental) | Still experimental in Node 22, requires `--experimental-sqlite` flag, lacks the maturity and Drizzle integration of better-sqlite3 | `better-sqlite3` until the module stabilizes |
+| Node.js `node:sqlite` (experimental) | Still experimental in Node 24, lacks the maturity and Drizzle integration of better-sqlite3 | `better-sqlite3` until the module stabilizes |
 | Prisma ORM | Binary engine adds ~50MB, slow cold-start on first run, over-engineered for single-file SQLite analytics workload | `drizzle-orm` |
 | Electron | Adds 200MB+ to distribution, complex IPC model, overkill when a local Node.js server + browser tab achieves the same UX at zero overhead | Hono server + Vite SPA opened in browser |
 | Chart.js | React wrappers (react-chartjs-2) are a thin shim over an imperative API — awkward in React component model, worse TypeScript experience | Recharts (React-native, declarative) |
@@ -96,8 +96,8 @@ A local-first web application for engineering leaders to understand how AI tools
 ## Version Compatibility
 | Package | Compatible With | Notes |
 |---------|-----------------|-------|
-| better-sqlite3@11.x | Node.js 20.x, 22.x | Use v11, not v12 — v12.3+ has active build failures on Node 22 and newer |
-| drizzle-orm@0.45.x | better-sqlite3@11.x | Verified integration; use `drizzle(new Database('app.db'))` |
+| better-sqlite3@12.x | Node.js 24.x (LTS) | v12 has Node 24 prebuilds; v11 does not. For Node 20 / Node 22, use better-sqlite3@11. |
+| drizzle-orm@0.45.x | better-sqlite3@12.x | Verified integration on Node 24 (Phase 999.11); drizzle peer dep accepts `better-sqlite3 >=7`. |
 | @octokit/plugin-throttling@9.x | @octokit/rest@21.x | Must match major Octokit core version; mixing majors breaks TypeScript types |
 | recharts@3.x | React 19 | Recharts 3.0 rewrote internal state management; use 3.x with React 19 |
 | shadcn/ui charts | recharts@3.x | shadcn CLI installs compatible Recharts version automatically |
