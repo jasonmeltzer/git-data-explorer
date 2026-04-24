@@ -101,11 +101,11 @@ What's next:
 
 | Layer | Technology |
 |-------|-----------|
-| Runtime | Node.js 22 LTS |
+| Runtime | Node.js 24 LTS |
 | Language | TypeScript 5 |
 | Frontend | React 19, Vite 8, Tailwind CSS 4, shadcn/ui |
 | Backend | Hono 4 |
-| Database | SQLite via better-sqlite3 ^11.10.0, Drizzle ORM (drizzle-kit migrations for the research DB since 9.4.3) |
+| Database | SQLite via better-sqlite3 ^12.9.0, Drizzle ORM (drizzle-kit migrations for the research DB since 9.4.3) |
 | GitHub API | @octokit/rest 21 with throttling plugin |
 | Data fetching | TanStack Query 5 |
 | Testing | Vitest |
@@ -142,7 +142,7 @@ packages/
 
 ### Prerequisites
 
-- Node.js 22.x LTS
+- Node.js 24.x LTS (pinned via `.nvmrc` and `engines.node`)
 - A GitHub Personal Access Token with `repo` scope (for the main app; not needed for research tool)
 
 ### Setup
