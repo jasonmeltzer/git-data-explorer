@@ -12,6 +12,7 @@ import {
   concentrationMonthly,
   headcountMonthly,
   periodMetrics,
+  developerMonthly,
 } from '../db/schema.js';
 import { eq, sql, and, desc } from 'drizzle-orm';
 import {
@@ -182,6 +183,13 @@ orgRoutes.get('/api/orgs/:orgId/snapshots/:snapshotId/data', (c) => {
     .orderBy(headcountMonthly.periodMonth)
     .all();
 
+  const developerRows = db
+    .select()
+    .from(developerMonthly)
+    .where(eq(developerMonthly.snapshotId, snapshotId))
+    .orderBy(developerMonthly.authorLogin, developerMonthly.periodMonth)
+    .all();
+
   const periodMetricsRow = db
     .select()
     .from(periodMetrics)
@@ -231,6 +239,16 @@ orgRoutes.get('/api/orgs/:orgId/snapshots/:snapshotId/data', (c) => {
       totalCommits: r.totalCommits,
       prsPerDev: r.prsPerDev,
       commitsPerDev: r.commitsPerDev,
+    })),
+    developerMonthly: developerRows.map(r => ({
+      authorLogin: r.authorLogin,
+      month: r.periodMonth,
+      prCount: r.prCount,
+      commitCount: r.commitCount,
+      meanLinesPerCommit: r.meanLinesPerCommit,
+      medianLinesPerCommit: r.medianLinesPerCommit,
+      meanFilesPerCommit: r.meanFilesPerCommit,
+      medianFilesPerCommit: r.medianFilesPerCommit,
     })),
   };
 
