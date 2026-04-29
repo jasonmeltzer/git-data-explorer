@@ -15,6 +15,13 @@
       "when": 1777000001000,
       "tag": "0001_drop_legacy_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1777439338005,
+      "tag": "0002_marvelous_celestials",
+      "breakpoints": true
     }
   ]
 }
