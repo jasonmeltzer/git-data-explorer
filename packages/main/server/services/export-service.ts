@@ -1,7 +1,7 @@
 /**
  * Server-side export data aggregation service.
  *
- * Aggregates all 11 dashboard data sections into a single ExportBundle.
+ * Aggregates all 12 dashboard data sections into a single ExportBundle.
  * Individual section failures are handled gracefully — they return empty arrays or
  * null rather than failing the entire export.
  */
