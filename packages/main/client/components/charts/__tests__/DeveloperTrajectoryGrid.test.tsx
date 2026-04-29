@@ -44,7 +44,8 @@ vi.mock('recharts', async () => {
     }: {
       children: React.ReactElement;
     }) => {
-      return React.cloneElement(children, { width: 800, height: 400 });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return React.cloneElement(children, { width: 800, height: 400 } as any);
     },
   };
 });

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { BarChart3, TableProperties } from 'lucide-react';
+import { BarChart3, TableProperties, ChevronDown, ChevronRight } from 'lucide-react';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
 import { useAiMarker } from '../hooks/useAiMarker.js';
 import { useCohortConfig } from '../hooks/useCohortConfig.js';
@@ -8,8 +8,10 @@ import { useCohortPrs } from '../hooks/useCohortPrs.js';
 import { useCohortCommits } from '../hooks/useCohortCommits.js';
 import { useRampUp } from '../hooks/useRampUp.js';
 import { useRolling } from '../hooks/useRolling.js';
-import { cohortTrendNarrative, rollingNarrative, METRIC_OPTIONS, METRIC_NARRATIVE_LABELS, CONCENTRATION_BASIS_OPTIONS } from '@shared/lib/narratives.js';
-import type { MetricOption } from '@shared/lib/narratives.js';
+import { useDeveloperMonthly } from '../hooks/useDeveloperMonthly.js';
+import { useContributors } from '../hooks/useContributors.js';
+import { cohortTrendNarrative, rollingNarrative, METRIC_OPTIONS, METRIC_NARRATIVE_LABELS, CONCENTRATION_BASIS_OPTIONS, DEVELOPER_METRIC_OPTIONS } from '@shared/lib/narratives.js';
+import type { MetricOption, DeveloperMetricOption } from '@shared/lib/narratives.js';
 import { computeCohortInsights, computeRampUpInsights, computeRollingInsights } from '@shared/lib/insights.js';
 import FilterBar from '../components/FilterBar.js';
 import SharingPrompt from '../components/SharingPrompt.js';
@@ -35,7 +37,15 @@ import { StatCalloutBox } from '@shared/components/charts/StatCalloutBox.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
-import type { TrackedRepo, ConcentrationBasis, ConcentrationMonthlyRow, HeadcountMonthlyRow, PeriodMetric } from '@shared/types.js';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '@shared/components/ui/collapsible.js';
+import {
+  DeveloperTrajectoryGrid,
+  chooseDevLayout,
+  type DeveloperWithRows,
+} from '../components/charts/DeveloperTrajectoryGrid.js';
+import { DeveloperTrajectoryList } from '../components/charts/DeveloperTrajectoryList.js';
+import { DeveloperZoomModal } from '../components/charts/DeveloperZoomModal.js';
+import type { TrackedRepo, ConcentrationBasis, ConcentrationMonthlyRow, HeadcountMonthlyRow, PeriodMetric, DeveloperMonthlyRow } from '@shared/types.js';
 import type { ExportBundle } from '@shared/export-types.js';
 
 export default function DashboardPage() {
@@ -55,6 +65,12 @@ export default function DashboardPage() {
   const [rampUpView, setRampUpView] = useState<'chart' | 'table'>('chart');
   const [concentrationBasis, setConcentrationBasis] = useState<ConcentrationBasis>('prs');
   const [concentrationView, setConcentrationView] = useState<'chart' | 'table'>('chart');
+
+  // Phase 9.5: Contribution Patterns section state
+  const [contribSectionOpen, setContribSectionOpen] = useState(false);  // D-07: collapsed by default
+  const [contribHasExpandedThisSession, setContribHasExpandedThisSession] = useState(false);  // D-11
+  const [contribMetric, setContribMetric] = useState<DeveloperMetricOption>('prCount');  // D-03 default
+  const [zoomedDev, setZoomedDev] = useState<string | null>(null);  // D-05 modal state
 
   // Sharing prompt state
   const [sharingPromptOpen, setSharingPromptOpen] = useState(false);
@@ -154,6 +170,61 @@ export default function DashboardPage() {
   const commitInsights = computeCohortInsights(commitData, commitMetric, 'commit');
   const rampUpInsights = computeRampUpInsights(rampUpData, !!markerDate);
   const rollingInsights = computeRollingInsights(rollingData);
+
+  // Phase 9.5: Contribution Patterns data fetching + computation.
+  // Hook key includes [startDate, endDate, repoIds] so cache auto-refetches
+  // when the dashboard filter changes (D-02/D-25).
+  const developerMonthlyQuery = useDeveloperMonthly({ startDate, endDate, repoIds });
+  const developerRows = developerMonthlyQuery.data ?? [];
+
+  // Phase 9.5: Pull tenure + cohort metadata from useContributors with
+  // tenureMode='global' so the same firstCommitAt / cohort keys flow into
+  // per-dev mini-chart sorting and cohort-mean overlays. tenureMode='global'
+  // is required for stable cross-repo cohorts.
+  // NOTE: This invocation is NEW in Phase 9.5 — DashboardPage did NOT call
+  // useContributors before this plan.
+  const contributorsQuery = useContributors({
+    startDate, endDate, tenureMode: 'global', repoIds,
+  });
+
+  // D-02: Active-dev count = distinct authorLogins in the response
+  const distinctAuthors = Array.from(new Set(developerRows.map(r => r.authorLogin)));
+  const activeDevsCount = distinctAuthors.length;
+  const layoutMode = chooseDevLayout(activeDevsCount);
+
+  // Bucket rows by author. tenureJoinedAt sourced from contributorsQuery.
+  // cohortKey defaults to 'mid' when contributor lookup is missing.
+  const developersWithRows: DeveloperWithRows[] = distinctAuthors.map(login => {
+    const rows = developerRows.filter(r => r.authorLogin === login);
+    const contrib = (contributorsQuery.data ?? []).find(
+      (c: { authorLogin: string }) => c.authorLogin === login,
+    );
+    const tenureJoinedAt = (contrib as { firstCommitAt?: string } | undefined)?.firstCommitAt ?? null;
+    const cohortKey = (contrib as { cohort?: string } | undefined)?.cohort ?? 'mid';
+    return { authorLogin: login, tenureJoinedAt, cohortKey, rows };
+  });
+
+  // Sort by tenure descending (newest joined first per D-06).
+  developersWithRows.sort((a, b) =>
+    (a.tenureJoinedAt ?? '9999').localeCompare(b.tenureJoinedAt ?? '9999'),
+  );
+
+  // Cohort-mean overlay — group rows by (cohortKey, month) and average the active metric.
+  const cohortMeanByMonthAndCohort = computeCohortMeans(developersWithRows, contribMetric);
+
+  // Cohort-band for the modal — computed only for the zoomed dev's cohort (D-05).
+  const zoomedDevObj = zoomedDev
+    ? developersWithRows.find(d => d.authorLogin === zoomedDev) ?? null
+    : null;
+  const cohortBandByMonth = zoomedDevObj
+    ? computeCohortBand(developersWithRows, zoomedDevObj.cohortKey, contribMetric)
+    : new Map<string, { p25: number | null; p75: number | null }>();
+  const cohortMeanForZoom = zoomedDevObj
+    ? (cohortMeanByMonthAndCohort.get(zoomedDevObj.cohortKey) ?? new Map<string, number | null>())
+    : new Map<string, number | null>();
+
+  // AI marker month — markerDate already in scope (line 85). Slice to 'YYYY-MM'.
+  const aiMarkerMonth = markerDate ? markerDate.slice(0, 7) : null;
 
   // Filter concentration data by selected basis and compute stat callout values
   const filteredConcentration: ConcentrationMonthlyRow[] = (concentrationData ?? []).filter(
@@ -451,6 +522,119 @@ export default function DashboardPage() {
             </div>
 
           </div>
+        </section>
+
+        {/* Phase 9.5: Contribution Patterns section (D-07/D-08/D-09/D-10/D-11) */}
+        <section>
+          <Collapsible
+            open={contribSectionOpen}
+            onOpenChange={(next) => {
+              setContribSectionOpen(next);
+              if (next && !contribHasExpandedThisSession) {
+                setContribHasExpandedThisSession(true);
+              }
+            }}
+          >
+            <CollapsibleTrigger className="w-full flex items-center justify-between py-2 hover:bg-muted/30 rounded-md transition-colors">
+              <div className="flex items-center gap-2">
+                {contribSectionOpen ? <ChevronDown className="h-5 w-5" /> : <ChevronRight className="h-5 w-5" />}
+                <div className="text-left">
+                  <h2 className="text-lg font-semibold tracking-tight">Contribution Patterns</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Per-developer monthly trajectories — for understanding how team contribution shapes shift over time
+                  </p>
+                </div>
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="mt-4 space-y-4">
+                {/*
+                  HelpPanel — D-10 verbatim copy.
+                  D-11 mechanism: HelpPanel's internal useState(defaultOpen) captures
+                  the prop value ONCE on first render. Subsequent prop changes are
+                  intentionally ignored, preserving the user's manual collapse choice.
+                  contribHasExpandedThisSession therefore only matters on the FIRST
+                  mount of HelpPanel within this section. After that, HelpPanel
+                  manages its own open/closed state independently.
+                */}
+                <HelpPanel defaultOpen={!contribHasExpandedThisSession}>
+                  <p>
+                    This section shows how each contributor's monthly output evolves over time — PR count, commit count, and per-commit size signals — alongside a cohort-average overlay so each chart is anchored to its peer group. It is designed for understanding team-wide patterns in how contributions change, especially around AI tool adoption, not for measuring individual productivity.
+                  </p>
+                  <p className="mt-2">
+                    Charts are sorted by tenure, never by output volume. There is no "good" or "bad" trajectory shape — different roles, project types, and personal styles produce different patterns. The cohort-average dashed line shows what a typical contributor at the same tenure looks like in the same months; clicking any chart opens a larger view with the full cohort 25th-75th percentile band, so you can see whether a pattern is unusual or within normal team variance.
+                  </p>
+                  <p className="mt-2">
+                    What to look for: changes that show up across most cohort members at once. AI marker date alignment, post-AI commit size shifts, ramp-up shape for newer joiners. Patterns at the cohort level reveal team dynamics; differences at the individual level mostly reflect role/project variation, not effort or skill.
+                  </p>
+                  <p className="mt-2">
+                    The PRs / Commits / Lines per commit / Files per commit tabs surface different contribution shapes. Lines per commit and files per commit are useful for spotting AI-assisted commit-shape shifts (smaller commits, narrower file scope) but are influenced by refactors, generated code, and personal commit hygiene — interpret with caution.
+                  </p>
+                  <p className="mt-2">
+                    Use Settings to configure cohort thresholds and the AI adoption marker date. Bot-detected accounts are excluded automatically.
+                  </p>
+                </HelpPanel>
+
+                {developersWithRows.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No active contributors in the selected date range.</p>
+                ) : (
+                  <>
+                    {/* Metric tabs — D-03 verbatim labels */}
+                    <div className="flex items-center justify-end">
+                      <Tabs value={contribMetric} onValueChange={(v) => setContribMetric(v as DeveloperMetricOption)}>
+                        <TabsList className="h-8 gap-1">
+                          {DEVELOPER_METRIC_OPTIONS.map(opt => (
+                            <TabsTrigger
+                              key={opt.value}
+                              value={opt.value}
+                              className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground"
+                            >
+                              {opt.label}
+                            </TabsTrigger>
+                          ))}
+                        </TabsList>
+                      </Tabs>
+                    </div>
+
+                    {/* Adaptive Layout A or C (D-01) */}
+                    {layoutMode === 'grid' ? (
+                      <DeveloperTrajectoryGrid
+                        developers={developersWithRows}
+                        metric={contribMetric}
+                        aiMarkerMonth={aiMarkerMonth}
+                        cohortMeanByMonthAndCohort={cohortMeanByMonthAndCohort}
+                        onChartClick={setZoomedDev}
+                        isLoading={developerMonthlyQuery.isLoading}
+                      />
+                    ) : (
+                      <DeveloperTrajectoryList
+                        developers={developersWithRows}
+                        metric={contribMetric}
+                        aiMarkerMonth={aiMarkerMonth}
+                        cohortMeanByMonthAndCohort={cohortMeanByMonthAndCohort}
+                        onChartClick={setZoomedDev}
+                        isLoading={developerMonthlyQuery.isLoading}
+                      />
+                    )}
+                  </>
+                )}
+
+                {/* Click-to-zoom modal (D-05) */}
+                {zoomedDevObj && (
+                  <DeveloperZoomModal
+                    open={zoomedDev !== null}
+                    onOpenChange={(open) => { if (!open) setZoomedDev(null); }}
+                    authorLogin={zoomedDevObj.authorLogin}
+                    rows={zoomedDevObj.rows}
+                    cohortMeanByMonth={cohortMeanForZoom}
+                    cohortBandByMonth={cohortBandByMonth}
+                    aiMarkerMonth={aiMarkerMonth}
+                    initialMetric={contribMetric}
+                  />
+                )}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </section>
 
         {/* Section 3: Cohort Trends (D-11) */}
@@ -806,4 +990,75 @@ export default function DashboardPage() {
       </div>
     </>
   );
+}
+
+// ─── Phase 9.5 helpers ─────────────────────────────────────────────────────────
+// Cohort mean/band computation per metric. Used by the Contribution Patterns
+// section to overlay cohort context on each per-developer mini-chart.
+
+function metricValue(row: DeveloperMonthlyRow, metric: DeveloperMetricOption): number | null {
+  switch (metric) {
+    case 'prCount': return row.prCount;
+    case 'commitCount': return row.commitCount;
+    case 'linesPerCommit': return row.meanLinesPerCommit;
+    case 'filesPerCommit': return row.meanFilesPerCommit;
+  }
+}
+
+function computeCohortMeans(
+  devs: DeveloperWithRows[],
+  metric: DeveloperMetricOption,
+): Map<string, Map<string, number | null>> {
+  const out = new Map<string, Map<string, number | null>>();
+  const buckets = new Map<string, Map<string, number[]>>();  // cohortKey -> month -> values
+  for (const dev of devs) {
+    if (!buckets.has(dev.cohortKey)) buckets.set(dev.cohortKey, new Map());
+    for (const r of dev.rows) {
+      const v = metricValue(r, metric);
+      if (v === null) continue;
+      const monthMap = buckets.get(dev.cohortKey)!;
+      if (!monthMap.has(r.month)) monthMap.set(r.month, []);
+      monthMap.get(r.month)!.push(v);
+    }
+  }
+  for (const [cohortKey, monthMap] of buckets) {
+    const result = new Map<string, number | null>();
+    for (const [month, values] of monthMap) {
+      result.set(
+        month,
+        values.length > 0 ? values.reduce((s, x) => s + x, 0) / values.length : null,
+      );
+    }
+    out.set(cohortKey, result);
+  }
+  return out;
+}
+
+function computeCohortBand(
+  devs: DeveloperWithRows[],
+  cohortKey: string,
+  metric: DeveloperMetricOption,
+): Map<string, { p25: number | null; p75: number | null }> {
+  const monthMap = new Map<string, number[]>();
+  for (const dev of devs) {
+    if (dev.cohortKey !== cohortKey) continue;
+    for (const r of dev.rows) {
+      const v = metricValue(r, metric);
+      if (v === null) continue;
+      if (!monthMap.has(r.month)) monthMap.set(r.month, []);
+      monthMap.get(r.month)!.push(v);
+    }
+  }
+  const out = new Map<string, { p25: number | null; p75: number | null }>();
+  for (const [month, values] of monthMap) {
+    if (values.length < 2) {
+      out.set(month, { p25: null, p75: null });
+      continue;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const p25Idx = Math.floor(sorted.length * 0.25);
+    const p75Idx = Math.floor(sorted.length * 0.75);
+    out.set(month, { p25: sorted[p25Idx], p75: sorted[p75Idx] });
+  }
+  return out;
 }
