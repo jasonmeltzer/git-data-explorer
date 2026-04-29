@@ -258,6 +258,7 @@ function makePhase94Bundle(overrides: Partial<ExportBundle> = {}): ExportBundle 
         metrics: { avgCommitSize: 72.8, prFrequency: 4.8, rampUpSpeed: 2.8, activeContributors: 12 },
       },
     ],
+    developerMonthly: [],   // Phase 9.5-01 — type-skeleton stub
     ...overrides,
   };
 }

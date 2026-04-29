@@ -126,6 +126,7 @@ function minimalBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       { month: '2025-06', basis: 'lines',   top1Share: 50, top3Share: 70, top5Share: 85, hhi: 0.20, gini: 0.35, busFactor: 2, activeDevs: 8, topContributor: 'alice' },
     ],
     headcountMonthly: [],
+    developerMonthly: [],   // Phase 9.5-01 — type-skeleton stub
     ...overrides,
   };
 }

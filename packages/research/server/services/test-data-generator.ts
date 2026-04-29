@@ -786,6 +786,7 @@ export function generateSmallStartup(options: GenerateOrgOptions = {}): ExportBu
     periodMetrics,
     concentrationMonthly,
     headcountMonthly,
+    developerMonthly: [],  // Phase 9.5-01 — type-skeleton stub; Plan 06 wires real archetype data
   };
 }
 
@@ -894,6 +895,7 @@ export function generateMidSizeCompany(options: GenerateOrgOptions = {}): Export
     periodMetrics,
     concentrationMonthly,
     headcountMonthly,
+    developerMonthly: [],  // Phase 9.5-01 — type-skeleton stub; Plan 06 wires real archetype data
   };
 }
 
@@ -1012,6 +1014,7 @@ export function generatePreAiBaseline(options: GenerateOrgOptions = {}): ExportB
     // profile-driven concentration/headcount for cross-org analysis consistency.
     concentrationMonthly: buildConcentrationMonthly(profile),
     headcountMonthly: buildHeadcountMonthly(profile),
+    developerMonthly: [],  // Phase 9.5-01 — type-skeleton stub; Plan 06 wires real archetype data
   };
 }
 

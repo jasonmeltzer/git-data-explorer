@@ -74,6 +74,7 @@ const stubBundle = {
   periodMetrics: null,
   concentrationMonthly: [],
   headcountMonthly: [],
+  developerMonthly: [],   // Phase 9.5-01 — type-skeleton stub
 };
 
 vi.mock('../services/export-service.js', () => ({

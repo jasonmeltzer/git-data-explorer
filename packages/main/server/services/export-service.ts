@@ -289,5 +289,8 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     periodMetrics,
     concentrationMonthly,
     headcountMonthly,
+    // Phase 9.5-01: stub — real builder lands in Plan 04 (export-service wiring).
+    // Empty array satisfies the new required ExportBundle.developerMonthly field.
+    developerMonthly: [],
   };
 }

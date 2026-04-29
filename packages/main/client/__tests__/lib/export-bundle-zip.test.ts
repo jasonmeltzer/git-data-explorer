@@ -24,6 +24,7 @@ function minimalBundle(): ExportBundle {
     periodMetrics: null,
     concentrationMonthly: [],
     headcountMonthly: [],
+    developerMonthly: [],   // Phase 9.5-01 — type-skeleton stub
   };
 }
 
