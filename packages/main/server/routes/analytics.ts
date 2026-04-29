@@ -13,6 +13,7 @@ import { getBotRatioTrend } from '../services/analytics-bot-ratio.js';
 import { getExecutiveSummary } from '../services/analytics-summary.js';
 import { getConcentrationMonthly } from '../services/analytics-concentration.js';
 import { getHeadcountMonthly } from '../services/analytics-headcount.js';
+import { getDeveloperMonthly } from '../services/analytics-developer-monthly.js';
 import { getPeriodMetrics } from '../services/analytics-period-metrics.js';
 import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 
@@ -454,6 +455,29 @@ analytics.get('/api/analytics/headcount', (c) => {
   } catch (err) {
     console.error('GET /api/analytics/headcount error:', err);
     return c.json({ error: 'Failed to fetch headcount metrics' }, 500);
+  }
+});
+
+// ─── Developer Monthly endpoint (Phase 9.5) ───────────────────────────────────
+
+// GET /api/analytics/developer-monthly — per-developer monthly time series
+// (PR count, commit count, mean+median lines/files per commit). Per CONTEXT D-18.
+analytics.get('/api/analytics/developer-monthly', (c) => {
+  try {
+    const parsed = trendQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
+    }
+
+    const { startDate, endDate, repoIds } = parsed.data;
+    const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
+
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
+    const result = getDeveloperMonthly(repoIdsParsed, periods);
+    return c.json(result);
+  } catch (err) {
+    console.error('GET /api/analytics/developer-monthly error:', err);
+    return c.json({ error: 'Failed to fetch developer-monthly metrics' }, 500);
   }
 });
 
