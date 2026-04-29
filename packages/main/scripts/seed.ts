@@ -159,7 +159,20 @@ const REPOS = [
 interface ContributorPersona {
   login: string;
   name: string;
-  type: 'senior' | 'regular' | 'new-pre-ai' | 'new-post-ai' | 'part-time' | 'bot' | 'commit-only' | 'pr-reviewer';
+  type:
+    | 'senior'
+    | 'regular'
+    | 'new-pre-ai'
+    | 'new-post-ai'
+    | 'part-time'
+    | 'bot'
+    | 'commit-only'
+    | 'pr-reviewer'
+    // Phase 9.5 archetypes (D-21)
+    | 'archetype-steady'
+    | 'archetype-ai-power-user'
+    | 'archetype-plateauing'
+    | 'archetype-declining';
   repos: number[];         // indices into REPOS array
   joinWeekOffset: number;  // weeks from DATA_START when they first commit
   leaveWeekOffset?: number; // weeks from DATA_START when they stop committing (undefined = never)
@@ -169,6 +182,8 @@ interface ContributorPersona {
   isBot: boolean;
   refactorWaveWeek?: number;  // If set, generate ~250 deletion-heavy commits in this week (relative to DATA_START)
   botStormWeeks?: [number, number];  // [startWeek, endWeek] — inclusive — bot commits are 14× normal during this window
+  // Phase 9.5: optional delay (in months) for declining-variant archetype — drop happens N months after AI marker
+  archetypeDelayMonths?: number;
 }
 
 const PERSONAS: ContributorPersona[] = [
@@ -205,13 +220,17 @@ const PERSONAS: ContributorPersona[] = [
   //   - part-timer: ~2/mo
   //  → Other human commits ~325/month across all 3 repos.
   //
-  // alex at 90 commits/week × 4.33 = ~390/mo:
-  //   390 / (390 + 325) ≈ 54% — centered in D-16 target of 45-55%.
+  // alex at 130 commits/week × 4.33 = ~563/mo:
+  //   563 / (563 + 325 + ~108 Phase 9.5 archetype overhead) ≈ 56% — centered in D-16 target of 45-55%.
   //
   // Weeks 6-22 span from early month 2 to late month 5, ensuring months 3, 4, 5 are fully
   // covered and produce 3 consecutive dominant months. Verified by the seed.test.ts
   // dominant-contributor assertion after running `npm run seed`.
-  { login: 'alexpower', name: 'Alex Power', type: 'regular', repos: [0], joinWeekOffset: 6, leaveWeekOffset: 22, commitsPerWeek: 90, sizeMu: 4.5, sizeSigma: 0.8, isBot: false },
+  //
+  // Phase 9.5 calibration: bumped from 90 → 130 commits/wk to absorb the ~108 commits/mo of
+  // pre-AI volume added by the 8 archetype-bearing personas (D-21). Without this bump, alex's
+  // share drops to ~47% nominal and Poisson noise dips it below the 45% threshold.
+  { login: 'alexpower', name: 'Alex Power', type: 'regular', repos: [0], joinWeekOffset: 6, leaveWeekOffset: 22, commitsPerWeek: 130, sizeMu: 4.5, sizeSigma: 0.8, isBot: false },
 
   // --- 5 Pre-AI new devs (join months 2-5 = weeks 4-20, some churn out) ---
   { login: 'rookie-alice', name: 'Alice Thornton', type: 'new-pre-ai', repos: [0], joinWeekOffset: 4, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 1.0, isBot: false },
@@ -257,6 +276,42 @@ const PERSONAS: ContributorPersona[] = [
   { login: 'dependabot[bot]', name: 'Dependabot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true, botStormWeeks: [34, 37] },
   { login: 'github-actions[bot]', name: 'GitHub Actions', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
   { login: 'renovate[bot]', name: 'Renovate Bot', type: 'bot', repos: [0, 1, 2], joinWeekOffset: 0, commitsPerWeek: 5, sizeMu: 1.0, sizeSigma: 0.3, isBot: true },
+
+  // --- Phase 9.5 archetype personas (D-21) ---
+  // 4 base archetypes + 4 variants = 8 archetype-bearing devs.
+  // Distribution rationale: AI-power-users stay in repo 0 (the dominant 70%-share repo) because
+  // they ARE the D-21 narrative anchor (post-AI ramp + lines/commit drop) and need to be visible
+  // in default all-repos and repo-0 views. The other archetypes are distributed across repos 1
+  // and 2 to avoid diluting alexpower's 45-55% commit-share dominance window in repo 0
+  // (Plan 03's D-16 test). All archetypes still appear in default all-repos analytics views.
+
+  // Steady base: ~3 PRs/mo throughout, no AI-marker shape change. Repo 1 (mobile-app).
+  { login: 'arch-steady-stella', name: 'Stella Aurora', type: 'archetype-steady', repos: [1], joinWeekOffset: 0, commitsPerWeek: 3.0, sizeMu: 3.0, sizeSigma: 0.6, isBot: false },
+
+  // Steady variant: same shape, lower volume baseline (~2 PRs/mo) — D-21 "base + variant" per archetype. Repo 2.
+  { login: 'arch-steady-soren', name: 'Soren Aurora', type: 'archetype-steady', repos: [2], joinWeekOffset: 0, commitsPerWeek: 2.0, sizeMu: 3.0, sizeSigma: 0.6, isBot: false },
+
+  // AI-power-user base: ~3 → ~8 PRs/mo post-AI, sustained. Lines/commit drops post-AI (D-21 narrative anchor). Repo 0.
+  { login: 'arch-aipower-aiden', name: 'Aiden Powers', type: 'archetype-ai-power-user', repos: [0], joinWeekOffset: 0, commitsPerWeek: 3.0, sizeMu: 4.0, sizeSigma: 0.7, isBot: false },
+
+  // AI-power-user variant: milder ramp (~3 → ~6 PRs/mo), smaller lines drop. Repo 0.
+  { login: 'arch-aipower-anya', name: 'Anya Powers', type: 'archetype-ai-power-user', repos: [0], joinWeekOffset: 0, commitsPerWeek: 3.0, sizeMu: 3.5, sizeSigma: 0.7, isBot: false },
+
+  // Plateauing: ~2 → ~6 PRs/mo by month +3, levels there for remainder. Repo 1.
+  { login: 'arch-plateau-pat', name: 'Pat Plateau', type: 'archetype-plateauing', repos: [1], joinWeekOffset: 0, commitsPerWeek: 2.0, sizeMu: 3.0, sizeSigma: 0.6, isBot: false },
+
+  // Plateauing variant: shorter plateau — levels by month +1. Repo 2.
+  { login: 'arch-plateau-priya', name: 'Priya Plateau', type: 'archetype-plateauing', repos: [2], joinWeekOffset: 0, commitsPerWeek: 2.0, sizeMu: 3.0, sizeSigma: 0.6, isBot: false },
+
+  // Declining: ~5 → ~2 PRs/mo post-AI, sustained low.
+  // NOTE: assigned to repo 1 (mobile-app, not repo 0) because their pre-AI volume of 5/wk would
+  // dilute alexpower's 45-55% commit-share dominance window (D-16 in Plan 03's seed.test.ts) when
+  // committing to the same repo. Repo 1 keeps the archetype shape visible in the all-repos view.
+  { login: 'arch-decline-dax', name: 'Dax Decliner', type: 'archetype-declining', repos: [1], joinWeekOffset: 0, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 0.6, isBot: false },
+
+  // Declining variant: drop happens 3 months after AI marker (delayed change). Repo 2 for the same
+  // D-16 preservation reason as the base persona above.
+  { login: 'arch-decline-delia', name: 'Delia Decliner', type: 'archetype-declining', repos: [2], joinWeekOffset: 0, commitsPerWeek: 5.0, sizeMu: 3.0, sizeSigma: 0.6, isBot: false, archetypeDelayMonths: 3 },
 ];
 
 // ---------------------------------------------------------------------------
@@ -365,6 +420,32 @@ function aiRampProgress(date: Date): number {
   if (ms <= AI_MARKER_MS) return 0;
   if (ms >= AI_RAMP_END_MS) return 1;
   return (ms - AI_MARKER_MS) / (AI_RAMP_END_MS - AI_MARKER_MS);
+}
+
+/**
+ * Phase 9.5: Plateau ramp progress — 0 before AI marker, ramps to 1 over `plateauMonths`,
+ * then stays at 1. Used by archetype-plateauing.
+ */
+function plateauingRampProgress(date: Date, plateauMonths: number = 3): number {
+  const ms = date.getTime();
+  if (ms <= AI_MARKER_MS) return 0;
+  const plateauEnd = AI_MARKER_MS + plateauMonths * 30 * 24 * 60 * 60 * 1000;
+  if (ms >= plateauEnd) return 1;
+  return (ms - AI_MARKER_MS) / (plateauEnd - AI_MARKER_MS);
+}
+
+/**
+ * Phase 9.5: Delayed declining ramp progress — 0 until (AI_MARKER + delayMonths), then ramps
+ * to 1 over the next 1 month. Used by archetype-declining with archetypeDelayMonths.
+ */
+function delayedDecliningRampProgress(date: Date, delayMonths: number = 0): number {
+  const ms = date.getTime();
+  const delayMs = delayMonths * 30 * 24 * 60 * 60 * 1000;
+  const dropStart = AI_MARKER_MS + delayMs;
+  const dropEnd = dropStart + 1 * 30 * 24 * 60 * 60 * 1000;  // 1-month drop window
+  if (ms <= dropStart) return 0;
+  if (ms >= dropEnd) return 1;
+  return (ms - dropStart) / (dropEnd - dropStart);
 }
 
 /**
@@ -502,6 +583,29 @@ function generateCommitsForPersonaRepo(
         // After AI marker: more frequent, smaller commits
         frequencyMultiplier = 1.0 + 0.3 * ramp;
         currentMu = persona.sizeMu - 0.3 * ramp;
+      } else if (persona.type === 'archetype-steady') {
+        // D-21 steady: ~3 PRs/mo throughout, no AI shape change
+        frequencyMultiplier = 1.0;
+        // currentMu unchanged
+      } else if (persona.type === 'archetype-ai-power-user') {
+        // D-21 AI-power-user: ramps to ~8 PRs/mo (variant ~6) post-AI; lines/commit drops
+        // Base (sizeMu=4.0) ramps 3→8 (2.67x); variant (sizeMu=3.5) ramps 3→6 (2.0x)
+        const peakMultiplier = persona.sizeMu >= 4.0 ? 2.67 : 2.0;
+        frequencyMultiplier = 1.0 + (peakMultiplier - 1.0) * ramp;
+        // STRONGER lines drop than standard (-0.5 vs -0.3) — D-21 narrative anchor
+        currentMu = persona.sizeMu - 0.5 * ramp;
+      } else if (persona.type === 'archetype-plateauing') {
+        // D-21 plateauing: ~2 → ~6 PRs/mo by month +3, levels after.
+        // Variant ('priya') has shorter plateau (1 month).
+        const plateauMonths = persona.login.includes('priya') ? 1 : 3;
+        const plateauRamp = plateauingRampProgress(weekStartDate, plateauMonths);
+        frequencyMultiplier = 1.0 + 2.0 * plateauRamp;  // 1.0 → 3.0 (i.e. 2 → 6 PRs/mo)
+      } else if (persona.type === 'archetype-declining') {
+        // D-21 declining: ~5 → ~2 PRs/mo post-AI, with optional 3-month delay (variant)
+        const delayMonths = persona.archetypeDelayMonths ?? 0;
+        const dropProgress = delayedDecliningRampProgress(weekStartDate, delayMonths);
+        // Multiplier goes from 1.0 down to 0.4 (5×0.4 = 2)
+        frequencyMultiplier = 1.0 - 0.6 * dropProgress;
       } else if (persona.type === 'new-pre-ai') {
         // 6-week ramp-up to target size
         const rampFraction = Math.min(1.0, weeksSinceJoin / 6);
