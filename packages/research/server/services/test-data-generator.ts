@@ -19,6 +19,7 @@ import type {
   PeriodMetric,
   ConcentrationMonthlyRow,
   HeadcountMonthlyRow,
+  DeveloperMonthlyRow,  // Phase 9.5
 } from '@shared/export-types.js';
 import type {
   CohortMetricsRow,
@@ -642,6 +643,60 @@ function buildHeadcountMonthly(profile: ActivityProfile): HeadcountMonthlyRow[] 
   });
 }
 
+// ─── Developer monthly builder (profile-driven, Phase 9.5) ──────────────────
+
+/**
+ * Build per-developer monthly time series from an ActivityProfile.
+ * Median fields are approximated as mean × 0.85 (synthetic data does not track
+ * per-commit arrays); this is acceptable for Phase 9.7 cross-org test fixtures.
+ */
+function buildDeveloperMonthly(profile: ActivityProfile): DeveloperMonthlyRow[] {
+  const rows: DeveloperMonthlyRow[] = [];
+
+  for (let mi = 0; mi < profile.months.length; mi++) {
+    const month = profile.months[mi];
+    const commitsBucket = profile.monthlyCommitsByPersona[mi];
+    const linesBucket = profile.monthlyLinesByPersona[mi];
+    const prsBucket = profile.monthlyPrsByPersona[mi];
+
+    for (const persona of profile.personas) {
+      const commitCount = commitsBucket.get(persona.login) ?? 0;
+      const totalLines = linesBucket.get(persona.login) ?? 0;
+      const prCount = Math.round(prsBucket.get(persona.login) ?? 0);
+
+      // Skip dev-month rows where there's no activity at all (D-19/D-20: emit
+      // rows only for months with activity; charts handle gaps).
+      if (commitCount === 0 && prCount === 0) continue;
+
+      const meanLines = commitCount > 0 ? totalLines / commitCount : null;
+      // Median approximation: synthetic data has no per-commit array.
+      // mean × 0.85 reflects typical lognormal distribution shape (median below mean).
+      const medianLines = meanLines !== null ? meanLines * 0.85 : null;
+
+      // Files heuristic: linesPerCommit / 30 (matches buildCohortMetrics:278)
+      const meanFiles = meanLines !== null ? Math.max(1, meanLines / 30) : null;
+      const medianFiles = meanFiles !== null ? meanFiles * 0.85 : null;
+
+      rows.push({
+        authorLogin: persona.login,
+        month,
+        prCount,
+        commitCount,
+        meanLinesPerCommit: meanLines,
+        medianLinesPerCommit: medianLines,
+        meanFilesPerCommit: meanFiles,
+        medianFilesPerCommit: medianFiles,
+      });
+    }
+  }
+
+  // Sort by (authorLogin, month) ascending — matches main app's analytics service contract.
+  return rows.sort((a, b) => {
+    if (a.authorLogin !== b.authorLogin) return a.authorLogin.localeCompare(b.authorLogin);
+    return a.month.localeCompare(b.month);
+  });
+}
+
 // ─── Bot ratio builder ────────────────────────────────────────────────────────
 
 function buildBotRatio(months: string[], botPct: number, stormMonthIdx?: number): BotRatioRow[] {
@@ -767,6 +822,12 @@ export function generateSmallStartup(options: GenerateOrgOptions = {}): ExportBu
       topShare: 0.50,
     } : undefined,
     headcountSchedule: includeTeamSizeStep ? [{ monthIdx: Math.floor(months.length * 0.6), delta: -3 }] : undefined,
+    // Phase 9.5 (D-22): SmallStartup archetype mix — 2 AI-power-users + 1 plateauing + 1 steady (out of 8 contributors)
+    archetypeMix: [
+      { type: 'ai-power-user', count: 2 },
+      { type: 'plateauing', count: 1 },
+      { type: 'steady', count: 1 },
+    ],
   });
 
   const cohortCommits = buildCohortMetrics('commits', {
@@ -828,7 +889,7 @@ export function generateSmallStartup(options: GenerateOrgOptions = {}): ExportBu
     periodMetrics,
     concentrationMonthly,
     headcountMonthly,
-    developerMonthly: [],  // Phase 9.5-01 — type-skeleton stub; Plan 06 wires real archetype data
+    developerMonthly: buildDeveloperMonthly(profile),  // Phase 9.5 (D-22)
   };
 }
 
@@ -876,6 +937,11 @@ export function generateMidSizeCompany(options: GenerateOrgOptions = {}): Export
       topShare: 0.50,
     } : undefined,
     headcountSchedule: includeTeamSizeStep ? [{ monthIdx: 8, delta: -5 }] : undefined,
+    // Phase 9.5 (D-22): MidSize archetype mix — 1 declining + 3 steady (out of 80 contributors)
+    archetypeMix: [
+      { type: 'declining', count: 1 },
+      { type: 'steady', count: 3 },
+    ],
   });
 
   const cohortCommits = buildCohortMetrics('commits', {
@@ -937,7 +1003,7 @@ export function generateMidSizeCompany(options: GenerateOrgOptions = {}): Export
     periodMetrics,
     concentrationMonthly,
     headcountMonthly,
-    developerMonthly: [],  // Phase 9.5-01 — type-skeleton stub; Plan 06 wires real archetype data
+    developerMonthly: buildDeveloperMonthly(profile),  // Phase 9.5 (D-22)
   };
 }
 
@@ -1056,7 +1122,7 @@ export function generatePreAiBaseline(options: GenerateOrgOptions = {}): ExportB
     // profile-driven concentration/headcount for cross-org analysis consistency.
     concentrationMonthly: buildConcentrationMonthly(profile),
     headcountMonthly: buildHeadcountMonthly(profile),
-    developerMonthly: [],  // Phase 9.5-01 — type-skeleton stub; Plan 06 wires real archetype data
+    developerMonthly: buildDeveloperMonthly(profile),  // Phase 9.5 (D-22)
   };
 }
 
