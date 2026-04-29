@@ -2,9 +2,10 @@
  * Types for the data export feature.
  *
  * NOTE: Server-side analytics types (PrTurnaroundRow, BotRatioRow, ExecutiveSummary,
- * ConcentrationMonthlyRow, HeadcountMonthlyRow, Period, PeriodMetric) are inlined
- * here rather than imported from server services to keep this shared module free of
- * server-only imports (which would break Vite bundling for the client).
+ * ConcentrationMonthlyRow, HeadcountMonthlyRow, DeveloperMonthlyRow, Period,
+ * PeriodMetric) are inlined here rather than imported from server services to keep
+ * this shared module free of server-only imports (which would break Vite bundling
+ * for the client).
  */
 
 import type {
@@ -82,6 +83,22 @@ export interface HeadcountMonthlyRow {
   commitsPerDev: number | null;
 }
 
+/**
+ * Per-developer monthly time series row (Phase 9.5).
+ * Inlined here per the server-isolation contract; matches DeveloperMonthlyRow
+ * in @shared/types.ts. Keep the two definitions in sync manually.
+ */
+export interface DeveloperMonthlyRow {
+  authorLogin: string;            // raw login in main app, animal name post-anonymizer
+  month: string;                  // 'YYYY-MM' UTC
+  prCount: number;
+  commitCount: number;
+  meanLinesPerCommit: number | null;     // null when commitCount = 0
+  medianLinesPerCommit: number | null;
+  meanFilesPerCommit: number | null;
+  medianFilesPerCommit: number | null;
+}
+
 // ─── Export feature types ─────────────────────────────────────────────────────
 
 export interface ExportMetadata {
@@ -111,6 +128,7 @@ export interface ExportBundle {
   periodMetrics: PeriodMetric[] | null;             // replaces beforeAfter (D-13)
   concentrationMonthly: ConcentrationMonthlyRow[];  // NEW (Phase 9.4)
   headcountMonthly: HeadcountMonthlyRow[];           // NEW (Phase 9.4)
+  developerMonthly: DeveloperMonthlyRow[];           // NEW (Phase 9.5)
 }
 
 export interface ExportRequest {
