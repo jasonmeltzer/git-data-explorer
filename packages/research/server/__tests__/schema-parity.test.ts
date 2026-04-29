@@ -43,6 +43,7 @@ const SCHEMA_TABLES: Array<[string, ReturnType<typeof getTableConfig>]> = [
   ['botRatio', getTableConfig(schema.botRatio)],
   ['concentrationMonthly', getTableConfig(schema.concentrationMonthly)],
   ['headcountMonthly', getTableConfig(schema.headcountMonthly)],
+  ['developerMonthly', getTableConfig(schema.developerMonthly)],
   ['periodMetrics', getTableConfig(schema.periodMetrics)],
 ];
 
