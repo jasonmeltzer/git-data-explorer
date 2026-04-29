@@ -79,6 +79,7 @@ interface SyntheticPersona {
   linesPerCommit: number;
   prsPerMonth: number;
   aiBoostFactor: number;  // 1.0 = no effect; 1.2 = 20% boost when in post-AI month
+  archetype?: 'steady' | 'ai-power-user' | 'plateauing' | 'declining';  // Phase 9.5 (D-22)
 }
 
 interface ActivityProfile {
@@ -101,6 +102,7 @@ interface BuildActivityProfileParams {
   aiBoostMean: number;              // mean of aiBoostFactor across personas (e.g. 1.2)
   dominantWindow?: { startIdx: number; endIdx: number; topShare: number }; // indices into months array
   headcountSchedule?: Array<{ monthIdx: number; delta: number }>; // D-09: preserves team-size step (delta < 0 = departures)
+  archetypeMix?: Array<{ type: 'steady' | 'ai-power-user' | 'plateauing' | 'declining'; count: number }>;  // Phase 9.5 (D-22)
 }
 
 function buildActivityProfile(p: BuildActivityProfileParams): ActivityProfile {
@@ -119,6 +121,16 @@ function buildActivityProfile(p: BuildActivityProfileParams): ActivityProfile {
     });
   }
 
+  // Phase 9.5 (D-22): Mark first N personas with archetype types per archetypeMix.
+  if (p.archetypeMix) {
+    let cursor = 0;
+    for (const slot of p.archetypeMix) {
+      for (let i = 0; i < slot.count && cursor < personas.length; i++, cursor++) {
+        personas[cursor].archetype = slot.type;
+      }
+    }
+  }
+
   // 2. Compute monthly activity per persona
   const monthlyCommitsByPersona = p.months.map(() => new Map<string, number>());
   const monthlyLinesByPersona   = p.months.map(() => new Map<string, number>());
@@ -128,11 +140,41 @@ function buildActivityProfile(p: BuildActivityProfileParams): ActivityProfile {
     const month = p.months[mi];
     const isPostAI = p.aiMarkerMonth !== null && month > p.aiMarkerMonth;
 
+    // Phase 9.5 (D-22): months past AI marker (for plateauing ramp).
+    let monthsPastAI = 0;
+    if (p.aiMarkerMonth !== null && isPostAI) {
+      const targetIdx = p.months.indexOf(month);
+      const markerIdx = p.months.indexOf(p.aiMarkerMonth);
+      if (targetIdx >= 0 && markerIdx >= 0) monthsPastAI = targetIdx - markerIdx;
+    }
+
     for (const persona of personas) {
-      const boost = isPostAI ? persona.aiBoostFactor : 1.0;
-      const commits = Math.max(0, Math.round(persona.commitsPerMonth * boost * jitter(1, 0.1)));
-      const lines = commits * Math.max(10, Math.round(persona.linesPerCommit * jitter(1, 0.1)));
-      const prs = Math.max(0, persona.prsPerMonth * boost * jitter(1, 0.1));
+      let frequencyMultiplier: number;
+      let linesMultiplier = 1.0;
+
+      if (persona.archetype === 'steady') {
+        frequencyMultiplier = 1.0;
+      } else if (persona.archetype === 'ai-power-user') {
+        frequencyMultiplier = isPostAI ? 2.5 : 1.0;
+        linesMultiplier = isPostAI ? 0.7 : 1.0;  // D-21 narrative anchor (lines drop)
+      } else if (persona.archetype === 'plateauing') {
+        if (!isPostAI) {
+          frequencyMultiplier = 0.7;
+        } else {
+          // Ramp from 0.7 -> 2.0 across first 3 post-AI months, then flat
+          const ramp = Math.min(monthsPastAI / 3, 1);
+          frequencyMultiplier = 0.7 + (2.0 - 0.7) * ramp;
+        }
+      } else if (persona.archetype === 'declining') {
+        frequencyMultiplier = isPostAI ? 0.5 : 1.4;
+      } else {
+        // Default (existing behavior): aiBoostFactor for non-archetype personas
+        frequencyMultiplier = isPostAI ? persona.aiBoostFactor : 1.0;
+      }
+
+      const commits = Math.max(0, Math.round(persona.commitsPerMonth * frequencyMultiplier * jitter(1, 0.1)));
+      const lines = commits * Math.max(10, Math.round(persona.linesPerCommit * linesMultiplier * jitter(1, 0.1)));
+      const prs = Math.max(0, persona.prsPerMonth * frequencyMultiplier * jitter(1, 0.1));
 
       monthlyCommitsByPersona[mi].set(persona.login, commits);
       monthlyLinesByPersona[mi].set(persona.login, lines);
