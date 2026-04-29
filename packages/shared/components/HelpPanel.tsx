@@ -4,10 +4,15 @@ import { HelpCircle, ChevronDown, ChevronRight } from 'lucide-react';
 
 export interface HelpPanelProps {
   children: ReactNode;
+  /**
+   * Phase 9.5 (D-11): When true, the panel is open on first render.
+   * Existing call sites omit this prop and keep the original closed-by-default behavior.
+   */
+  defaultOpen?: boolean;
 }
 
-export function HelpPanel({ children }: HelpPanelProps) {
-  const [open, setOpen] = useState(false);
+export function HelpPanel({ children, defaultOpen = false }: HelpPanelProps) {
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <div className="mt-3">
