@@ -137,6 +137,15 @@ export function anonymizeBundle(
     }
   }
 
+  // Anonymize developerMonthly[].authorLogin (Phase 9.5).
+  // Uses the SAME pseudonymMap as contributors[].authorLogin so identities are
+  // stable across sections — the same person gets the same pseudonym in both.
+  for (const row of cloned.developerMonthly) {
+    if (row.authorLogin && pseudonymMap.has(row.authorLogin)) {
+      row.authorLogin = pseudonymMap.get(row.authorLogin)!;
+    }
+  }
+
   // Anonymize repo names in metadata
   cloned.metadata.repoNames = cloned.metadata.repoNames.map(
     name => repoMap.get(name) ?? name

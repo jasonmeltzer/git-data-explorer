@@ -75,7 +75,9 @@ function contributorsToCsv(contributors: ContributorBeforeAfterStats[]): string 
 }
 
 function extractAllLogins(bundle: ExportBundle): string[] {
-  return Array.from(new Set(bundle.contributors.map(c => c.authorLogin)));
+  const fromContributors = bundle.contributors.map(c => c.authorLogin);
+  const fromDeveloperMonthly = bundle.developerMonthly.map(r => r.authorLogin);
+  return Array.from(new Set([...fromContributors, ...fromDeveloperMonthly]));
 }
 
 // ─── ZIP creation ─────────────────────────────────────────────────────────────
@@ -115,6 +117,9 @@ export function buildZipFileEntries(
     }
     if (bundle.headcountMonthly.length > 0) {
       files['headcount-monthly.json'] = strToU8(JSON.stringify(bundle.headcountMonthly, null, 2));
+    }
+    if (bundle.developerMonthly.length > 0) {
+      files['developer-monthly.json'] = strToU8(JSON.stringify(bundle.developerMonthly, null, 2));
     }
   } else {
     files['cohort-commits.csv'] = strToU8(arrayToCsv(bundle.cohortCommits as unknown as Record<string, unknown>[]));
