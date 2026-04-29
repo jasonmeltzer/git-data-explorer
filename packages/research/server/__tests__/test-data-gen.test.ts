@@ -332,4 +332,86 @@ describe('Test data generator', () => {
       expect(startupRate).toBeGreaterThan(midSizeRate);
     });
   });
+
+  describe('Phase 9.5 developerMonthly archetypes (D-22)', () => {
+    it('SmallStartup includes developerMonthly', () => {
+      const bundle = generateSmallStartup();
+      expect(bundle.developerMonthly).toBeDefined();
+      expect(bundle.developerMonthly.length).toBeGreaterThan(0);
+    });
+
+    it('SmallStartup AI-power-user personas show post-AI ramp', () => {
+      const bundle = generateSmallStartup();
+      const aiMonth = bundle.metadata.aiMarkerDate?.slice(0, 7);
+      expect(aiMonth).toBeDefined();
+
+      // Per D-22, the first 2 personas in SmallStartup are AI-power-user archetype.
+      // Skip persona[0] / first authorLogin because the SmallStartup dominantWindow
+      // option (true by default) elevates personas[0] to ~50% share for 3 pre-AI
+      // months — which inflates pre-AI mean and confounds the AI ramp signal.
+      // Use persona[1] (the second AI-power-user) — same archetype, not dominant-window-affected.
+      const distinctLogins = Array.from(new Set(bundle.developerMonthly.map(r => r.authorLogin))).sort();
+      expect(distinctLogins.length).toBeGreaterThanOrEqual(2);
+      const secondLogin = distinctLogins[1];
+      const rows = bundle.developerMonthly.filter(r => r.authorLogin === secondLogin);
+      const pre = rows.filter(r => r.month <= aiMonth!);
+      const post = rows.filter(r => r.month > aiMonth!);
+
+      const meanPre = pre.reduce((s, r) => s + r.prCount, 0) / Math.max(1, pre.length);
+      const meanPost = post.reduce((s, r) => s + r.prCount, 0) / Math.max(1, post.length);
+      // 2.5x post-AI ramp minus jitter — assert > 1.5x to leave room for stochastic noise.
+      expect(meanPost).toBeGreaterThan(meanPre * 1.5);
+    });
+
+    it('MidSize includes a declining archetype persona', () => {
+      const bundle = generateMidSizeCompany();
+      expect(bundle.developerMonthly.length).toBeGreaterThan(0);
+      const aiMonth = bundle.metadata.aiMarkerDate?.slice(0, 7);
+      expect(aiMonth).toBeDefined();
+
+      // Per D-22, the FIRST persona in MidSize is declining archetype.
+      const firstLogin = bundle.developerMonthly[0].authorLogin;
+      const rows = bundle.developerMonthly.filter(r => r.authorLogin === firstLogin);
+      const pre = rows.filter(r => r.month <= aiMonth!);
+      const post = rows.filter(r => r.month > aiMonth!);
+      const meanPre = pre.reduce((s, r) => s + r.prCount, 0) / Math.max(1, pre.length);
+      const meanPost = post.reduce((s, r) => s + r.prCount, 0) / Math.max(1, post.length);
+      // 0.5x post-AI drop plus jitter — assert < 0.6x as the drop signal.
+      expect(meanPost).toBeLessThan(meanPre * 0.6);
+    });
+
+    it('PreAiBaseline produces NO archetype shape changes (control invariant)', () => {
+      const bundle = generatePreAiBaseline();
+      expect(bundle.developerMonthly.length).toBeGreaterThan(0);
+      // No AI marker → no shape change. metadata.aiMarkerDate is null.
+      expect(bundle.metadata.aiMarkerDate).toBeNull();
+
+      // Verify all per-persona series are roughly flat (sample first persona).
+      const firstLogin = bundle.developerMonthly[0].authorLogin;
+      const rows = bundle.developerMonthly.filter(r => r.authorLogin === firstLogin);
+      if (rows.length >= 6) {
+        const half = Math.floor(rows.length / 2);
+        const meanFirst = rows.slice(0, half).reduce((s, r) => s + r.prCount, 0) / half;
+        const meanSecond = rows.slice(half).reduce((s, r) => s + r.prCount, 0) / (rows.length - half);
+        if (meanFirst > 0) {
+          // Within 30% — control group has no AI-driven shape changes.
+          expect(Math.abs(meanSecond - meanFirst) / meanFirst).toBeLessThan(0.3);
+        }
+      }
+    });
+
+    it('every developerMonthly row has all 8 D-18 fields', () => {
+      const bundle = generateSmallStartup();
+      for (const row of bundle.developerMonthly) {
+        expect(row).toHaveProperty('authorLogin');
+        expect(row).toHaveProperty('month');
+        expect(row).toHaveProperty('prCount');
+        expect(row).toHaveProperty('commitCount');
+        expect(row).toHaveProperty('meanLinesPerCommit');
+        expect(row).toHaveProperty('medianLinesPerCommit');
+        expect(row).toHaveProperty('meanFilesPerCommit');
+        expect(row).toHaveProperty('medianFilesPerCommit');
+      }
+    });
+  });
 });
