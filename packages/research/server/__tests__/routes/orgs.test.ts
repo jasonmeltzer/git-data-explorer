@@ -138,6 +138,19 @@ const CREATE_TABLES_SQL = `
     org_id INTEGER NOT NULL REFERENCES orgs(id),
     data_json TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS developer_monthly (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
+    author_login TEXT NOT NULL,
+    period_month TEXT NOT NULL,
+    pr_count INTEGER NOT NULL,
+    commit_count INTEGER NOT NULL,
+    mean_lines_per_commit REAL,
+    median_lines_per_commit REAL,
+    mean_files_per_commit REAL,
+    median_files_per_commit REAL
+  );
 `;
 
 // ── In-memory test DB ─────────────────────────────────────────────────────────
@@ -210,6 +223,7 @@ function seedAll() {
   const raw = testDb.$client;
 
   // Clear in reverse FK order
+  raw.exec(`DELETE FROM developer_monthly`);
   raw.exec(`DELETE FROM period_metrics`);
   raw.exec(`DELETE FROM headcount_monthly`);
   raw.exec(`DELETE FROM concentration_monthly`);
