@@ -23,7 +23,7 @@ import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { zipSync, strToU8 } from 'fflate';
 import * as schema from '../db/schema.js';
-import type { ExportBundle, ConcentrationMonthlyRow, HeadcountMonthlyRow, PeriodMetric } from '@shared/export-types.js';
+import type { ExportBundle, ConcentrationMonthlyRow, HeadcountMonthlyRow, PeriodMetric, DeveloperMonthlyRow } from '@shared/export-types.js';
 
 // ── Full schema SQL (includes Phase 9.4 tables) ───────────────────────────────
 // Sourced from packages/research/server/index.ts (the single source of truth for
@@ -145,6 +145,19 @@ const CREATE_TABLES_SQL = `
     org_id INTEGER NOT NULL REFERENCES orgs(id),
     data_json TEXT NOT NULL
   );
+  CREATE TABLE IF NOT EXISTS developer_monthly (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL REFERENCES snapshots(id),
+    org_id INTEGER NOT NULL REFERENCES orgs(id),
+    author_login TEXT NOT NULL,
+    period_month TEXT NOT NULL,
+    pr_count INTEGER NOT NULL,
+    commit_count INTEGER NOT NULL,
+    mean_lines_per_commit REAL,
+    median_lines_per_commit REAL,
+    mean_files_per_commit REAL,
+    median_files_per_commit REAL
+  );
 `;
 
 // ── In-memory research DB ─────────────────────────────────────────────────────
@@ -258,7 +271,13 @@ function makePhase94Bundle(overrides: Partial<ExportBundle> = {}): ExportBundle 
         metrics: { avgCommitSize: 72.8, prFrequency: 4.8, rampUpSpeed: 2.8, activeContributors: 12 },
       },
     ],
-    developerMonthly: [],   // Phase 9.5-01 — type-skeleton stub
+    // Phase 9.5: 3 developers × 1-2 months = 4 total rows
+    developerMonthly: [
+      { authorLogin: 'amber-bear', month: '2025-01', prCount: 5,  commitCount: 12, meanLinesPerCommit: 80.5,  medianLinesPerCommit: 75.0,  meanFilesPerCommit: 2.4, medianFilesPerCommit: 2 },
+      { authorLogin: 'amber-bear', month: '2025-02', prCount: 8,  commitCount: 18, meanLinesPerCommit: 65.25, medianLinesPerCommit: 60.0,  meanFilesPerCommit: 1.8, medianFilesPerCommit: 2 },
+      { authorLogin: 'azure-fox',  month: '2025-01', prCount: 3,  commitCount: 7,  meanLinesPerCommit: 120.0, medianLinesPerCommit: 110.0, meanFilesPerCommit: 3.5, medianFilesPerCommit: 3 },
+      { authorLogin: 'crystal-owl', month: '2025-03', prCount: 2, commitCount: 4,  meanLinesPerCommit: null,  medianLinesPerCommit: null,  meanFilesPerCommit: null, medianFilesPerCommit: null },
+    ],
     ...overrides,
   };
 }
@@ -280,6 +299,7 @@ function bundleToZip(bundle: ExportBundle): Buffer {
   if (bundle.periodMetrics)    files['period-metrics.json']      = json(bundle.periodMetrics);
   if (bundle.concentrationMonthly.length > 0) files['concentration-monthly.json'] = json(bundle.concentrationMonthly);
   if (bundle.headcountMonthly.length  > 0) files['headcount-monthly.json']    = json(bundle.headcountMonthly);
+  if (bundle.developerMonthly.length   > 0) files['developer-monthly.json']    = json(bundle.developerMonthly);
   return Buffer.from(zipSync(files));
 }
 
@@ -291,6 +311,7 @@ let reconstructed: ExportBundle;
 
 beforeAll(async () => {
   // Clear DB between test file runs (in case of test-order coupling)
+  sqlite.exec(`DELETE FROM developer_monthly`);
   sqlite.exec(`DELETE FROM period_metrics`);
   sqlite.exec(`DELETE FROM headcount_monthly`);
   sqlite.exec(`DELETE FROM concentration_monthly`);
@@ -447,6 +468,7 @@ describe('round-trip: Phase 9.4 periodMetrics', () => {
 describe('round-trip: Phase 9.4 empty-data path (H2 negative)', () => {
   it('empty concentrationMonthly / headcountMonthly / null periodMetrics survive as empty / null', async () => {
     // Clear existing data so this import gets a fresh unique content hash
+    sqlite.exec(`DELETE FROM developer_monthly`);
     sqlite.exec(`DELETE FROM period_metrics`);
     sqlite.exec(`DELETE FROM headcount_monthly`);
     sqlite.exec(`DELETE FROM concentration_monthly`);
@@ -464,6 +486,7 @@ describe('round-trip: Phase 9.4 empty-data path (H2 negative)', () => {
       concentrationMonthly: [],
       headcountMonthly: [],
       periodMetrics: null,
+      developerMonthly: [],
     });
     const zipBuf = bundleToZip(emptyBundle);
     const parsed = parseZipBundle(zipBuf);
@@ -480,5 +503,120 @@ describe('round-trip: Phase 9.4 empty-data path (H2 negative)', () => {
     expect(rec.concentrationMonthly).toEqual([]);
     expect(rec.headcountMonthly).toEqual([]);
     expect(rec.periodMetrics).toBeNull();
+    expect(rec.developerMonthly).toEqual([]);
+  });
+});
+
+// ── round-trip: Phase 9.5 developerMonthly ───────────────────────────────────
+
+describe('round-trip: Phase 9.5 developerMonthly', () => {
+  it('row count matches original', () => {
+    expect(reconstructed.developerMonthly.length).toBe(bundle.developerMonthly.length);
+  });
+
+  it('every field survives for the first row', () => {
+    const orig = bundle.developerMonthly[0];
+    const rec = reconstructed.developerMonthly.find(
+      r => r.authorLogin === orig.authorLogin && r.month === orig.month,
+    );
+    expect(rec).toBeDefined();
+    expect(rec!.authorLogin).toBe(orig.authorLogin);
+    expect(rec!.month).toBe(orig.month);
+    expect(rec!.prCount).toBe(orig.prCount);
+    expect(rec!.commitCount).toBe(orig.commitCount);
+    expect(rec!.meanLinesPerCommit).toBeCloseTo(orig.meanLinesPerCommit ?? 0, 5);
+    expect(rec!.medianLinesPerCommit).toBeCloseTo(orig.medianLinesPerCommit ?? 0, 5);
+    expect(rec!.meanFilesPerCommit).toBeCloseTo(orig.meanFilesPerCommit ?? 0, 5);
+    expect(rec!.medianFilesPerCommit).toBeCloseTo(orig.medianFilesPerCommit ?? 0, 5);
+  });
+
+  it('null fields survive as null (REAL nullability preserved)', () => {
+    const orig = bundle.developerMonthly.find(
+      r => r.meanLinesPerCommit === null,
+    );
+    expect(orig).toBeDefined();
+    const rec = reconstructed.developerMonthly.find(
+      r => r.authorLogin === orig!.authorLogin && r.month === orig!.month,
+    );
+    expect(rec).toBeDefined();
+    expect(rec!.meanLinesPerCommit).toBeNull();
+    expect(rec!.medianLinesPerCommit).toBeNull();
+    expect(rec!.meanFilesPerCommit).toBeNull();
+    expect(rec!.medianFilesPerCommit).toBeNull();
+  });
+
+  it('deep equality over ALL rows (sorted by authorLogin+month, numeric tolerance)', () => {
+    const sortKey = (r: DeveloperMonthlyRow) => `${r.authorLogin}:${r.month}`;
+    const origSorted = [...bundle.developerMonthly].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    const recSorted = [...reconstructed.developerMonthly].sort((a, b) => sortKey(a).localeCompare(sortKey(b)));
+    expect(recSorted.length).toBe(origSorted.length);
+    for (let i = 0; i < origSorted.length; i++) {
+      expect(recSorted[i]).toMatchObject({
+        authorLogin: origSorted[i].authorLogin,
+        month: origSorted[i].month,
+        prCount: origSorted[i].prCount,
+        commitCount: origSorted[i].commitCount,
+      });
+      // Sized-stat fields are nullable — match null-vs-null exactly, otherwise tolerance
+      if (origSorted[i].meanLinesPerCommit === null) {
+        expect(recSorted[i].meanLinesPerCommit).toBeNull();
+      } else {
+        expect(recSorted[i].meanLinesPerCommit).toBeCloseTo(origSorted[i].meanLinesPerCommit!, 5);
+      }
+    }
+  });
+});
+
+// ── D-17 graceful degradation: pre-9.5 bundles missing developerMonthly ──────
+
+describe('imports pre-9.5 bundles missing developerMonthly without error (D-17)', () => {
+  it('bundle without developerMonthly section imports successfully and reconstructs as []', async () => {
+    // Clear existing data so this import gets a fresh unique content hash
+    sqlite.exec(`DELETE FROM developer_monthly`);
+    sqlite.exec(`DELETE FROM period_metrics`);
+    sqlite.exec(`DELETE FROM headcount_monthly`);
+    sqlite.exec(`DELETE FROM concentration_monthly`);
+    sqlite.exec(`DELETE FROM bot_ratio`);
+    sqlite.exec(`DELETE FROM pr_turnaround`);
+    sqlite.exec(`DELETE FROM contributors`);
+    sqlite.exec(`DELETE FROM rolling_comparisons`);
+    sqlite.exec(`DELETE FROM ramp_up`);
+    sqlite.exec(`DELETE FROM cohort_metrics`);
+    sqlite.exec(`DELETE FROM snapshots`);
+    sqlite.exec(`DELETE FROM orgs`);
+
+    // Build a pre-9.5 ZIP — same as bundleToZip but WITHOUT developer-monthly.json.
+    // This simulates an older-tool-version bundle that pre-dates the developerMonthly section.
+    const orig = makePhase94Bundle({ developerMonthly: [] });
+    const json = (data: unknown) => strToU8(JSON.stringify(data, null, 2));
+    const files: Record<string, Uint8Array> = {
+      'metadata.json': json(orig.metadata),
+      'cohort-commits.json': json(orig.cohortCommits),
+      'cohort-prs.json': json(orig.cohortPrs),
+      'ramp-up.json': json(orig.rampUp),
+      'contributors.json': json(orig.contributors),
+      'pr-turnaround.json': json(orig.prTurnaround),
+      'bot-ratio.json': json(orig.botRatio),
+    };
+    if (orig.concentrationMonthly.length > 0) files['concentration-monthly.json'] = json(orig.concentrationMonthly);
+    if (orig.headcountMonthly.length > 0) files['headcount-monthly.json'] = json(orig.headcountMonthly);
+    if (orig.periodMetrics) files['period-metrics.json'] = json(orig.periodMetrics);
+    // Intentionally omit developer-monthly.json to mimic pre-9.5 bundles
+    const zipBuf = Buffer.from(zipSync(files));
+
+    const parsed = parseZipBundle(zipBuf);
+    // The graceful-degradation contract: parseZipBundle returns developerMonthly: []
+    expect((parsed as { developerMonthly: unknown[] }).developerMonthly).toEqual([]);
+
+    const result = importBundle(parsed, null, 'batch', 'Pre-9.5 Test Org');
+    expect(result.snapshotId).toBeGreaterThan(0);
+
+    const app = getApp();
+    const res = await app.request(
+      `/api/orgs/${result.orgId}/snapshots/${result.snapshotId}/data`,
+    );
+    expect(res.status).toBe(200);
+    const rec = await res.json() as ExportBundle;
+    expect(rec.developerMonthly).toEqual([]);
   });
 });
