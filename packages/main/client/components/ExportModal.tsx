@@ -29,7 +29,7 @@ import {
 import { useExport, useExportPreview, useIncrementExport } from '../hooks/useExport.js';
 import { buildPseudonymMap, buildRepoMap, anonymizeBundle } from '../lib/anonymizer.js';
 import { toCsv } from '../lib/csv-serializer.js';
-import { rollingToCsv, periodMetricsToCsv, concentrationMonthlyToCsv, headcountMonthlyToCsv, executiveSummaryToCsv } from '../lib/csv-flatteners.js';
+import { rollingToCsv, periodMetricsToCsv, concentrationMonthlyToCsv, headcountMonthlyToCsv, developerMonthlyToCsv, executiveSummaryToCsv } from '../lib/csv-flatteners.js';
 import type { DashboardFilters } from '../hooks/useDashboardFilters.js';
 import type { ExportBundle, ExportRequest } from '@shared/export-types.js';
 import type { ContributorBeforeAfterStats } from '@shared/types.js';
@@ -142,6 +142,9 @@ export function buildZipFileEntries(
     }
     if (bundle.headcountMonthly.length > 0) {
       files['headcount-monthly.csv'] = strToU8(headcountMonthlyToCsv(bundle.headcountMonthly));
+    }
+    if (bundle.developerMonthly.length > 0) {
+      files['developer-monthly.csv'] = strToU8(developerMonthlyToCsv(bundle.developerMonthly));
     }
   }
 

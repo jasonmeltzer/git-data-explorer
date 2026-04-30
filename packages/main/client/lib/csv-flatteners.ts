@@ -8,7 +8,7 @@
 
 import { toCsv } from './csv-serializer.js';
 import type { RollingComparisonResult } from '@shared/types.js';
-import type { ExecutiveSummary, PeriodMetric, ConcentrationMonthlyRow, HeadcountMonthlyRow } from '@shared/export-types.js';
+import type { ExecutiveSummary, PeriodMetric, ConcentrationMonthlyRow, HeadcountMonthlyRow, DeveloperMonthlyRow } from '@shared/export-types.js';
 
 /**
  * Flatten a RollingComparisonResult into a 3-row CSV string.
@@ -144,6 +144,27 @@ export function headcountMonthlyToCsv(rows: HeadcountMonthlyRow[]): string {
   ];
   const data = rows.map((r) => [
     r.month, r.activeDevs, r.totalPrs, r.totalCommits, r.prsPerDev, r.commitsPerDev,
+  ]);
+  return toCsv(headers, data);
+}
+
+/**
+ * Flatten a DeveloperMonthlyRow[] into a CSV string.
+ *
+ * Per Phase 9.5 D-19, the four mean/median per-commit-size fields are null when
+ * commitCount = 0 (PR-only month). Nulls render as empty cells.
+ */
+export function developerMonthlyToCsv(rows: DeveloperMonthlyRow[]): string {
+  if (rows.length === 0) return '';
+  const headers = [
+    'authorLogin', 'month', 'prCount', 'commitCount',
+    'meanLinesPerCommit', 'medianLinesPerCommit',
+    'meanFilesPerCommit', 'medianFilesPerCommit',
+  ];
+  const data = rows.map((r) => [
+    r.authorLogin, r.month, r.prCount, r.commitCount,
+    r.meanLinesPerCommit, r.medianLinesPerCommit,
+    r.meanFilesPerCommit, r.medianFilesPerCommit,
   ]);
   return toCsv(headers, data);
 }

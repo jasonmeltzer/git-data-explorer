@@ -131,6 +131,29 @@ describe('buildZipFileEntries — JSON format', () => {
     const files = buildZipFileEntries(b, 'json');
     expect(files['headcount-monthly.json']).toBeDefined();
   });
+
+  test('OMITS developer-monthly.json when developerMonthly is empty', () => {
+    const files = buildZipFileEntries(minimalBundle(), 'json');
+    expect(files['developer-monthly.json']).toBeUndefined();
+  });
+
+  test('INCLUDES developer-monthly.json when developerMonthly has entries', () => {
+    const b = minimalBundle();
+    b.developerMonthly = [
+      {
+        authorLogin: 'alice',
+        month: '2025-06',
+        prCount: 3,
+        commitCount: 10,
+        meanLinesPerCommit: 50,
+        medianLinesPerCommit: 40,
+        meanFilesPerCommit: 2,
+        medianFilesPerCommit: 1,
+      },
+    ];
+    const files = buildZipFileEntries(b, 'json');
+    expect(files['developer-monthly.json']).toBeDefined();
+  });
 });
 
 describe('buildZipFileEntries — CSV format', () => {
@@ -151,7 +174,12 @@ describe('buildZipFileEntries — CSV format', () => {
     expect(files['rolling-comparison.csv']).toBeUndefined();
   });
 
-  test('INCLUDES all 3 Phase 9.4 CSVs when data present', () => {
+  test('OMITS developer-monthly.csv when developerMonthly is empty', () => {
+    const files = buildZipFileEntries(minimalBundle(), 'csv');
+    expect(files['developer-monthly.csv']).toBeUndefined();
+  });
+
+  test('INCLUDES all 4 Phase 9.4+9.5 CSVs when data present (CSV/JSON parity)', () => {
     const b = minimalBundle();
     b.periodMetrics = [
       {
@@ -183,9 +211,26 @@ describe('buildZipFileEntries — CSV format', () => {
         commitsPerDev: 20,
       },
     ];
+    b.developerMonthly = [
+      {
+        authorLogin: 'alice',
+        month: '2025-06',
+        prCount: 3,
+        commitCount: 10,
+        meanLinesPerCommit: 50,
+        medianLinesPerCommit: 40,
+        meanFilesPerCommit: 2,
+        medianFilesPerCommit: 1,
+      },
+    ];
     const files = buildZipFileEntries(b, 'csv');
     expect(files['period-metrics.csv']).toBeDefined();
     expect(files['concentration-monthly.csv']).toBeDefined();
     expect(files['headcount-monthly.csv']).toBeDefined();
+    expect(files['developer-monthly.csv']).toBeDefined();
+    // Sanity: CSV body has the header row plus one data row
+    const csv = strFromU8(files['developer-monthly.csv']);
+    expect(csv).toContain('authorLogin,month,prCount');
+    expect(csv).toContain('alice,2025-06');
   });
 });
