@@ -65,7 +65,7 @@ What works today:
 - **10-section dashboard** — Executive Summary KPI tiles, Team Distribution, Cohort Trends, Contribution Patterns (per-developer trajectories), Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table
 - **Data Export** — full dashboard data exported as CSV or JSON in a ZIP bundle with anonymization
 - **Optional sharing** — post-export sharing invitation via GitHub Gist (private), HTTP endpoint, or manual file download
-- **840 passing tests** across 64 test files (including D-16, Phase 9.4.2 seed-scenario assertions when `npm run seed` has run, and the Phase 9.4.3 security + migration regression suite)
+- **882 passing tests** across 67 test files (including D-16, Phase 9.4.2 seed-scenario assertions when `npm run seed` has run, the Phase 9.4.3 security + migration regression suite, and the Phase 9.5 per-developer trajectory + CSV/JSON export parity tests)
 
 ### Research Tool (`packages/research/`)
 A personal research tool for cross-org AI adoption analysis. No GitHub token required — imports pre-exported bundles from the main app.
@@ -91,7 +91,7 @@ The project is organized as an npm workspaces monorepo:
 
 ### Code Quality
 - **ESLint configured** — flat config with typescript-eslint parser; includes `no-restricted-syntax` rule banning `asChild` prop on `@base-ui/react` components (prevents regression of resolved console warnings)
-- **840 passing tests** across 64 test files (including D-16, Phase 9.4.2 seed-scenario assertions when `npm run seed` has run, and the Phase 9.4.3 security + migration regression suite)
+- **882 passing tests** across 67 test files (including D-16, Phase 9.4.2 seed-scenario assertions when `npm run seed` has run, the Phase 9.4.3 security + migration regression suite, and the Phase 9.5 per-developer trajectory + CSV/JSON export parity tests)
 
 What's next:
 - **Phase 9.6: Cycle Time Correction** — first-commit-to-merge analytics
@@ -191,7 +191,7 @@ Open http://localhost:5173 — all dashboard views populated with synthetic data
 ### Run Tests
 
 ```bash
-npm run test        # Run all tests across workspaces (840 tests, 64 files)
+npm run test        # Run all tests across workspaces (882 tests, 67 files)
 ```
 
 ### First Use (main app, with real data)

@@ -288,7 +288,7 @@ Run with `npm run lint`.
 
 ## Testing
 
-Vitest 4.x drives the test suite — **840 tests across 64 files** as of Phase 9.4.3. Two environments in a single config:
+Vitest 4.x drives the test suite — **882 tests across 67 files** as of Phase 9.5. Two environments in a single config:
 
 - **Node tests (default)** — server-side routes, services, import pipeline. Pattern: `vi.mock('../db/client.js', ...)` with in-memory `better-sqlite3`, dynamic route import, `app.request('/api/...')` via Hono. See `packages/main/server/__tests__/routes/analytics.test.ts` and `packages/research/server/__tests__/routes/orgs.test.ts`.
 - **jsdom tests (opt-in)** — React component tests. Each test file declares `// @vitest-environment jsdom` at the top (vitest 4.x removed `environmentMatchGlobs`). Uses `@testing-library/react`, `@testing-library/jest-dom/vitest`, plus `ResizeObserver` and `getBoundingClientRect` polyfills for Recharts. Co-located under `packages/shared/components/charts/__tests__/` and `packages/*/client/__tests__/`.
