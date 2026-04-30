@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3, TableProperties, ChevronDown, ChevronRight } from 'lucide-react';
 import { useDashboardFilters } from '../hooks/useDashboardFilters.js';
@@ -69,6 +69,18 @@ export default function DashboardPage() {
   // Phase 9.5: Contribution Patterns section state
   const [contribSectionOpen, setContribSectionOpen] = useState(false);  // D-07: collapsed by default
   const [contribHasExpandedThisSession, setContribHasExpandedThisSession] = useState(false);  // D-11
+
+  // D-11: HelpPanel must default-open on FIRST session expansion. Flipping the
+  // flag in the onOpenChange handler runs synchronously with the section's mount,
+  // so HelpPanel reads the already-flipped flag and renders closed. Deferring
+  // via useEffect ensures the flag updates AFTER HelpPanel has mounted with
+  // defaultOpen=true on the first render. Subsequent re-mounts (collapse +
+  // re-expand) read the now-true flag and render closed.
+  useEffect(() => {
+    if (contribSectionOpen && !contribHasExpandedThisSession) {
+      setContribHasExpandedThisSession(true);
+    }
+  }, [contribSectionOpen, contribHasExpandedThisSession]);
   const [contribMetric, setContribMetric] = useState<DeveloperMetricOption>('prCount');  // D-03 default
   const [zoomedDev, setZoomedDev] = useState<string | null>(null);  // D-05 modal state
 
@@ -192,10 +204,28 @@ export default function DashboardPage() {
   const activeDevsCount = distinctAuthors.length;
   const layoutMode = chooseDevLayout(activeDevsCount);
 
+  // Build the canonical month axis covering the entire analysis window. The
+  // analytics service only emits rows for (author, month) pairs with activity,
+  // so a dev with sparse activity would render a chart with 2-4 wide bars.
+  // Padding each dev's rows to ALL months in the window keeps the X-axis
+  // consistent across charts and lets D-19's connectNulls=false render gaps.
+  const allMonths = buildMonthAxis(startDate, endDate);
+
   // Bucket rows by author. tenureJoinedAt sourced from contributorsQuery.
   // cohortKey defaults to 'mid' when contributor lookup is missing.
   const developersWithRows: DeveloperWithRows[] = distinctAuthors.map(login => {
-    const rows = developerRows.filter(r => r.authorLogin === login);
+    const authorRows = developerRows.filter(r => r.authorLogin === login);
+    const byMonth = new Map(authorRows.map(r => [r.month, r]));
+    const rows = allMonths.map(month => byMonth.get(month) ?? {
+      authorLogin: login,
+      month,
+      prCount: 0,
+      commitCount: 0,
+      meanLinesPerCommit: null,
+      medianLinesPerCommit: null,
+      meanFilesPerCommit: null,
+      medianFilesPerCommit: null,
+    });
     const contrib = (contributorsQuery.data ?? []).find(
       (c: { authorLogin: string }) => c.authorLogin === login,
     );
@@ -528,12 +558,7 @@ export default function DashboardPage() {
         <section>
           <Collapsible
             open={contribSectionOpen}
-            onOpenChange={(next) => {
-              setContribSectionOpen(next);
-              if (next && !contribHasExpandedThisSession) {
-                setContribHasExpandedThisSession(true);
-              }
-            }}
+            onOpenChange={setContribSectionOpen}
           >
             <CollapsibleTrigger className="w-full flex items-center justify-between py-2 hover:bg-muted/30 rounded-md transition-colors">
               <div className="flex items-center gap-2">
@@ -995,6 +1020,24 @@ export default function DashboardPage() {
 // ─── Phase 9.5 helpers ─────────────────────────────────────────────────────────
 // Cohort mean/band computation per metric. Used by the Contribution Patterns
 // section to overlay cohort context on each per-developer mini-chart.
+
+/**
+ * Build the inclusive list of 'YYYY-MM' month keys spanning [start, end] (UTC).
+ * Used to pad each dev's rows so every chart shares the same X-axis density.
+ */
+function buildMonthAxis(startDate: string, endDate: string): string[] {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
+  const months: string[] = [];
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+  while (cursor <= last) {
+    months.push(`${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return months;
+}
 
 function metricValue(row: DeveloperMonthlyRow, metric: DeveloperMetricOption): number | null {
   switch (metric) {

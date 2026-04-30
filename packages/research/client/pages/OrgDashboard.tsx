@@ -43,6 +43,18 @@ interface OrgDashboardProps {
   orgId: number;
 }
 
+/**
+ * D-15 cohort filter labels. base-ui's Select.Value renders the raw token
+ * unless explicit children are passed; this map provides the human-readable
+ * label keyed by the internal cohort token.
+ */
+const COHORT_FILTER_LABELS: Record<'all' | 'senior' | 'mid' | 'new', string> = {
+  all: 'All',
+  senior: 'Senior',
+  mid: 'Mid',
+  new: 'Junior',
+};
+
 export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   const { data: org, isLoading: orgLoading } = useOrg(orgId);
   const [selectedSnapshotId, setSelectedSnapshotId] = useState<number | null>(null);
@@ -96,10 +108,31 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   // Phase 9.5 (D-12, D-14, D-15): Build per-developer rows + apply Cohort + Min Activity filters
   const developerRows: DeveloperMonthlyRow[] = bundle?.developerMonthly ?? [];
 
+  // Pad each dev's rows to cover all months in the bundle's analysis window so
+  // sparse contributors render with the same X-axis density as everyone else.
+  // Without this, a dev active in 4 months produces a chart with 4 wide bars
+  // spread across the full container width — visually misleading.
+  const allMonths = bundle?.metadata
+    ? buildMonthAxis(bundle.metadata.startDate, bundle.metadata.endDate)
+    : [];
+
   // Group rows by author + look up cohort/tenure from bundle.contributors
   const distinctAuthorsAll = Array.from(new Set(developerRows.map(r => r.authorLogin)));
   const allDevelopersWithRows: DeveloperWithRows[] = distinctAuthorsAll.map(login => {
-    const rows = developerRows.filter(r => r.authorLogin === login);
+    const authorRows = developerRows.filter(r => r.authorLogin === login);
+    const byMonth = new Map(authorRows.map(r => [r.month, r]));
+    const rows = allMonths.length > 0
+      ? allMonths.map(month => byMonth.get(month) ?? {
+          authorLogin: login,
+          month,
+          prCount: 0,
+          commitCount: 0,
+          meanLinesPerCommit: null,
+          medianLinesPerCommit: null,
+          meanFilesPerCommit: null,
+          medianFilesPerCommit: null,
+        })
+      : authorRows;
     const contrib = (bundle?.contributors ?? []).find((c: { authorLogin: string }) => c.authorLogin === login);
     const tenureJoinedAt = (contrib as { firstCommitAt?: string | null } | undefined)?.firstCommitAt ?? null;
     const cohortKey = (contrib as { cohort?: string } | undefined)?.cohort ?? 'mid';
@@ -294,7 +327,8 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
               <span className="text-xs text-muted-foreground">Cohort:</span>
               <Select value={cohortFilter} onValueChange={(v) => setCohortFilter(v as 'senior' | 'mid' | 'new' | 'all')}>
                 <SelectTrigger className="h-7 text-xs w-[120px]">
-                  <SelectValue />
+                  {/* base-ui Select.Value needs explicit children — without them it falls back to the raw value token */}
+                  <SelectValue>{COHORT_FILTER_LABELS[cohortFilter]}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
@@ -713,6 +747,24 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
 
 // Phase 9.5 helpers — copied from Plan 07 (DashboardPage). If both files diverge,
 // promote to a shared lib at packages/shared/lib/developer-monthly-helpers.ts.
+
+/**
+ * Build the inclusive list of 'YYYY-MM' month keys spanning [start, end] (UTC).
+ * Used to pad each dev's rows so every chart shares the same X-axis density.
+ */
+function buildMonthAxis(startDate: string, endDate: string): string[] {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
+  const months: string[] = [];
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+  while (cursor <= last) {
+    months.push(`${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return months;
+}
 
 function metricValue(row: DeveloperMonthlyRow, metric: DeveloperMetricOption): number | null {
   switch (metric) {

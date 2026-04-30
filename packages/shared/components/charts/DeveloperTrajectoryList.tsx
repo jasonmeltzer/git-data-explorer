@@ -29,6 +29,19 @@ import type { DeveloperWithRows } from './DeveloperTrajectoryGrid.js';
 
 type SortKey = 'tenure-desc' | 'tenure-asc' | 'name-asc' | 'name-desc';
 
+/**
+ * base-ui's Select.Value renders the raw value when used without children
+ * (unlike Radix). Provide an explicit label map so the trigger shows the
+ * human-readable option text (e.g., "Tenure (newest first)") instead of the
+ * raw token "tenure-desc".
+ */
+const SORT_LABELS: Record<SortKey, string> = {
+  'tenure-desc': 'Tenure (newest first)',
+  'tenure-asc': 'Tenure (oldest first)',
+  'name-asc': 'Name (A→Z)',
+  'name-desc': 'Name (Z→A)',
+};
+
 interface DeveloperTrajectoryListProps {
   developers: DeveloperWithRows[];
   metric: DeveloperMetricOption;
@@ -68,7 +81,7 @@ export function DeveloperTrajectoryList({
         <span className="text-xs text-muted-foreground">Sort by:</span>
         <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
           <SelectTrigger className="h-7 text-xs w-[200px]">
-            <SelectValue />
+            <SelectValue>{SORT_LABELS[sortKey]}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="tenure-desc">Tenure (newest first)</SelectItem>

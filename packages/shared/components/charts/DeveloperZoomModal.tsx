@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@shared/components/ui/dialog.js';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@shared/components/ui/tabs.js';
+import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
 import {
   ComposedChart,
   Bar,
@@ -102,68 +102,82 @@ export function DeveloperZoomModal({
               </TabsTrigger>
             ))}
           </TabsList>
-
-          {DEVELOPER_METRIC_OPTIONS.map(opt => (
-            <TabsContent key={opt.value} value={opt.value}>
-              <ChartContainer config={chartConfig} className="h-[400px] w-full">
-                <ComposedChart data={data}>
-                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
-                  <XAxis dataKey="month" fontSize={11} />
-                  <YAxis fontSize={11} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-
-                  {/* Cohort 25-75 percentile band (D-05) — render BEHIND bars */}
-                  <Area
-                    type="monotone"
-                    dataKey="p75"
-                    stroke="none"
-                    fill="var(--muted)"
-                    fillOpacity={0.15}
-                    connectNulls={false}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="p25"
-                    stroke="none"
-                    fill="var(--background)"
-                    fillOpacity={1}
-                    connectNulls={false}
-                  />
-
-                  <Bar dataKey="value" fill="var(--chart-1)" radius={[2, 2, 0, 0]} />
-
-                  <Line
-                    type="monotone"
-                    dataKey="cohortMean"
-                    stroke="var(--muted-foreground)"
-                    strokeDasharray="4 4"
-                    strokeWidth={1.5}
-                    dot={false}
-                    connectNulls={false}
-                  />
-
-                  {aiMarkerMonth && (
-                    <ReferenceLine
-                      x={aiMarkerMonth}
-                      stroke="var(--chart-ai-marker)"
-                      strokeDasharray="4 4"
-                      strokeWidth={2}
-                      label={({ viewBox }) => {
-                        if (!viewBox || typeof (viewBox as { x?: number }).x !== 'number') return null;
-                        const { x: cx } = viewBox as { x: number };
-                        return (
-                          <text x={cx + 4} y={16} fontSize={11} fill="var(--muted-foreground)">
-                            AI tools adopted
-                          </text>
-                        );
-                      }}
-                    />
-                  )}
-                </ComposedChart>
-              </ChartContainer>
-            </TabsContent>
-          ))}
         </Tabs>
+
+        {/*
+          Render the chart ONCE outside the Tabs panels. The previous
+          implementation looped 4 TabsContent panels each rendering an
+          identical ComposedChart; base-ui keeps non-active panels mounted at
+          zero width, so Recharts measured stale dimensions and bars
+          animated from those bad positions ("flying off-screen" on first
+          open). Single chart instance keyed on `metric` dodges the issue.
+          isAnimationActive=false on Bar/Line is belt-and-suspenders against
+          any residual measurement-during-Dialog-enter glitches.
+        */}
+        <ChartContainer config={chartConfig} className="h-[400px] w-full">
+          <ComposedChart data={data}>
+            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+            <XAxis dataKey="month" fontSize={11} />
+            <YAxis fontSize={11} />
+            <ChartTooltip content={<ChartTooltipContent />} />
+
+            {/* Cohort 25-75 percentile band (D-05) — render BEHIND bars */}
+            <Area
+              type="monotone"
+              dataKey="p75"
+              stroke="none"
+              fill="var(--muted)"
+              fillOpacity={0.15}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+            <Area
+              type="monotone"
+              dataKey="p25"
+              stroke="none"
+              fill="var(--background)"
+              fillOpacity={1}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+
+            <Bar
+              dataKey="value"
+              fill="var(--chart-1)"
+              radius={[2, 2, 0, 0]}
+              isAnimationActive={false}
+            />
+
+            <Line
+              type="monotone"
+              dataKey="cohortMean"
+              stroke="var(--muted-foreground)"
+              strokeDasharray="4 4"
+              strokeWidth={1.5}
+              dot={false}
+              connectNulls={false}
+              isAnimationActive={false}
+            />
+
+            {aiMarkerMonth && (
+              <ReferenceLine
+                x={aiMarkerMonth}
+                stroke="var(--chart-ai-marker)"
+                strokeDasharray="4 4"
+                strokeWidth={2}
+                label={({ viewBox }) => {
+                  if (!viewBox || typeof (viewBox as { x?: number }).x !== 'number') return null;
+                  const { x: cx } = viewBox as { x: number };
+                  return (
+                    <text x={cx + 4} y={16} fontSize={11} fill="var(--muted-foreground)">
+                      AI tools adopted
+                    </text>
+                  );
+                }}
+              />
+            )}
+          </ComposedChart>
+        </ChartContainer>
 
         <p className="text-xs text-muted-foreground mt-2">
           Shaded band shows the 25th-75th percentile of contributors at the same tenure cohort. Dashed line shows cohort mean.
