@@ -211,7 +211,7 @@ describe('migration bootstrap for legacy research.db', () => {
     expect(colNames).not.toContain('ai_tool');
   });
 
-  test('__drizzle_migrations has 2 rows after bootstrap (bootstrapped-0000 + 0001 hash)', () => {
+  test('__drizzle_migrations has 3 rows after bootstrap (bootstrapped-0000 + 0001 hash + 0002 hash)', () => {
     const db = drizzle(sqlite);
     bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
@@ -220,11 +220,14 @@ describe('migration bootstrap for legacy research.db', () => {
       .prepare(`SELECT hash FROM __drizzle_migrations ORDER BY id`)
       .all() as Array<{ hash: string }>;
 
-    expect(rows.length).toBe(2);
+    expect(rows.length).toBe(3);
     expect(rows[0].hash).toBe('bootstrapped-0000');
-    // Row 1 is a hash drizzle generates for 0001_drop_legacy_columns.sql
+    // Row 1 is the hash drizzle generates for 0001_drop_legacy_columns.sql
     expect(typeof rows[1].hash).toBe('string');
     expect(rows[1].hash.length).toBeGreaterThan(0);
+    // Row 2 is the hash drizzle generates for 0002_*_developer_monthly.sql (Phase 9.5 Plan 03)
+    expect(typeof rows[2].hash).toBe('string');
+    expect(rows[2].hash.length).toBeGreaterThan(0);
   });
 
   test('running bootstrapMigrationJournal + migrate twice is idempotent', () => {

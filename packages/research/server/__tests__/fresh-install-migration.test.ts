@@ -1,6 +1,6 @@
 /**
  * Verifies that applying migrations to a fresh :memory: DB produces the
- * canonical schema.ts-equivalent schema (no legacy columns, all 11 tables).
+ * canonical schema.ts-equivalent schema (no legacy columns, all 12 tables).
  *
  * This replaces fresh-install.test.ts which used fragile regex extraction
  * from index.ts. Migration-based testing is authoritative.
@@ -21,6 +21,7 @@ const EXPECTED_TABLES = [
   'cohort_metrics',
   'concentration_monthly',
   'contributors',
+  'developer_monthly',
   'headcount_monthly',
   'orgs',
   'period_metrics',
@@ -41,7 +42,7 @@ afterEach(() => {
 });
 
 describe('fresh-install via migration', () => {
-  test('all 11 schema.ts tables exist after applying migrations', () => {
+  test('all 12 schema.ts tables exist after applying migrations', () => {
     const db = drizzle(sqlite);
     bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
     migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
