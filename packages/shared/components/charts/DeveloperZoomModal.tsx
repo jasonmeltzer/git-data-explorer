@@ -121,14 +121,19 @@ export function DeveloperZoomModal({
             <YAxis fontSize={11} />
             <ChartTooltip content={<ChartTooltipContent />} />
 
-            {/* Cohort 25-75 percentile band (D-05) — render BEHIND bars */}
+            {/* Cohort 25-75 percentile band (D-05) — render BEHIND bars.
+                connectNulls={true} so the band spans the full X-axis even
+                when intermediate months have <2 cohort members for the
+                active metric (PR-only months and padded inactive months
+                produce null meanLinesPerCommit / meanFilesPerCommit, which
+                otherwise truncate the band visibly short of the X-axis end). */}
             <Area
               type="monotone"
               dataKey="p75"
               stroke="none"
               fill="var(--muted)"
               fillOpacity={0.15}
-              connectNulls={false}
+              connectNulls={true}
               isAnimationActive={false}
             />
             <Area
@@ -137,7 +142,7 @@ export function DeveloperZoomModal({
               stroke="none"
               fill="var(--background)"
               fillOpacity={1}
-              connectNulls={false}
+              connectNulls={true}
               isAnimationActive={false}
             />
 
