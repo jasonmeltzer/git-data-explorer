@@ -76,6 +76,22 @@ export function DeveloperZoomModal({
     };
   });
 
+  // Forward-fill p25/p75 so the cohort band <Area> spans the full X-axis.
+  // Recharts' connectNulls only joins INTERIOR nulls — it never extrapolates
+  // past the last non-null point. With Phase 9.5's mix of padded inactive
+  // months and PR-only months, the active metric often produces trailing
+  // nulls (e.g., May 2026 just started, no commits yet), and the band
+  // visibly truncates short of the X-axis end. Carrying forward the last
+  // known percentile is a defensible "no fresher cohort data" interpretation
+  // — slightly preferable to either dropping the trailing column or showing
+  // a hard discontinuity at the chart's right edge.
+  let lastP25: number | null = null;
+  let lastP75: number | null = null;
+  for (const d of data) {
+    if (d.p25 !== null) lastP25 = d.p25; else if (lastP25 !== null) d.p25 = lastP25;
+    if (d.p75 !== null) lastP75 = d.p75; else if (lastP75 !== null) d.p75 = lastP75;
+  }
+
   const chartConfig = {
     value: { label: metric, color: 'var(--chart-1)' },
     cohortMean: { label: 'Cohort mean', color: 'var(--muted-foreground)' },
@@ -122,11 +138,8 @@ export function DeveloperZoomModal({
             <ChartTooltip content={<ChartTooltipContent />} />
 
             {/* Cohort 25-75 percentile band (D-05) — render BEHIND bars.
-                connectNulls={true} so the band spans the full X-axis even
-                when intermediate months have <2 cohort members for the
-                active metric (PR-only months and padded inactive months
-                produce null meanLinesPerCommit / meanFilesPerCommit, which
-                otherwise truncate the band visibly short of the X-axis end). */}
+                Data is forward-filled above (see comment in `data` block)
+                so the band spans the full X-axis without trailing-null gaps. */}
             <Area
               type="monotone"
               dataKey="p75"
