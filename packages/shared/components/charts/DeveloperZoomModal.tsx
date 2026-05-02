@@ -101,7 +101,7 @@ export function DeveloperZoomModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl overflow-hidden">
         <DialogHeader>
           <DialogTitle>{authorLogin} — Trajectory</DialogTitle>
         </DialogHeader>
@@ -130,7 +130,15 @@ export function DeveloperZoomModal({
           isAnimationActive=false on Bar/Line is belt-and-suspenders against
           any residual measurement-during-Dialog-enter glitches.
         */}
-        <ChartContainer config={chartConfig} className="h-[400px] w-full">
+        {/*
+          min-w-0 lets the chart shrink to fit the grid track inside
+          DialogContent. Without it, grid items default to min-width:auto
+          which uses the chart's intrinsic content width — Recharts
+          renders an SVG at whatever width it measured first, and that
+          can exceed the dialog's max-w-3xl, pushing the X-axis tick
+          labels (2026-05) past the modal's right edge.
+        */}
+        <ChartContainer config={chartConfig} className="h-[400px] w-full min-w-0">
           <ComposedChart data={data}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="month" fontSize={11} />
