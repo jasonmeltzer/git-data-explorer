@@ -209,7 +209,19 @@ export default function DashboardPage() {
   // so a dev with sparse activity would render a chart with 2-4 wide bars.
   // Padding each dev's rows to ALL months in the window keeps the X-axis
   // consistent across charts and lets D-19's connectNulls=false render gaps.
-  const allMonths = buildMonthAxis(startDate, endDate);
+  //
+  // Trim trailing months that have zero activity across all developers. Today's
+  // date is inclusive of the current calendar month, but the current month may
+  // have no data yet (just started). An empty trailing column also breaks the
+  // zoom modal's cohort 25-75 band Area, which renders only where cohort
+  // percentiles are non-null — making the band visibly shorter than the X-axis.
+  const activeMonthSet = new Set(developerRows.map(r => r.month));
+  const allMonthsRaw = buildMonthAxis(startDate, endDate);
+  let lastActiveIdx = allMonthsRaw.length - 1;
+  while (lastActiveIdx >= 0 && !activeMonthSet.has(allMonthsRaw[lastActiveIdx])) {
+    lastActiveIdx--;
+  }
+  const allMonths = lastActiveIdx >= 0 ? allMonthsRaw.slice(0, lastActiveIdx + 1) : allMonthsRaw;
 
   // Bucket rows by author. tenureJoinedAt sourced from contributorsQuery.
   // cohortKey defaults to 'mid' when contributor lookup is missing.

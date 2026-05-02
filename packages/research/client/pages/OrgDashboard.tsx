@@ -112,9 +112,19 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   // sparse contributors render with the same X-axis density as everyone else.
   // Without this, a dev active in 4 months produces a chart with 4 wide bars
   // spread across the full container width — visually misleading.
-  const allMonths = bundle?.metadata
+  //
+  // Trim trailing months that have zero activity across the bundle. Bundles
+  // exported on the 1st of a month (or any time before the first commit lands)
+  // include an empty trailing month that breaks the zoom modal's cohort band.
+  const activeMonthSet = new Set(developerRows.map(r => r.month));
+  const allMonthsRaw = bundle?.metadata
     ? buildMonthAxis(bundle.metadata.startDate, bundle.metadata.endDate)
     : [];
+  let lastActiveIdx = allMonthsRaw.length - 1;
+  while (lastActiveIdx >= 0 && !activeMonthSet.has(allMonthsRaw[lastActiveIdx])) {
+    lastActiveIdx--;
+  }
+  const allMonths = lastActiveIdx >= 0 ? allMonthsRaw.slice(0, lastActiveIdx + 1) : allMonthsRaw;
 
   // Group rows by author + look up cohort/tenure from bundle.contributors
   const distinctAuthorsAll = Array.from(new Set(developerRows.map(r => r.authorLogin)));
