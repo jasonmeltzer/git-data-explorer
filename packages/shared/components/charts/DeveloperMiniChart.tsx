@@ -90,6 +90,7 @@ export function DeveloperMiniChart({
             dataKey="value"
             fill="var(--chart-1)"
             radius={[2, 2, 0, 0]}
+            maxBarSize={compact ? 24 : 48}
           />
           <Line
             type="monotone"

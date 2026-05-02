@@ -146,6 +146,7 @@ export function DeveloperZoomModal({
               fill="var(--chart-1)"
               radius={[2, 2, 0, 0]}
               isAnimationActive={false}
+              maxBarSize={64}
             />
 
             <Line
