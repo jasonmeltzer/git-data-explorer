@@ -147,17 +147,28 @@ function DeveloperListRow({
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="pt-2 pb-4 px-2">
-          <DeveloperMiniChart
-            authorLogin={dev.authorLogin}
-            data={data}
-            metric={metric}
-            aiMarkerMonth={aiMarkerMonth}
-            isLoading={isLoading}
-            compact={false}
-            onClick={onChartClick}
-          />
-        </div>
+        {/*
+          Only mount the chart while the row is expanded. base-ui's Collapsible
+          keeps content mounted but hidden when collapsed, so a chart rendered
+          here on first mount measures itself against a zero-width container
+          and locks the axes to that width. Reopening doesn't re-measure, so
+          the visible axes look narrower than the container. Mounting fresh
+          each time the row opens forces ResponsiveContainer to measure the
+          actual expanded width.
+        */}
+        {open && (
+          <div className="pt-2 pb-4 px-2">
+            <DeveloperMiniChart
+              authorLogin={dev.authorLogin}
+              data={data}
+              metric={metric}
+              aiMarkerMonth={aiMarkerMonth}
+              isLoading={isLoading}
+              compact={false}
+              onClick={onChartClick}
+            />
+          </div>
+        )}
       </CollapsibleContent>
     </Collapsible>
   );
