@@ -282,3 +282,28 @@ export interface HeadcountMonthlyRow {
   prsPerDev: number | null;   // null if activeDevs=0
   commitsPerDev: number | null;
 }
+
+/**
+ * Per-developer monthly time series row (Phase 9.5).
+ *
+ * One row per active dev per month across the analysis window. prCount and
+ * commitCount = 0 for inactive months. Per-commit size signals (lines/files)
+ * are null when commitCount = 0 — distinguishes "no activity" from "tiny
+ * commits" (D-19). Bots excluded via authors.is_bot = 0 (D-23).
+ *
+ * Sort order: by (authorLogin, month) ascending so consumers can chunk by
+ * author easily.
+ *
+ * Lines = additions + deletions per commit (total churn), not net (D-18).
+ * Median computed via TypeScript post-processing — SQLite has no MEDIAN().
+ */
+export interface DeveloperMonthlyRow {
+  authorLogin: string;            // raw login in main app, animal name post-anonymizer
+  month: string;                  // 'YYYY-MM' UTC
+  prCount: number;                // PRs created in month (created_at month basis, D-12)
+  commitCount: number;            // non-bot commits authored in month
+  meanLinesPerCommit: number | null;     // null when commitCount = 0
+  medianLinesPerCommit: number | null;   // null when commitCount = 0
+  meanFilesPerCommit: number | null;     // null when commitCount = 0
+  medianFilesPerCommit: number | null;   // null when commitCount = 0
+}

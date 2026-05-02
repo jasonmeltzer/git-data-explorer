@@ -256,8 +256,8 @@ describe('CollectionQueue', () => {
       insertTestRepo(1, 'org/months-test');
 
       const twoMonthsAgo = new Date();
-      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
       twoMonthsAgo.setDate(1);
+      twoMonthsAgo.setMonth(twoMonthsAgo.getMonth() - 2);
       twoMonthsAgo.setHours(0, 0, 0, 0);
 
       upsertCollectionState(1, 'commits', {
@@ -282,13 +282,13 @@ describe('CollectionQueue', () => {
       insertTestRepo(1, 'org/bottleneck-test');
 
       const threeMonthsAgo = new Date();
-      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 2);
       threeMonthsAgo.setDate(1);
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 2);
       threeMonthsAgo.setHours(0, 0, 0, 0);
 
       const oneMonthAgo = new Date();
-      oneMonthAgo.setMonth(oneMonthAgo.getMonth());
       oneMonthAgo.setDate(1);
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth());
       oneMonthAgo.setHours(0, 0, 0, 0);
 
       // Commits collected 3 months, PRs only 1 month

@@ -212,6 +212,7 @@ function makeFullBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
     ],
     concentrationMonthly: [],
     headcountMonthly: [],
+    developerMonthly: [],   // Phase 9.5-01 — type-skeleton stub
     ...overrides,
   };
 }
@@ -381,6 +382,7 @@ function readBackBundle(
     periodMetrics: null,        // not persisted in snapshots table (Phase 9.4 D-13)
     concentrationMonthly: [],
     headcountMonthly: [],
+    developerMonthly: [],       // Phase 9.5-01 — type-skeleton stub; Plan 03 wires real reconstruction
   };
 }
 

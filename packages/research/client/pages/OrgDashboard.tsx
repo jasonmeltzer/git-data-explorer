@@ -4,6 +4,13 @@ import { Badge } from '@shared/components/ui/badge.js';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card.js';
 import { Skeleton } from '@shared/components/ui/skeleton.js';
 import { Tabs, TabsList, TabsTrigger } from '@shared/components/ui/tabs.js';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@shared/components/ui/select.js';
 import { StatCalloutBox } from '@shared/components/charts/StatCalloutBox.js';
 import { StatCalloutRow } from '@shared/components/charts/StatCalloutRow.js';
 import NarrativeCard from '@shared/components/charts/NarrativeCard.js';
@@ -15,10 +22,18 @@ import { HelpPanel } from '@shared/components/HelpPanel.js';
 import { TeamDistributionChart } from '@shared/components/charts/TeamDistributionChart.js';
 import { TeamDistributionTable } from '@shared/components/charts/TeamDistributionTable.js';
 import { BeforeAfterComparison } from '@shared/components/charts/BeforeAfterComparison.js';
+import {
+  DeveloperTrajectoryGrid,
+  chooseDevLayout,
+  type DeveloperWithRows,
+} from '@shared/components/charts/DeveloperTrajectoryGrid.js';
+import { DeveloperTrajectoryList } from '@shared/components/charts/DeveloperTrajectoryList.js';
+import { DeveloperZoomModal } from '@shared/components/charts/DeveloperZoomModal.js';
 import { computeCohortInsights, computeRampUpInsights } from '@shared/lib/insights.js';
-import { cohortTrendNarrative, METRIC_NARRATIVE_LABELS, METRIC_OPTIONS, CONCENTRATION_BASIS_OPTIONS } from '@shared/lib/narratives.js';
-import type { MetricOption } from '@shared/lib/narratives.js';
+import { cohortTrendNarrative, METRIC_NARRATIVE_LABELS, METRIC_OPTIONS, CONCENTRATION_BASIS_OPTIONS, DEVELOPER_METRIC_OPTIONS } from '@shared/lib/narratives.js';
+import type { MetricOption, DeveloperMetricOption } from '@shared/lib/narratives.js';
 import type { ConcentrationBasis } from '@shared/types.js';
+import type { DeveloperMonthlyRow } from '@shared/export-types.js';
 import SnapshotHistory from '../components/SnapshotHistory.js';
 import { useOrg } from '../hooks/useOrgs.js';
 import OrgMetadataForm from '../components/OrgMetadataForm.js';
@@ -27,6 +42,18 @@ import { useSnapshotData } from '../hooks/useSnapshotData.js';
 interface OrgDashboardProps {
   orgId: number;
 }
+
+/**
+ * D-15 cohort filter labels. base-ui's Select.Value renders the raw token
+ * unless explicit children are passed; this map provides the human-readable
+ * label keyed by the internal cohort token.
+ */
+const COHORT_FILTER_LABELS: Record<'all' | 'senior' | 'mid' | 'new', string> = {
+  all: 'All',
+  senior: 'Senior',
+  mid: 'Mid',
+  new: 'Junior',
+};
 
 export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   const { data: org, isLoading: orgLoading } = useOrg(orgId);
@@ -38,6 +65,12 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   const [rampUpView, setRampUpView] = useState<'chart' | 'table'>('chart');
   const [concentrationBasis, setConcentrationBasis] = useState<ConcentrationBasis>('prs');
   const [concentrationView, setConcentrationView] = useState<'chart' | 'table'>('chart');
+
+  // Phase 9.5 (D-12, D-13, D-14, D-15): Contribution Patterns section state
+  const [contribMetric, setContribMetric] = useState<DeveloperMetricOption>('prCount');
+  const [zoomedDev, setZoomedDev] = useState<string | null>(null);
+  const [cohortFilter, setCohortFilter] = useState<'senior' | 'mid' | 'new' | 'all'>('all');
+  const [minActiveMonths, setMinActiveMonths] = useState<number>(1);
 
   const snapshotId = selectedSnapshotId ?? (org?.snapshots?.[0]?.id ?? null);
   const { data: bundle, isFetching: dataFetching } = useSnapshotData(orgId, snapshotId);
@@ -71,6 +104,72 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
   const prInsights = computeCohortInsights(bundle?.cohortPrs ?? [], prMetric, 'pr');
   const commitInsights = computeCohortInsights(bundle?.cohortCommits ?? [], commitMetric, 'commit');
   const rampUpInsights = computeRampUpInsights(bundle?.rampUp ?? [], !!aiMarkerDate);
+
+  // Phase 9.5 (D-12, D-14, D-15): Build per-developer rows + apply Cohort + Min Activity filters
+  const developerRows: DeveloperMonthlyRow[] = bundle?.developerMonthly ?? [];
+
+  // Pad each dev's rows to cover all months in the bundle's analysis window so
+  // sparse contributors render with the same X-axis density as everyone else.
+  // Without this, a dev active in 4 months produces a chart with 4 wide bars
+  // spread across the full container width — visually misleading.
+  const allMonths = bundle?.metadata
+    ? buildMonthAxis(bundle.metadata.startDate, bundle.metadata.endDate)
+    : [];
+
+  // Group rows by author + look up cohort/tenure from bundle.contributors
+  const distinctAuthorsAll = Array.from(new Set(developerRows.map(r => r.authorLogin)));
+  const allDevelopersWithRows: DeveloperWithRows[] = distinctAuthorsAll.map(login => {
+    const authorRows = developerRows.filter(r => r.authorLogin === login);
+    const byMonth = new Map(authorRows.map(r => [r.month, r]));
+    const rows = allMonths.length > 0
+      ? allMonths.map(month => byMonth.get(month) ?? {
+          authorLogin: login,
+          month,
+          prCount: 0,
+          commitCount: 0,
+          meanLinesPerCommit: null,
+          medianLinesPerCommit: null,
+          meanFilesPerCommit: null,
+          medianFilesPerCommit: null,
+        })
+      : authorRows;
+    const contrib = (bundle?.contributors ?? []).find((c: { authorLogin: string }) => c.authorLogin === login);
+    const tenureJoinedAt = (contrib as { firstCommitAt?: string | null } | undefined)?.firstCommitAt ?? null;
+    const cohortKey = (contrib as { cohort?: string } | undefined)?.cohort ?? 'mid';
+    return { authorLogin: login, tenureJoinedAt, cohortKey, rows };
+  });
+
+  // Apply Cohort filter (D-15)
+  const cohortFiltered = cohortFilter === 'all'
+    ? allDevelopersWithRows
+    : allDevelopersWithRows.filter(d => d.cohortKey === cohortFilter);
+
+  // Apply Min Activity filter (D-15) — count distinct months with any activity
+  const filteredDevs = cohortFiltered.filter(d => {
+    const activeMonths = d.rows.filter(r => r.prCount > 0 || r.commitCount > 0).length;
+    return activeMonths >= minActiveMonths;
+  });
+
+  // Sort by tenure descending (D-06 — longest-tenured first)
+  filteredDevs.sort((a, b) =>
+    (a.tenureJoinedAt ?? '9999').localeCompare(b.tenureJoinedAt ?? '9999')
+  );
+
+  // D-14: layout switch based on filtered active dev count (threshold 8 — chooseDevLayout)
+  const activeDevsCount = filteredDevs.length;
+  const contribLayoutMode = chooseDevLayout(activeDevsCount);
+
+  // Cohort means (cohort-relative overlay) and cohort band (modal only)
+  const contribCohortMeans = computeCohortMeans(filteredDevs, contribMetric);
+  const zoomedDevObj = zoomedDev ? filteredDevs.find(d => d.authorLogin === zoomedDev) : null;
+  const contribCohortBand = zoomedDevObj
+    ? computeCohortBand(filteredDevs, zoomedDevObj.cohortKey, contribMetric)
+    : new Map<string, { p25: number | null; p75: number | null }>();
+  const contribCohortMeanForZoom = zoomedDevObj
+    ? (contribCohortMeans.get(zoomedDevObj.cohortKey) ?? new Map<string, number | null>())
+    : new Map<string, number | null>();
+
+  const contribAiMarkerMonth = aiMarkerDate ? aiMarkerDate.slice(0, 7) : null;
 
   return (
     <div className="max-w-5xl mx-auto px-6 pb-16 space-y-8">
@@ -205,6 +304,112 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
               </p>
             </HelpPanel>
           </div>
+        </div>
+      </section>
+
+      {/* Phase 9.5: Contribution Patterns section (D-12, D-13, D-14, D-15) */}
+      <section>
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-lg font-semibold tracking-tight">Contribution Patterns</h2>
+        </div>
+        <div className="space-y-4">
+          {/* HelpPanel — D-13 SHORTER copy verbatim. Always default-open since D-13 has no opt-in collapse. */}
+          <HelpPanel defaultOpen={true}>
+            <p>
+              Per-developer monthly trajectories for this snapshot. Pseudonyms are applied at export time (animal names). Patterns at the cohort level reveal team dynamics; individual variation mostly reflects role/project type, not effort or skill. Use the metric tabs to switch between PRs, commits, lines per commit, and files per commit. Click any chart for a larger view with cohort-band context.
+            </p>
+          </HelpPanel>
+
+          {/* Filters: Cohort dropdown + Min Activity slider (D-15) + metric Tabs (D-03) */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Cohort filter — D-15 verbatim options */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Cohort:</span>
+              <Select value={cohortFilter} onValueChange={(v) => setCohortFilter(v as 'senior' | 'mid' | 'new' | 'all')}>
+                <SelectTrigger className="h-7 text-xs w-[120px]">
+                  {/* base-ui Select.Value needs explicit children — without them it falls back to the raw value token */}
+                  <SelectValue>{COHORT_FILTER_LABELS[cohortFilter]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="senior">Senior</SelectItem>
+                  <SelectItem value="mid">Mid</SelectItem>
+                  <SelectItem value="new">Junior</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Min Activity slider — D-15. Plain HTML <input type="range"> (no shadcn Slider primitive exists). */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-muted-foreground" htmlFor="min-activity-slider">
+                Min activity: {minActiveMonths} active month{minActiveMonths === 1 ? '' : 's'}
+              </label>
+              <input
+                id="min-activity-slider"
+                type="range"
+                min={1}
+                max={12}
+                value={minActiveMonths}
+                onChange={(e) => setMinActiveMonths(Number(e.target.value))}
+                className="w-32"
+              />
+            </div>
+
+            {/* Metric Tabs — D-03 verbatim labels */}
+            <div className="ml-auto">
+              <Tabs value={contribMetric} onValueChange={(v) => setContribMetric(v as DeveloperMetricOption)}>
+                <TabsList className="h-8 gap-1">
+                  {DEVELOPER_METRIC_OPTIONS.map(opt => (
+                    <TabsTrigger
+                      key={opt.value}
+                      value={opt.value}
+                      className="text-xs px-3 py-1 data-active:bg-primary data-active:text-primary-foreground"
+                    >
+                      {opt.label}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          </div>
+
+          {filteredDevs.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No active contributors in the selected date range.</p>
+          ) : (
+            contribLayoutMode === 'grid' ? (
+              <DeveloperTrajectoryGrid
+                developers={filteredDevs}
+                metric={contribMetric}
+                aiMarkerMonth={contribAiMarkerMonth}
+                cohortMeanByMonthAndCohort={contribCohortMeans}
+                onChartClick={setZoomedDev}
+                isLoading={dataFetching && !bundle?.developerMonthly}
+              />
+            ) : (
+              <DeveloperTrajectoryList
+                developers={filteredDevs}
+                metric={contribMetric}
+                aiMarkerMonth={contribAiMarkerMonth}
+                cohortMeanByMonthAndCohort={contribCohortMeans}
+                onChartClick={setZoomedDev}
+                isLoading={dataFetching && !bundle?.developerMonthly}
+              />
+            )
+          )}
+
+          {/* Click-to-zoom modal (D-05) — same component as main app, populated with research-tool data */}
+          {zoomedDevObj && (
+            <DeveloperZoomModal
+              open={zoomedDev !== null}
+              onOpenChange={(open) => { if (!open) setZoomedDev(null); }}
+              authorLogin={zoomedDevObj.authorLogin}
+              rows={zoomedDevObj.rows}
+              cohortMeanByMonth={contribCohortMeanForZoom}
+              cohortBandByMonth={contribCohortBand}
+              aiMarkerMonth={contribAiMarkerMonth}
+              initialMetric={contribMetric}
+            />
+          )}
         </div>
       </section>
 
@@ -538,4 +743,88 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
       )}
     </div>
   );
+}
+
+// Phase 9.5 helpers — copied from Plan 07 (DashboardPage). If both files diverge,
+// promote to a shared lib at packages/shared/lib/developer-monthly-helpers.ts.
+
+/**
+ * Build the inclusive list of 'YYYY-MM' month keys spanning [start, end] (UTC).
+ * Used to pad each dev's rows so every chart shares the same X-axis density.
+ */
+function buildMonthAxis(startDate: string, endDate: string): string[] {
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) return [];
+  const months: string[] = [];
+  const cursor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+  const last = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1));
+  while (cursor <= last) {
+    months.push(`${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`);
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
+  }
+  return months;
+}
+
+function metricValue(row: DeveloperMonthlyRow, metric: DeveloperMetricOption): number | null {
+  switch (metric) {
+    case 'prCount': return row.prCount;
+    case 'commitCount': return row.commitCount;
+    case 'linesPerCommit': return row.meanLinesPerCommit;
+    case 'filesPerCommit': return row.meanFilesPerCommit;
+  }
+}
+
+function computeCohortMeans(
+  devs: DeveloperWithRows[],
+  metric: DeveloperMetricOption,
+): Map<string, Map<string, number | null>> {
+  const out = new Map<string, Map<string, number | null>>();
+  const buckets = new Map<string, Map<string, number[]>>();
+  for (const dev of devs) {
+    if (!buckets.has(dev.cohortKey)) buckets.set(dev.cohortKey, new Map());
+    for (const r of dev.rows) {
+      const v = metricValue(r, metric);
+      if (v === null) continue;
+      if (!buckets.get(dev.cohortKey)!.has(r.month)) buckets.get(dev.cohortKey)!.set(r.month, []);
+      buckets.get(dev.cohortKey)!.get(r.month)!.push(v);
+    }
+  }
+  for (const [cohortKey, monthMap] of buckets) {
+    const result = new Map<string, number | null>();
+    for (const [month, values] of monthMap) {
+      result.set(month, values.length > 0 ? values.reduce((s, x) => s + x, 0) / values.length : null);
+    }
+    out.set(cohortKey, result);
+  }
+  return out;
+}
+
+function computeCohortBand(
+  devs: DeveloperWithRows[],
+  cohortKey: string,
+  metric: DeveloperMetricOption,
+): Map<string, { p25: number | null; p75: number | null }> {
+  const monthMap = new Map<string, number[]>();
+  for (const dev of devs) {
+    if (dev.cohortKey !== cohortKey) continue;
+    for (const r of dev.rows) {
+      const v = metricValue(r, metric);
+      if (v === null) continue;
+      if (!monthMap.has(r.month)) monthMap.set(r.month, []);
+      monthMap.get(r.month)!.push(v);
+    }
+  }
+  const out = new Map<string, { p25: number | null; p75: number | null }>();
+  for (const [month, values] of monthMap) {
+    if (values.length < 2) {
+      out.set(month, { p25: null, p75: null });
+      continue;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const p25Idx = Math.floor(sorted.length * 0.25);
+    const p75Idx = Math.floor(sorted.length * 0.75);
+    out.set(month, { p25: sorted[p25Idx], p75: sorted[p75Idx] });
+  }
+  return out;
 }

@@ -29,7 +29,7 @@ import {
 import { useExport, useExportPreview, useIncrementExport } from '../hooks/useExport.js';
 import { buildPseudonymMap, buildRepoMap, anonymizeBundle } from '../lib/anonymizer.js';
 import { toCsv } from '../lib/csv-serializer.js';
-import { rollingToCsv, periodMetricsToCsv, concentrationMonthlyToCsv, headcountMonthlyToCsv, executiveSummaryToCsv } from '../lib/csv-flatteners.js';
+import { rollingToCsv, periodMetricsToCsv, concentrationMonthlyToCsv, headcountMonthlyToCsv, developerMonthlyToCsv, executiveSummaryToCsv } from '../lib/csv-flatteners.js';
 import type { DashboardFilters } from '../hooks/useDashboardFilters.js';
 import type { ExportBundle, ExportRequest } from '@shared/export-types.js';
 import type { ContributorBeforeAfterStats } from '@shared/types.js';
@@ -75,7 +75,9 @@ function contributorsToCsv(contributors: ContributorBeforeAfterStats[]): string 
 }
 
 function extractAllLogins(bundle: ExportBundle): string[] {
-  return Array.from(new Set(bundle.contributors.map(c => c.authorLogin)));
+  const fromContributors = bundle.contributors.map(c => c.authorLogin);
+  const fromDeveloperMonthly = bundle.developerMonthly.map(r => r.authorLogin);
+  return Array.from(new Set([...fromContributors, ...fromDeveloperMonthly]));
 }
 
 // ─── ZIP creation ─────────────────────────────────────────────────────────────
@@ -116,6 +118,9 @@ export function buildZipFileEntries(
     if (bundle.headcountMonthly.length > 0) {
       files['headcount-monthly.json'] = strToU8(JSON.stringify(bundle.headcountMonthly, null, 2));
     }
+    if (bundle.developerMonthly.length > 0) {
+      files['developer-monthly.json'] = strToU8(JSON.stringify(bundle.developerMonthly, null, 2));
+    }
   } else {
     files['cohort-commits.csv'] = strToU8(arrayToCsv(bundle.cohortCommits as unknown as Record<string, unknown>[]));
     files['cohort-prs.csv'] = strToU8(arrayToCsv(bundle.cohortPrs as unknown as Record<string, unknown>[]));
@@ -137,6 +142,9 @@ export function buildZipFileEntries(
     }
     if (bundle.headcountMonthly.length > 0) {
       files['headcount-monthly.csv'] = strToU8(headcountMonthlyToCsv(bundle.headcountMonthly));
+    }
+    if (bundle.developerMonthly.length > 0) {
+      files['developer-monthly.csv'] = strToU8(developerMonthlyToCsv(bundle.developerMonthly));
     }
   }
 

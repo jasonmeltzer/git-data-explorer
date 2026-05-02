@@ -73,7 +73,7 @@ git-data-explorer/
 │  NO GitHub API — all data from imported ExportBundles    │
 │                        │                                 │
 │  SQLite (better-sqlite3) — data/research.db             │
-│  Drizzle ORM schema (11 tables)                         │
+│  Drizzle ORM schema (12 tables)                         │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -84,7 +84,7 @@ git-data-explorer/
 Single-page React app using hash-based routing (`#/dashboard`, `#/landing`, `#/repos`, `#/collection`, `#/settings`). Default route (`#/`) goes to Dashboard. Full dark mode support via `useTheme` hook with localStorage persistence.
 
 - **Pages:** Each page is a self-contained component that fetches its own data via TanStack Query hooks
-- **Dashboard:** Primary view with FilterBar, 8 chart sections (Executive Summary, Cohort Trends, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio, Contributor Table), stat callout boxes, rich help panels, filter scope badges, Chart|Table toggles on all 6 chart sections, and collapsible contributor table with 15 before/after AI delta columns
+- **Dashboard:** Primary view with FilterBar, 9 chart sections (Executive Summary, Team Distribution, Cohort Trends, **Contribution Patterns**, Ramp-Up Curves, Before/After Comparison, PR Turnaround, Rolling Comparisons, Bot vs Human Ratio) plus a Contributor Table, stat callout boxes, rich help panels, filter scope badges, Chart|Table toggles on most chart sections, and collapsible contributor table with 15 before/after AI delta columns
 - **Charts:** Built on Recharts via shadcn chart primitives. `CohortAreaChart` renders stacked areas with 3 cohort layers. `RampUpLineChart` renders per-join-period lines. `RollingCards` shows metric cards with change percentages. All 6 chart sections support icon-based Chart|Table toggle with sortable data tables via @tanstack/react-table
 - **TanStack Query:** Manages all server state. Query keys like `['repos', 'tracked']` are shared across pages so navigation triggers instant cache hits rather than re-fetches
 - **shadcn/ui:** Component primitives (Button, Checkbox, Input, Badge, AlertDialog, Chart, Table, Collapsible, Card, Skeleton, Select, Popover, Calendar, Tooltip, Command) copied into `packages/shared/components/ui/`. Styled with Tailwind CSS 4
@@ -98,8 +98,8 @@ Hono HTTP server running on Node.js. Serves the API — does not serve the front
 - `settings.ts` — `GET/POST /api/settings/token`, `GET/PUT /api/settings`, sharing consent endpoints
 - `repositories.ts` — 7 endpoints for repo CRUD, GitHub browsing, stop/delete
 - `collection.ts` — `POST /api/collection/start`, `POST /api/collection/stop`, `GET /api/collection/status`, `GET /api/collection/progress` (SSE)
-- `analytics.ts` — 15 analytics endpoints: marker, cohort-config, cohorts (commits+prs), rampup, rolling, contributors, contributors/before-after, pr-turnaround, bot-ratio, summary, period-metrics (replaces before-after), concentration, headcount
-- `export.ts` — `POST /api/export` → builds ExportBundle (11 analytics sections including the 3 Phase 9.4 additions)
+- `analytics.ts` — 16 analytics endpoints: marker, cohort-config, cohorts (commits+prs), rampup, rolling, contributors, contributors/before-after, pr-turnaround, bot-ratio, summary, period-metrics (replaces before-after), concentration, headcount, **developer-monthly** (Phase 9.5)
+- `export.ts` — `POST /api/export` → builds ExportBundle (12 analytics sections including the 3 Phase 9.4 additions and the Phase 9.5 `developerMonthly`)
 - `share.ts` — `POST /api/share/gist`, `POST /api/share/http`, `GET /api/share/reachability`
 
 ### Research Tool Frontend (`packages/research/client/`)
@@ -143,12 +143,12 @@ Hono HTTP server. No GitHub API dependency — all data from imported ExportBund
 ### Shared Package (`packages/shared/`)
 
 Code imported by both main and research frontends:
-- `types.ts` — TypeScript interfaces (GitHubRepo, TrackedRepo, CohortMetricsRow, RampUpBucket, ContributorBeforeAfterStats, and the Phase 9.4 additions: `Period`, `PeriodMetric`, `ConcentrationBasis`, `ConcentrationMonthlyRow`, `HeadcountMonthlyRow`)
-- `export-types.ts` — ExportBundle, ExportMetadata (includes `orgName: string | null` inferred from repo owners), PrTurnaroundRow, BotRatioRow, ExecutiveSummary. Phase 9.4: `beforeAfter` field removed, replaced by `periodMetrics: PeriodMetric[] | null`, `concentrationMonthly: ConcentrationMonthlyRow[]`, `headcountMonthly: HeadcountMonthlyRow[]`. The analytics row types are inlined here (not imported from server) to keep shared free of server-only imports.
+- `types.ts` — TypeScript interfaces (GitHubRepo, TrackedRepo, CohortMetricsRow, RampUpBucket, ContributorBeforeAfterStats, the Phase 9.4 additions: `Period`, `PeriodMetric`, `ConcentrationBasis`, `ConcentrationMonthlyRow`, `HeadcountMonthlyRow`, and the Phase 9.5 addition: `DeveloperMonthlyRow` — 8 fields per author per month, with mean/median pairs nullable when commitCount=0 for D-19 graceful "PR-only month" rendering)
+- `export-types.ts` — ExportBundle, ExportMetadata (includes `orgName: string | null` inferred from repo owners), PrTurnaroundRow, BotRatioRow, ExecutiveSummary. Phase 9.4: `beforeAfter` field removed, replaced by `periodMetrics: PeriodMetric[] | null`, `concentrationMonthly: ConcentrationMonthlyRow[]`, `headcountMonthly: HeadcountMonthlyRow[]`. Phase 9.5: `developerMonthly: DeveloperMonthlyRow[]` added (Zod schema in `validation.ts` uses `.default([])` so pre-9.5 bundles still validate — D-17 graceful degradation). The analytics row types are inlined here (not imported from server) to keep shared free of server-only imports.
 - `cohort-config.ts` — Single source of truth for cohort boundary definitions: `CohortThreshold`, `CohortConfig`, `DEFAULT_COHORT_CONFIG` (3mo/12mo thresholds), `getThresholdSeconds()` for SQL CASE WHEN generation
 - `lib/periods.ts` — `buildPeriodsFromMarker(startDate, endDate, markerDate)` produces `Period[]`. No marker → length-1 All-time; single marker → length-2 Pre-AI/Post-AI. Phase 10 will add multi-marker paths via the same signature.
 - `lib/narratives.ts` — `MetricOption`, `METRIC_OPTIONS`, and `CONCENTRATION_BASIS_OPTIONS` (PRs / Commits / Lines) for metric-selector tabs
-- `components/charts/` — shared chart components: `CohortAreaChart`, `RampUpLineChart`, `RollingCards`, `BeforeAfterComparison` (Phase 9.4: rewired to `PeriodMetric[]`, handles length 0/1/2/>2), `TeamDistributionChart` (Recharts ComposedChart with dual Y-axis), `TeamDistributionTable` (TanStack Table with 8 columns), `ScaryRealPanel` (side-by-side total PRs + PRs/dev)
+- `components/charts/` — shared chart components: `CohortAreaChart`, `RampUpLineChart`, `RollingCards`, `BeforeAfterComparison` (Phase 9.4: rewired to `PeriodMetric[]`, handles length 0/1/2/>2), `TeamDistributionChart` (Recharts ComposedChart with dual Y-axis), `TeamDistributionTable` (TanStack Table with 8 columns), `ScaryRealPanel` (side-by-side total PRs + PRs/dev), and the Phase 9.5 per-developer trajectory family: `DeveloperMiniChart` (Recharts ComposedChart with monthly bars + cohort-relative dashed mean line + AI marker `ReferenceLine` + `connectNulls={false}` so null months render as gaps), `DeveloperTrajectoryGrid` (Layout A — small-multiples grid for ≤8 active devs; also exports `DEV_LAYOUT_THRESHOLD = 8` and `chooseDevLayout(activeDevs)` helpers), `DeveloperTrajectoryList` (Layout C — sortable list with inline-expand for >8 active devs; sortable columns are statically limited to Name and Tenure-Joined-Date via the `SortKey` union — volume metrics are physically unselectable per D-06), `DeveloperZoomModal` (shadcn Dialog with cohort 25–75 percentile band shading and 4 metric tabs). The 4 chart components live at `@shared` with thin re-export shims at `packages/main/client/components/charts/Developer*.tsx` so the main app's relative imports continue to resolve unchanged.
 - `components/ui/` — shadcn/ui primitives (used only by frontend, but placed in shared for the `@shared/*` path alias)
 - `lib/utils.ts` — `cn()` helper for Tailwind class merging
 
@@ -169,7 +169,7 @@ SQLite via better-sqlite3. Drizzle ORM schema.
 
 ### Research DB (`data/research.db`)
 
-Separate SQLite database. 11 tables (Phase 9.4 adds 3 new, drops `before_after_json` from `snapshots`).
+Separate SQLite database. 12 tables (Phase 9.4 adds 3 new and drops `before_after_json` from `snapshots`; Phase 9.5 adds `developer_monthly`).
 
 | Table | Purpose |
 |-------|---------|
@@ -184,6 +184,7 @@ Separate SQLite database. 11 tables (Phase 9.4 adds 3 new, drops `before_after_j
 | `concentration_monthly` | **Phase 9.4.** One row per (snapshot, org, month, basis). Per-basis top-N share, HHI, Gini, bus factor, active devs, top contributor. Nullable share columns handle zero-activity months. |
 | `headcount_monthly` | **Phase 9.4.** One row per (snapshot, org, month). Active dev count + normalized output (PRs/dev, commits/dev). |
 | `period_metrics` | **Phase 9.4.** JSON blob column storing the `PeriodMetric[]` for a snapshot (same pattern as `rolling_comparisons`). Replaces the old `snapshots.before_after_json` column. |
+| `developer_monthly` | **Phase 9.5.** One row per (snapshot, author, month). 8 columns: `author_login`, `period_month`, `pr_count`, `commit_count`, plus 4 nullable mean/median pairs for `lines_per_commit` and `files_per_commit` (null when `commit_count = 0` so the UI can distinguish a PR-only month from a low-output month). Per D-16, indexes are `(snapshot_id, period_month)` and `(snapshot_id, author_login)` — per-snapshot access pattern, intentionally different from sibling tables that index by `org_id`. |
 
 ## Cross-Org Aggregation Engine
 
@@ -227,6 +228,7 @@ User provides source (file/URL/Gist/batch)
                   → INSERT INTO contributors (N rows)
                   → INSERT INTO pr_turnaround (N rows)
                   → INSERT INTO bot_ratio (N rows)
+                  → INSERT INTO developer_monthly (N rows)  ← Phase 9.5
               → Cross-org duplicate detection:
                   → Exact hash match against snapshots in other orgs
                   → Fuzzy match (overlapping owners, repoIds, date ranges)
@@ -286,7 +288,7 @@ Run with `npm run lint`.
 
 ## Testing
 
-Vitest 4.x drives the test suite — **840 tests across 64 files** as of Phase 9.4.3. Two environments in a single config:
+Vitest 4.x drives the test suite — **882 tests across 67 files** as of Phase 9.5. Two environments in a single config:
 
 - **Node tests (default)** — server-side routes, services, import pipeline. Pattern: `vi.mock('../db/client.js', ...)` with in-memory `better-sqlite3`, dynamic route import, `app.request('/api/...')` via Hono. See `packages/main/server/__tests__/routes/analytics.test.ts` and `packages/research/server/__tests__/routes/orgs.test.ts`.
 - **jsdom tests (opt-in)** — React component tests. Each test file declares `// @vitest-environment jsdom` at the top (vitest 4.x removed `environmentMatchGlobs`). Uses `@testing-library/react`, `@testing-library/jest-dom/vitest`, plus `ResizeObserver` and `getBoundingClientRect` polyfills for Recharts. Co-located under `packages/shared/components/charts/__tests__/` and `packages/*/client/__tests__/`.
@@ -295,13 +297,14 @@ Round-trip coverage: `packages/research/server/__tests__/round-trip-phase9.4.tes
 
 ## Recently Closed
 
+- **Phase 9.5 — Contribution Patterns** — Per-developer monthly trajectories surfaced in BOTH the main dashboard and the research-tool OrgDashboard. New analytics service `getDeveloperMonthly(repoIds, periods)` (3-query hybrid: commit aggregates + PR counts + raw per-commit rows for in-memory median, since SQLite has no `MEDIAN()`) feeds a new `/api/analytics/developer-monthly` route. Export pipeline gains `developer-monthly.json`; the anonymizer pseudonymizes `developerMonthly[].authorLogin` with the SAME `pseudonymMap` used for `contributors[].authorLogin` (stable identity across sections). Research DB gains `developer_monthly` table (drizzle migration `0002_handy_roughhouse.sql`); reconstruct route `/api/orgs/:orgId/snapshots/:snapshotId/data` returns the `developerMonthly` section. UI: collapsed-by-default section on main dashboard with HelpPanel (D-10/D-11 verbatim 5-paragraph copy); always-expanded section on research OrgDashboard with HelpPanel (D-13 verbatim shorter copy) plus Cohort filter (Senior / Mid / Junior / All) and Min Activity slider (1–12 active months). 4 promoted chart components live at `@shared/components/charts/`; main-package paths preserved as thin re-export shims. Privacy invariants enforced statically: 0 `dangerouslySetInnerHTML`, 0 real-name reveal, no profile-page navigation, sort exclusion at the type level (`SortKey` union excludes volume metrics). Seed data exhibits 4 archetype trajectories — Steady, AI-Power-User, Plateauing, Declining — across both `seed.db` and the research test-data-generator.
+
 - **Phase 9.4.3 (2026-04-21 external audit)** — 8 items closed: SSRF on `/api/import/url` (SEC-05), path sandbox on `/api/import/batch` (SEC-06), `sql.raw` integer guard across research + main (SEC-07), research DB drizzle-kit migration adoption (MIG-01, MIG-02), better-sqlite3 pin to `^11.10.0` and `@types/node` to `^22.19.17` (COMP-01, COMP-02), `export-service.ts` section-count comment + parity test (DOC-01).
 
 ## What's Not Built Yet
 
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
 - **Research tool: persisted org charts** — OrgDashboard renders aggregated data from the latest snapshot; time-series comparison across snapshots not yet implemented
-- **Per-developer monthly time series** — individual contribution patterns, privacy-framed (Phase 9.5)
 - **Cycle time correction** — firstCommitAt on PRs for first-commit-to-merge measurement (Phase 9.6)
 - **Cross-org Team Distribution aggregation** — Phase 9.4 added per-org concentration/headcount routes and tables; the CrossOrgPage aggregation path for these new sections is deferred to Phase 9.7
 - **Individual onboarding profiles** — per-new-hire first-N-weeks breakdown (Phase 9.8)
@@ -327,12 +330,18 @@ packages/
 │   │   │   │   ├── ExecutiveSummary.tsx
 │   │   │   │   ├── PrTurnaroundChart.tsx
 │   │   │   │   ├── BotRatioChart.tsx
-│   │   │   │   └── charts/                  (most charts live in packages/shared/components/charts/)
+│   │   │   │   └── charts/
+│   │   │   │       ├── DeveloperMiniChart.tsx       # Phase 9.5: re-export shim → @shared/components/charts/
+│   │   │   │       ├── DeveloperTrajectoryGrid.tsx  # Phase 9.5: re-export shim
+│   │   │   │       ├── DeveloperTrajectoryList.tsx  # Phase 9.5: re-export shim
+│   │   │   │       └── DeveloperZoomModal.tsx       # Phase 9.5: re-export shim
+                                                     (most other charts live directly in packages/shared/components/charts/)
 │   │   │   ├── hooks/
 │   │   │   │   ├── useDashboardFilters.ts
 │   │   │   │   ├── useCohortCommits.ts / useCohortPrs.ts
 │   │   │   │   ├── useRampUp.ts / useRolling.ts
 │   │   │   │   ├── useContributors.ts / useContributorBeforeAfter.ts
+│   │   │   │   ├── useDeveloperMonthly.ts          # Phase 9.5: TanStack Query hook keyed on [startDate, endDate, repoIds]
 │   │   │   │   ├── useExport.ts / useSharingStatus.ts
 │   │   │   │   └── useCollectionSSE.ts
 │   │   │   ├── lib/
@@ -366,19 +375,23 @@ packages/
 │   │           ├── analytics-concentration.ts    # Phase 9.4: top-N share, HHI, Gini, bus factor across prs/commits/lines
 │   │           ├── analytics-headcount.ts        # Phase 9.4: active devs, PRs/dev, commits/dev
 │   │           ├── analytics-period-metrics.ts   # Phase 9.4: replaces analytics-before-after; accepts Period[]
+│   │           ├── analytics-developer-monthly.ts # Phase 9.5: getDeveloperMonthly(repoIds, periods) — 3-query hybrid; SQLite-side aggregates + TS-side median
 │   │           ├── analytics-config.ts / analytics-utils.ts
 │   │           ├── cohort-config-service.ts
-│   │           ├── export-service.ts # buildExportBundle (11 analytics sections: cohortCommits, cohortPrs, rampUp, rolling, contributors, prTurnaround, botRatio, executiveSummary, periodMetrics, concentrationMonthly, headcountMonthly)
+│   │           ├── export-service.ts # buildExportBundle (12 analytics sections: cohortCommits, cohortPrs, rampUp, rolling, contributors, prTurnaround, botRatio, executiveSummary, periodMetrics, concentrationMonthly, headcountMonthly, developerMonthly)
 │   │           └── first-commit-fetcher.ts
 │   └── scripts/
 │       └── seed.ts                   # Synthetic data generator (npm run seed). 34 personas (3 bots) across 3 repos. Phase 9.4.2 scenarios: `direct-devon` commit-only persona (zero PRs), `reviewer-riley` PR-reviewer persona (cross-month PRs, minimal commits), `lwilson` refactor wave (week 40, 250 deletion-heavy commits), `dependabot` bot storm (weeks 34-37, 14× commit rate).
 │
 ├── shared/
-│   ├── types.ts                      # Shared TypeScript interfaces
-│   ├── export-types.ts               # ExportBundle, ExportMetadata, etc.
+│   ├── types.ts                      # Shared TypeScript interfaces (Phase 9.5: DeveloperMonthlyRow added)
+│   ├── export-types.ts               # ExportBundle, ExportMetadata, etc. (Phase 9.5: developerMonthly field on ExportBundle)
 │   ├── cohort-config.ts              # CohortConfig, DEFAULT_COHORT_CONFIG
 │   ├── lib/utils.ts                  # cn() class merge helper
+│   ├── lib/narratives.ts             # Phase 9.5: DEVELOPER_METRIC_OPTIONS (4 metric tabs: PRs / Commits / Lines per commit / Files per commit)
 │   ├── lib/sql-safety.ts             # Phase 9.4.3: assertIntegerArray + sqlIntList for sql.raw guards (SEC-07)
+│   ├── components/HelpPanel.tsx      # Phase 9.5: gained optional defaultOpen prop
+│   ├── components/charts/Developer*.tsx  # Phase 9.5: 4 promoted chart components (MiniChart, TrajectoryGrid, TrajectoryList, ZoomModal)
 │   └── components/ui/               # shadcn/ui primitives
 │
 └── research/
@@ -387,6 +400,7 @@ packages/
     │   └── migrations/                # Phase 9.4.3: drizzle-kit generated migrations (MIG-01)
     │       ├── 0000_initial.sql       # Baseline table DDL including pre-9.4 legacy columns
     │       ├── 0001_drop_legacy_columns.sql  # Drops industry, ai_tool, before_after_json (MIG-02)
+    │       ├── 0002_handy_roughhouse.sql      # Phase 9.5: developer_monthly table + indexes
     │       └── meta/                  # _journal.json + per-migration snapshots
     ├── client/
     │   ├── main.tsx                  # Entry point
@@ -400,7 +414,7 @@ packages/
     └── server/
         ├── index.ts                  # Hono app (port 3002). Phase 9.4.3: sqlite.exec(...DDL...) block removed; startup now calls runMigrations()
         ├── db/
-        │   ├── schema.ts             # Drizzle table definitions (11 tables: Phase 9.4 added concentration_monthly, headcount_monthly, period_metrics)
+        │   ├── schema.ts             # Drizzle table definitions (12 tables: Phase 9.4 added concentration_monthly, headcount_monthly, period_metrics; Phase 9.5 added developer_monthly)
         │   ├── client.ts             # DB singleton (data/research.db)
         │   └── migrate.ts            # Phase 9.4.3: runMigrations() + bootstrapMigrationJournal() for legacy DB upgrades
         ├── routes/

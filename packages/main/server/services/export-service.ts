@@ -1,7 +1,7 @@
 /**
  * Server-side export data aggregation service.
  *
- * Aggregates all 11 dashboard data sections into a single ExportBundle.
+ * Aggregates all 12 dashboard data sections into a single ExportBundle.
  * Individual section failures are handled gracefully — they return empty arrays or
  * null rather than failing the entire export.
  */
@@ -24,6 +24,7 @@ import { getExecutiveSummary } from './analytics-summary.js';
 import { getAiMarkerDate } from './analytics-config.js';
 import { getConcentrationMonthly } from './analytics-concentration.js';
 import { getHeadcountMonthly } from './analytics-headcount.js';
+import { getDeveloperMonthly } from './analytics-developer-monthly.js';
 import { getPeriodMetrics } from './analytics-period-metrics.js';
 import { buildPeriodsFromMarker } from '@shared/lib/periods.js';
 import { getCohortConfig } from './cohort-config-service.js';
@@ -254,6 +255,13 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     console.error('[export-service] headcountMonthly failed:', err);
   }
 
+  let developerMonthly: ExportBundle['developerMonthly'] = [];
+  try {
+    developerMonthly = getDeveloperMonthly(repoIds, periods);
+  } catch (err) {
+    console.error('[export-service] developerMonthly failed:', err);
+  }
+
   // ── Build metadata ────────────────────────────────────────────────────────
 
   const filteredRepos = req.repoIds.length === 0
@@ -289,5 +297,6 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     periodMetrics,
     concentrationMonthly,
     headcountMonthly,
+    developerMonthly,
   };
 }

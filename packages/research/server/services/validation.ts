@@ -119,6 +119,19 @@ const HeadcountMonthlyRowSchema = z.object({
   commitsPerDev: z.number().nullable(),
 });
 
+// ─── Phase 9.5 schema ─────────────────────────────────────────────────────────
+
+const DeveloperMonthlyRowSchema = z.object({
+  authorLogin: z.string(),
+  month: z.string(),
+  prCount: z.number(),
+  commitCount: z.number(),
+  meanLinesPerCommit: z.number().nullable(),
+  medianLinesPerCommit: z.number().nullable(),
+  meanFilesPerCommit: z.number().nullable(),
+  medianFilesPerCommit: z.number().nullable(),
+});
+
 export const ExportBundleSchema = z.object({
   metadata: ExportMetadataSchema,
   cohortCommits: z.array(CohortMetricsRowSchema).default([]),
@@ -132,6 +145,7 @@ export const ExportBundleSchema = z.object({
   periodMetrics: z.array(PeriodMetricSchema).nullable().default(null),
   concentrationMonthly: z.array(ConcentrationMonthlyRowSchema).default([]),
   headcountMonthly: z.array(HeadcountMonthlyRowSchema).default([]),
+  developerMonthly: z.array(DeveloperMonthlyRowSchema).default([]),
 });
 
 export type ValidationResult = {

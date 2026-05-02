@@ -657,6 +657,234 @@ d('seed data 9.4.2 × D-16 window non-overlap (9.4.2)', () => {
   });
 });
 
+// ── Phase 9.5 archetypes (D-21) ─────────────────────────────────────────────
+
+interface ArchetypeMonthlyRow {
+  login: string;
+  month: string;
+  pr_count: number;
+  commit_count: number;
+  mean_lines_per_commit: number;
+}
+
+function getArchetypeMonthly(db: Database.Database): ArchetypeMonthlyRow[] {
+  // Joins per-author monthly PR counts to per-author monthly commit metrics for
+  // archetype-bearing logins (arch-*). Uses the same month-bucketing convention
+  // as Plan 02's getDeveloperMonthly (PR.createdAt month for PRs, commit.committedAt
+  // month for commits).
+  return db.prepare(`
+    WITH archetype_authors AS (
+      SELECT id, github_login AS login
+      FROM authors
+      WHERE github_login LIKE 'arch-%' AND is_bot = 0
+    ),
+    pr_months AS (
+      SELECT
+        aa.login,
+        strftime('%Y-%m', p.created_at, 'unixepoch') AS month,
+        COUNT(*) AS pr_count
+      FROM archetype_authors aa
+      JOIN pull_requests p ON p.author_id = aa.id
+      GROUP BY aa.id, month
+    ),
+    commit_months AS (
+      SELECT
+        aa.login,
+        strftime('%Y-%m', c.committed_at, 'unixepoch') AS month,
+        COUNT(*) AS commit_count,
+        AVG(c.lines_added) AS mean_lines_per_commit
+      FROM archetype_authors aa
+      JOIN commits c ON c.author_id = aa.id
+      GROUP BY aa.id, month
+    )
+    SELECT
+      COALESCE(pm.login, cm.login) AS login,
+      COALESCE(pm.month, cm.month) AS month,
+      COALESCE(pm.pr_count, 0) AS pr_count,
+      COALESCE(cm.commit_count, 0) AS commit_count,
+      COALESCE(cm.mean_lines_per_commit, 0) AS mean_lines_per_commit
+    FROM pr_months pm
+    FULL OUTER JOIN commit_months cm
+      ON cm.login = pm.login AND cm.month = pm.month
+    ORDER BY login, month
+  `).all() as ArchetypeMonthlyRow[];
+}
+
+function getAiMarkerMonth(db: Database.Database): string {
+  const row = db.prepare(`
+    SELECT value FROM app_config WHERE key = 'ai_adoption_marker'
+  `).get() as { value: string } | undefined;
+  if (!row) throw new Error('ai_adoption_marker not found in app_config');
+  return row.value.slice(0, 7);  // 'YYYY-MM'
+}
+
+function meanField(rows: ArchetypeMonthlyRow[], field: 'pr_count' | 'mean_lines_per_commit'): number {
+  if (rows.length === 0) return 0;
+  return rows.reduce((s, r) => s + r[field], 0) / rows.length;
+}
+
+d('seed data archetype shapes (Phase 9.5 D-21)', () => {
+  // SQLite shipped with better-sqlite3 may lack FULL OUTER JOIN — fall back to a
+  // UNION of LEFT JOINs if the query throws.
+  test('all 8 archetype-bearing personas appear in the seed', () => {
+    const db = openSeedDb();
+    try {
+      const rows = db.prepare(`
+        SELECT DISTINCT github_login FROM authors WHERE github_login LIKE 'arch-%'
+      `).all() as Array<{ github_login: string }>;
+      expect(rows.length).toBeGreaterThanOrEqual(8);
+      const logins = new Set(rows.map(r => r.github_login));
+      expect(logins.has('arch-steady-stella')).toBe(true);
+      expect(logins.has('arch-aipower-aiden')).toBe(true);
+      expect(logins.has('arch-decline-delia')).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('archetype-steady is roughly stable across AI marker (variance < 50%)', () => {
+    const db = openSeedDb();
+    try {
+      const aiMonth = getAiMarkerMonth(db);
+      const allRows = getArchetypeMonthly(db);
+      const rows = allRows.filter(r => r.login === 'arch-steady-stella');
+      const pre = rows.filter(r => r.month < aiMonth);
+      const post = rows.filter(r => r.month > aiMonth);  // skip marker month boundary
+      const meanPre = meanField(pre, 'pr_count');
+      const meanPost = meanField(post, 'pr_count');
+      expect(meanPre).toBeGreaterThan(0);
+      expect(meanPost).toBeGreaterThan(0);
+      expect(Math.abs(meanPost - meanPre) / meanPre).toBeLessThan(0.5);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('archetype-ai-power-user shows post-AI PR ramp >= 1.6x (base persona)', () => {
+    const db = openSeedDb();
+    try {
+      const aiMonth = getAiMarkerMonth(db);
+      const allRows = getArchetypeMonthly(db);
+      const rows = allRows.filter(r => r.login === 'arch-aipower-aiden');
+      const pre = rows.filter(r => r.month < aiMonth);
+      const post = rows.filter(r => r.month > aiMonth);
+      const meanPre = meanField(pre, 'pr_count');
+      const meanPost = meanField(post, 'pr_count');
+      expect(meanPre).toBeGreaterThan(0);
+      // 2.67x target with Poisson noise — keep tolerance loose to avoid flakes.
+      expect(meanPost / meanPre).toBeGreaterThanOrEqual(1.6);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('archetype-ai-power-user shows lines/commit drop >= 15% post-AI', () => {
+    const db = openSeedDb();
+    try {
+      const aiMonth = getAiMarkerMonth(db);
+      const allRows = getArchetypeMonthly(db);
+      const rows = allRows.filter(r => r.login === 'arch-aipower-aiden');
+      const pre = rows.filter(r => r.month < aiMonth);
+      const post = rows.filter(r => r.month > aiMonth);
+      const linesPre = meanField(pre, 'mean_lines_per_commit');
+      const linesPost = meanField(post, 'mean_lines_per_commit');
+      expect(linesPre).toBeGreaterThan(0);
+      // -0.5 * ramp on logNormal(sizeMu) — exponential drop is much more than 15%
+      expect(linesPost / linesPre).toBeLessThan(0.85);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('archetype-plateauing shows post-AI PR ramp >= 1.5x', () => {
+    const db = openSeedDb();
+    try {
+      const aiMonth = getAiMarkerMonth(db);
+      const allRows = getArchetypeMonthly(db);
+      const rows = allRows.filter(r => r.login === 'arch-plateau-pat');
+      const pre = rows.filter(r => r.month < aiMonth);
+      const post = rows.filter(r => r.month > aiMonth);
+      const meanPre = meanField(pre, 'pr_count');
+      const meanPost = meanField(post, 'pr_count');
+      expect(meanPre).toBeGreaterThan(0);
+      // 3.0x target post-plateau — but average over post window includes the ramp,
+      // so realized average is lower. 1.5x is the conservative tolerance.
+      expect(meanPost / meanPre).toBeGreaterThanOrEqual(1.5);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('archetype-declining shows post-AI commit drop <= 0.7x', () => {
+    const db = openSeedDb();
+    try {
+      const aiMonth = getAiMarkerMonth(db);
+      const allRows = getArchetypeMonthly(db);
+      const rows = allRows.filter(r => r.login === 'arch-decline-dax');
+      const pre = rows.filter(r => r.month < aiMonth);
+      const post = rows.filter(r => r.month > aiMonth);
+      // Use commit_count rather than pr_count — declining persona's monthly PR sampling
+      // (~2 PRs/mo at 5-cpw baseline) is sparse enough that Poisson variance can flip the
+      // ratio above 0.7 even when the underlying drop signal (5→2 cpw, i.e., 0.4×) is intact.
+      // commit_count tracks the same shape with ~10× more samples, so the test reliably
+      // detects regressions in the archetype's commit-generation logic.
+      const meanPreCommits = meanField(pre, 'commit_count');
+      const meanPostCommits = meanField(post, 'commit_count');
+      expect(meanPreCommits).toBeGreaterThan(0);
+      // 0.4x target with Poisson noise on commit_count (much lower than on pr_count);
+      // 0.7x is the upper bound that catches a regression while tolerating noise.
+      expect(meanPostCommits / meanPreCommits).toBeLessThanOrEqual(0.7);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('archetype-declining variant (delia) preserves volume in first 3 post-AI months then drops', () => {
+    const db = openSeedDb();
+    try {
+      const aiMonth = getAiMarkerMonth(db);
+      const allRows = getArchetypeMonthly(db);
+      const rows = allRows.filter(r => r.login === 'arch-decline-delia');
+
+      // Buckets: pre, early-post (first 3 months), late-post (3+ months after marker)
+      function monthOffset(a: string, b: string): number {
+        const [ay, am] = a.split('-').map(Number);
+        const [by, bm] = b.split('-').map(Number);
+        return (by * 12 + bm) - (ay * 12 + am);
+      }
+
+      const pre = rows.filter(r => r.month < aiMonth);
+      const earlyPost = rows.filter(r => {
+        const off = monthOffset(aiMonth, r.month);
+        return off > 0 && off <= 3;
+      });
+      const latePost = rows.filter(r => monthOffset(aiMonth, r.month) > 3);
+
+      // Use commit_count rather than pr_count for the ratio — declining/delia's monthly PR
+      // sampling is too sparse (~1-2 PRs/mo on 5-cpw baseline) for reliable drop detection
+      // under Poisson noise. The drop signal is on commit volume; PR count tracks it but
+      // with much higher variance. D-21's intent (5→2 drop after 3-month delay) is identical.
+      const meanPreCommits = meanField(pre, 'commit_count');
+      const meanEarlyPostCommits = meanField(earlyPost, 'commit_count');
+      const meanLatePostCommits = meanField(latePost, 'commit_count');
+
+      // Sanity: all three buckets have data (13-month window has ≥3 months in each bucket)
+      expect(pre.length).toBeGreaterThan(0);
+      expect(earlyPost.length).toBeGreaterThan(0);
+      expect(latePost.length).toBeGreaterThan(0);
+      expect(meanPreCommits).toBeGreaterThan(0);
+
+      // Early post-AI is similar to pre (within 35% — Poisson + month-1 partial drop)
+      expect(Math.abs(meanEarlyPostCommits - meanPreCommits) / meanPreCommits).toBeLessThan(0.35);
+
+      // Late post-AI is meaningfully below early-post (drop has fully kicked in)
+      expect(meanLatePostCommits).toBeLessThan(meanEarlyPostCommits * 0.7);
+    } finally {
+      db.close();
+    }
+  });
+});
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function isAdjacentMonth(a: string, b: string): boolean {

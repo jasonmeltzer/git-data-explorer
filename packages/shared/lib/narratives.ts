@@ -10,6 +10,23 @@ export const METRIC_OPTIONS: { label: string; value: MetricOption }[] = [
   { label: 'Files Changed', value: 'avgFilesChanged' },
 ];
 
+/**
+ * Phase 9.5 (D-03): Metric tabs for the per-developer "Contribution Patterns"
+ * section on DashboardPage and OrgDashboard. Section-local enum so it doesn't
+ * pollute the cohort-section METRIC_OPTIONS namespace.
+ *
+ * Default tab = 'prCount' per D-03.
+ * Tab labels are LITERALS (verbatim per D-03): "PRs", "Commits", "Lines per commit", "Files per commit".
+ */
+export type DeveloperMetricOption = 'prCount' | 'commitCount' | 'linesPerCommit' | 'filesPerCommit';
+
+export const DEVELOPER_METRIC_OPTIONS: { label: string; value: DeveloperMetricOption }[] = [
+  { label: 'PRs', value: 'prCount' },
+  { label: 'Commits', value: 'commitCount' },
+  { label: 'Lines per commit', value: 'linesPerCommit' },
+  { label: 'Files per commit', value: 'filesPerCommit' },
+];
+
 export const CONCENTRATION_BASIS_OPTIONS: { label: string; value: ConcentrationBasis }[] = [
   { label: 'PRs', value: 'prs' },
   { label: 'Commits', value: 'commits' },

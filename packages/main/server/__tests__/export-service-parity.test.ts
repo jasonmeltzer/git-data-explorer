@@ -35,6 +35,7 @@ describe('export-service.ts doc-code parity (DOC-01)', () => {
       periodMetrics: null,
       concentrationMonthly: [],
       headcountMonthly: [],
+      developerMonthly: [],   // Phase 9.5-01 — type-skeleton stub
     };
     const actualCount = Object.keys(synthetic).filter((k) => k !== 'metadata').length;
 

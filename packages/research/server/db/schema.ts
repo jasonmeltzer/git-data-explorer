@@ -133,6 +133,28 @@ export const headcountMonthly = sqliteTable('headcount_monthly', {
   index('idx_headcount_monthly_org').on(table.orgId),
 ]);
 
+/**
+ * Phase 9.5 — per-developer monthly time series mirror table.
+ * Mirrors DeveloperMonthlyRow shape; indexed by snapshot_id (per D-16 access pattern).
+ * Per-commit size columns are nullable to encode zero-commit months (D-19).
+ */
+export const developerMonthly = sqliteTable('developer_monthly', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  snapshotId: integer('snapshot_id').notNull().references(() => snapshots.id),
+  orgId: integer('org_id').notNull().references(() => orgs.id),
+  authorLogin: text('author_login').notNull(),
+  periodMonth: text('period_month').notNull(),
+  prCount: integer('pr_count').notNull(),
+  commitCount: integer('commit_count').notNull(),
+  meanLinesPerCommit: real('mean_lines_per_commit'),
+  medianLinesPerCommit: real('median_lines_per_commit'),
+  meanFilesPerCommit: real('mean_files_per_commit'),
+  medianFilesPerCommit: real('median_files_per_commit'),
+}, (table) => [
+  index('idx_developer_monthly_snapshot_month').on(table.snapshotId, table.periodMonth),
+  index('idx_developer_monthly_snapshot_author').on(table.snapshotId, table.authorLogin),
+]);
+
 export const periodMetrics = sqliteTable('period_metrics', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   snapshotId: integer('snapshot_id').notNull().references(() => snapshots.id),

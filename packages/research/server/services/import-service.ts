@@ -16,6 +16,7 @@ import {
   concentrationMonthly,
   headcountMonthly,
   periodMetrics,
+  developerMonthly,
 } from '../db/schema.js';
 import { eq, and, ne } from 'drizzle-orm';
 import { validateBundle } from './validation.js';
@@ -76,6 +77,7 @@ export function parseZipBundle(buffer: Buffer): unknown {
     periodMetrics: readJson('period-metrics.json') ?? null,
     concentrationMonthly: readJson('concentration-monthly.json') ?? [],
     headcountMonthly: readJson('headcount-monthly.json') ?? [],
+    developerMonthly: readJson('developer-monthly.json') ?? [],
   };
 }
 
@@ -413,6 +415,31 @@ export function importBundle(
           prsPerDev: row.prsPerDev ?? null,
           commitsPerDev: row.commitsPerDev ?? null,
         }).run();
+      }
+    }
+
+    // Insert developer_monthly rows (Phase 9.5).
+    // Per-section try/catch (orchestrator-required) — researcher imports of foreign
+    // bundles are higher-risk; isolate developerMonthly failures from aborting the
+    // whole transaction. Validated by Zod (Plan 01) before reaching this loop.
+    if (data.developerMonthly?.length) {
+      try {
+        for (const row of data.developerMonthly) {
+          db.insert(developerMonthly).values({
+            snapshotId: snapId,
+            orgId: orgId as number,
+            authorLogin: row.authorLogin,
+            periodMonth: row.month,
+            prCount: row.prCount,
+            commitCount: row.commitCount,
+            meanLinesPerCommit: row.meanLinesPerCommit ?? null,
+            medianLinesPerCommit: row.medianLinesPerCommit ?? null,
+            meanFilesPerCommit: row.meanFilesPerCommit ?? null,
+            medianFilesPerCommit: row.medianFilesPerCommit ?? null,
+          }).run();
+        }
+      } catch (err) {
+        console.error('[import-service] developerMonthly insert failed:', err);
       }
     }
 
