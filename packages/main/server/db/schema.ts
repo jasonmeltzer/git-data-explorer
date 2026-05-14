@@ -59,6 +59,7 @@ export const pullRequests = sqliteTable('pull_requests', {
   state: text('state').notNull(),   // open, closed, merged
   createdAt: integer('created_at', { mode: 'timestamp' }).notNull(),
   mergedAt: integer('merged_at', { mode: 'timestamp' }),
+  firstCommitAt: integer('first_commit_at', { mode: 'timestamp' }),  // D-04: nullable; min(authoredDate, committedDate) per PR per D-02
   closedAt: integer('closed_at', { mode: 'timestamp' }),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).notNull(),
   linesAdded: integer('lines_added').notNull().default(0),
