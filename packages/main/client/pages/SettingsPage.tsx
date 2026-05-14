@@ -56,6 +56,26 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
   const [seniorLabelError, setSeniorLabelError] = useState<string>('');
   const [showSaved, setShowSaved] = useState(false);
 
+  // --- Cycle time outlier cap (D-08) ---
+  const [cycleMaxDays, setCycleMaxDays] = useState<string>('90');
+  const [cycleMaxError, setCycleMaxError] = useState<string>('');
+
+  const cycleMaxQuery = useQuery({
+    queryKey: ['settings', 'cycle-time-max-days'],
+    queryFn: () =>
+      fetch('/api/settings/cycle-time-max-days').then(r => r.json() as Promise<{ days: number }>),
+  });
+
+  const cycleMaxMutation = useMutation({
+    mutationFn: (days: number) =>
+      fetch('/api/settings/cycle-time-max-days', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days }),
+      }).then(r => r.json()),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['settings', 'cycle-time-max-days'] }),
+  });
+
   // Sync form fields from loaded config
   useEffect(() => {
     if (config) {
@@ -66,6 +86,23 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
       setSeniorLabel(config.thresholds[2].label);
     }
   }, [config]);
+
+  // Sync cycle-time cap from server
+  useEffect(() => {
+    if (cycleMaxQuery.data && cycleMaxQuery.data.days != null) {
+      setCycleMaxDays(String(cycleMaxQuery.data.days));
+    }
+  }, [cycleMaxQuery.data]);
+
+  function handleSaveCycleMax() {
+    const v = parseInt(cycleMaxDays, 10);
+    if (!Number.isInteger(v) || v < 1 || v > 365) {
+      setCycleMaxError('Must be an integer between 1 and 365 days');
+      return;
+    }
+    setCycleMaxError('');
+    cycleMaxMutation.mutate(v);
+  }
 
   function validate(): boolean {
     let valid = true;
@@ -264,6 +301,39 @@ export default function SettingsPage({ onNavigateRepos }: Props) {
             )}
           </CardContent>
         </Card>
+
+        {/* Cycle Time Analytics (D-08) */}
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Cycle Time Analytics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Outlier cap (days)</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={cycleMaxDays}
+                  onChange={e => setCycleMaxDays(e.target.value)}
+                />
+                {cycleMaxError && <p className="text-xs text-destructive mt-1">{cycleMaxError}</p>}
+                <p className="text-xs text-muted-foreground mt-1">
+                  PRs with cycle time (first commit → merge) above this cap are excluded from cycle-time medians but remain queryable in PR tables. Default 90 covers typical feature branches; branches running longer are usually long-lived release branches or rebased experiments and represent atypical cycle time. Changing this retroactively adjusts which PRs are in the metric — useful for sensitivity analysis.
+                </p>
+              </div>
+            </div>
+            <Button
+              onClick={handleSaveCycleMax}
+              disabled={cycleMaxMutation.isPending}
+              className="mt-3"
+            >
+              {cycleMaxMutation.isPending ? 'Saving...' : 'Save'}
+            </Button>
+          </CardContent>
+        </Card>
+
         {/* Data Sharing */}
         <Card className="mt-6">
           <CardHeader>
