@@ -1,0 +1,1 @@
+ALTER TABLE `pull_requests` ADD `first_commit_at` integer;
