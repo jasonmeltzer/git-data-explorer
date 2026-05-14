@@ -5,6 +5,7 @@ import { db } from '../db/client.js';
 import { appConfig, collectionState } from '../db/schema.js';
 import { getTokenStatus, validateAndSaveToken } from '../services/token.js';
 import { getDepthSetting, setDepthSetting } from '../services/collection-state.js';
+import { getCycleTimeMaxDays, setCycleTimeMaxDays } from '../services/analytics-config.js';
 
 const settings = new Hono();
 
@@ -103,6 +104,24 @@ settings.put('/api/settings/depth', async (c) => {
   }
   setDepthSetting(parsed.data.months);
   return c.json({ success: true, depthMonths: parsed.data.months });
+});
+
+// GET /api/settings/cycle-time-max-days — get current cycle-time outlier cap (D-08)
+settings.get('/api/settings/cycle-time-max-days', (c) => {
+  return c.json({ days: getCycleTimeMaxDays() });
+});
+
+// PUT /api/settings/cycle-time-max-days — update the cap (1-365 days)
+const cycleMaxSchema = z.object({ days: z.number().int().min(1).max(365) });
+
+settings.put('/api/settings/cycle-time-max-days', async (c) => {
+  const body = await c.req.json().catch(() => null);
+  const parsed = cycleMaxSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ success: false, error: 'Invalid days value (must be an integer between 1 and 365)' }, 400);
+  }
+  setCycleTimeMaxDays(parsed.data.days);
+  return c.json({ success: true, days: parsed.data.days });
 });
 
 // ─── Sharing consent endpoints ────────────────────────────────────────────────
