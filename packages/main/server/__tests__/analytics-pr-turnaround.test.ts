@@ -1,10 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import * as schema from '../db/schema.js';
-import { vi } from 'vitest';
 
-// Build an in-memory test database with the full schema
+// ── In-memory test database (must be created before module mock) ──────────────
 function createTestDb() {
   const sqlite = new Database(':memory:');
   sqlite.pragma('foreign_keys = ON');
@@ -59,6 +58,7 @@ function createTestDb() {
       state TEXT NOT NULL,
       created_at INTEGER NOT NULL,
       merged_at INTEGER,
+      first_commit_at INTEGER,
       closed_at INTEGER,
       updated_at INTEGER NOT NULL,
       lines_added INTEGER NOT NULL DEFAULT 0,
@@ -82,12 +82,6 @@ function createTestDb() {
     );
 
     CREATE UNIQUE INDEX idx_collection_repo_type_unique ON collection_state (repo_id, resource_type);
-    CREATE INDEX idx_commits_repo_date ON commits (repo_id, committed_at);
-    CREATE INDEX idx_commits_author ON commits (author_id);
-    CREATE UNIQUE INDEX idx_commits_sha_repo ON commits (sha, repo_id);
-    CREATE INDEX idx_prs_repo_date ON pull_requests (repo_id, created_at);
-    CREATE INDEX idx_prs_author ON pull_requests (author_id);
-    CREATE UNIQUE INDEX idx_prs_github_id_repo ON pull_requests (github_id, repo_id);
   `);
 
   return drizzle(sqlite, { schema });
@@ -95,175 +89,223 @@ function createTestDb() {
 
 const testDb = createTestDb();
 
+// ── Module mock (must be hoisted before service imports) ──────────────────────
 vi.mock('../db/client.js', () => ({
   db: testDb,
   sqlite: null,
 }));
 
-// Import service AFTER mock
+// ── Dynamic imports AFTER mock ─────────────────────────────────────────────────
 const { getPrTurnaroundTrend } = await import('../services/analytics-pr-turnaround.js');
+const { setCycleTimeMaxDays } = await import('../services/analytics-config.js');
 
-// ---- Helpers ----
+// ── Time constants (UTC epochs, seconds) ──────────────────────────────────────
+const JAN_15_2025 = Math.floor(Date.UTC(2025, 0, 15) / 1000);  // 2025-01-15
+const JAN_20_2025 = Math.floor(Date.UTC(2025, 0, 20) / 1000);  // 2025-01-20
 
-function insertRepo(id: number, fullName: string): number {
-  testDb.insert(schema.repositories).values({
-    id,
-    githubId: id * 100,
-    fullName,
-    ownerLogin: fullName.split('/')[0],
-    name: fullName.split('/')[1],
-    isPrivate: false,
-    defaultBranch: 'main',
-    addedAt: new Date(),
-  }).run();
-  return id;
-}
+// ── Test data helpers ──────────────────────────────────────────────────────────
 
-function insertAuthor(id: number, login: string): number {
-  testDb.insert(schema.authors).values({
-    id,
-    githubLogin: login,
-    isBot: false,
-  }).run();
-  return id;
-}
+const ALL_2025_PERIOD = {
+  startDate: '2025-01-01',
+  endDate: '2025-12-31',
+  label: 'All 2025',
+};
 
 let _prCounter = 0;
+
+function resetDb(): void {
+  const raw = testDb.$client;
+  raw.exec(`DELETE FROM collection_state`);
+  raw.exec(`DELETE FROM pull_requests`);
+  raw.exec(`DELETE FROM commits`);
+  raw.exec(`DELETE FROM authors`);
+  raw.exec(`DELETE FROM repositories`);
+  raw.exec(`DELETE FROM app_config`);
+  _prCounter = 0;
+}
+
+/** Seed a repo (id=1) and mark it complete for both commits + pull_requests. */
+function seedCompleteRepo(): void {
+  const raw = testDb.$client;
+  raw.prepare(`
+    INSERT INTO repositories (id, github_id, full_name, owner_login, name, added_at)
+    VALUES (1, 101, 'org/repo1', 'org', 'repo1', ?)
+  `).run(JAN_15_2025);
+  raw.prepare(`INSERT INTO collection_state (repo_id, resource_type, status) VALUES (1, 'commits', 'complete')`).run();
+  raw.prepare(`INSERT INTO collection_state (repo_id, resource_type, status) VALUES (1, 'pull_requests', 'complete')`).run();
+}
+
+function insertAuthor(id: number, login: string, isBot = 0): void {
+  const raw = testDb.$client;
+  raw.prepare(`
+    INSERT INTO authors (id, github_login, is_bot, first_commit_at)
+    VALUES (?, ?, ?, ?)
+  `).run(id, login, isBot, JAN_15_2025);
+}
+
+/**
+ * Insert a PR with explicit createdAt / mergedAt / firstCommitAt epochs.
+ * Pass null for firstCommitAt to exercise the D-05 IS NOT NULL filter.
+ */
 function insertPr(
-  repoId: number,
   authorId: number,
   createdAtEpoch: number,
   mergedAtEpoch: number | null,
-  state = 'merged'
+  firstCommitAtEpoch: number | null,
+  state = 'merged',
 ): void {
   _prCounter++;
-  testDb.insert(schema.pullRequests).values({
-    githubId: _prCounter * 1000,
-    repoId,
+  const raw = testDb.$client;
+  raw.prepare(`
+    INSERT INTO pull_requests (
+      github_id, repo_id, author_id, number, title, state,
+      created_at, merged_at, first_commit_at, updated_at
+    ) VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    _prCounter * 1000,
     authorId,
-    number: _prCounter,
-    title: `PR ${_prCounter}`,
+    _prCounter,
+    `PR ${_prCounter}`,
     state,
-    createdAt: new Date(createdAtEpoch * 1000),
-    mergedAt: mergedAtEpoch != null ? new Date(mergedAtEpoch * 1000) : undefined,
-    updatedAt: new Date(createdAtEpoch * 1000),
-  }).run();
+    createdAtEpoch,
+    mergedAtEpoch,
+    firstCommitAtEpoch,
+    createdAtEpoch,
+  );
 }
 
-function markRepoComplete(repoId: number): void {
-  testDb.insert(schema.collectionState).values([
-    {
-      repoId,
-      resourceType: 'commits',
-      status: 'complete',
-      lastRunAt: new Date(),
-    },
-    {
-      repoId,
-      resourceType: 'pull_requests',
-      status: 'complete',
-      lastRunAt: new Date(),
-    },
-  ]).run();
-}
-
-// ---- Tests ----
+// ── Tests ──────────────────────────────────────────────────────────────────────
 
 describe('getPrTurnaroundTrend', () => {
-  // Jan 1 2025 00:00:00 UTC
-  const JAN_1_2025 = 1735689600;
-  // 24 hours later
-  const JAN_2_2025 = JAN_1_2025 + 86400;
-  // 48 hours later
-  const JAN_3_2025 = JAN_1_2025 + 2 * 86400;
 
   beforeEach(() => {
-    testDb.delete(schema.collectionState).run();
-    testDb.delete(schema.pullRequests).run();
-    testDb.delete(schema.commits).run();
-    testDb.delete(schema.authors).run();
-    testDb.delete(schema.repositories).run();
-    _prCounter = 0;
+    resetDb();
+    seedCompleteRepo();
+    insertAuthor(10, 'alice', 0);    // human author
+    insertAuthor(11, 'depbot[bot]', 1);  // bot author
   });
 
-  it('returns empty array when no merged PRs exist', () => {
-    const repoId = insertRepo(1, 'org/repo1');
-    markRepoComplete(repoId);
-
-    const results = getPrTurnaroundTrend({});
-
-    expect(results).toEqual([]);
+  // ── Test 1: empty periods array ─────────────────────────────────────────────
+  it('returns [] when periods array is empty', () => {
+    const result = getPrTurnaroundTrend([1], []);
+    expect(result).toEqual([]);
   });
 
-  it('excludes PRs where mergedAt <= createdAt', () => {
-    const repoId = insertRepo(1, 'org/repo1');
-    markRepoComplete(repoId);
-    const authorId = insertAuthor(1, 'dev1');
+  // ── Test 2: no complete repos ───────────────────────────────────────────────
+  it('returns [] when no repos have complete coverage (SEC-01)', () => {
+    // Wipe collection_state so no repos are "complete"
+    const raw = testDb.$client;
+    raw.exec(`DELETE FROM collection_state`);
 
-    // PR where merged_at === created_at (should be excluded)
-    insertPr(repoId, authorId, JAN_1_2025, JAN_1_2025);
+    // PR exists but the SEC-01 gate filters out the repo
+    insertPr(10, JAN_15_2025, JAN_20_2025, JAN_15_2025 - 3600);
 
-    const results = getPrTurnaroundTrend({});
-
-    expect(results).toEqual([]);
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toEqual([]);
   });
 
-  it('groups by month and returns avgHoursToMerge for merged PRs', () => {
-    const repoId = insertRepo(1, 'org/repo1');
-    markRepoComplete(repoId);
-    const authorId = insertAuthor(1, 'dev1');
+  // ── Test 3: D-05 — first_commit_at IS NULL excluded from medians but counted in totalPrCount ─
+  it('excludes PRs with first_commit_at = NULL from medians but counts them in totalPrCount (D-05/D-06)', () => {
+    // 2 PRs in Jan: one with firstCommitAt set (cycle 5h), one with firstCommitAt NULL
+    insertPr(10, JAN_15_2025,         JAN_15_2025 + 5 * 3600, JAN_15_2025);            // covered, 5h
+    insertPr(10, JAN_15_2025 + 100,   JAN_15_2025 + 8 * 3600, null);                    // NOT covered (NULL)
 
-    // Two PRs in January 2025, each merged 24 hours later
-    insertPr(repoId, authorId, JAN_1_2025, JAN_2_2025);
-    insertPr(repoId, authorId, JAN_2_2025, JAN_3_2025);
-
-    const results = getPrTurnaroundTrend({});
-
-    expect(results).toHaveLength(1);
-    expect(results[0].periodMonth).toBe('2025-01');
-    expect(results[0].avgHoursToMerge).toBeCloseTo(24, 0);
-    expect(results[0].prCount).toBe(2);
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toHaveLength(1);
+    const row = result[0];
+    expect(row.periodMonth).toBe('2025-01');
+    expect(row.prCount).toBe(1);          // only the covered PR feeds medians
+    expect(row.totalPrCount).toBe(2);     // coverage caveat counts both
+    expect(row.medianHoursToMerge).toBeCloseTo(5, 5);
   });
 
-  it('excludes unmerged (open/closed) PRs from turnaround calculation', () => {
-    const repoId = insertRepo(1, 'org/repo1');
-    markRepoComplete(repoId);
-    const authorId = insertAuthor(1, 'dev1');
+  // ── Test 4: D-10 sanity guard — merged_at <= first_commit_at excluded ─────────
+  it('excludes PRs where merged_at <= first_commit_at (D-10 sanity guard)', () => {
+    // Pathological PR: merged_at == first_commit_at → negative-or-zero cycle time → excluded
+    insertPr(10, JAN_15_2025, JAN_15_2025 + 3600, JAN_15_2025 + 3600);  // mergedAt == firstCommitAt
+    // Good PR for contrast
+    insertPr(10, JAN_15_2025 + 100, JAN_15_2025 + 4 * 3600, JAN_15_2025);  // cycle 4h
 
-    // Merged PR (should be included)
-    insertPr(repoId, authorId, JAN_1_2025, JAN_2_2025);
-    // Open PR with no mergedAt (should be excluded)
-    insertPr(repoId, authorId, JAN_1_2025, null, 'open');
-
-    const results = getPrTurnaroundTrend({});
-
-    expect(results).toHaveLength(1);
-    expect(results[0].prCount).toBe(1);
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toHaveLength(1);
+    const row = result[0];
+    expect(row.prCount).toBe(1);            // only the good PR feeds medians
+    expect(row.medianHoursToMerge).toBeCloseTo(4, 5);
+    // totalPrCount counts the bad PR too (it's in created_at month, not bot)
+    expect(row.totalPrCount).toBe(2);
   });
 
-  it('filters by date range when startDate and endDate provided', () => {
-    const repoId = insertRepo(1, 'org/repo1');
-    markRepoComplete(repoId);
-    const authorId = insertAuthor(1, 'dev1');
+  // ── Test 5: D-08 cycle_time_max_days cap excludes outliers from medians ──────
+  it('excludes PRs exceeding cycle_time_max_days cap from medians but counts them in totalPrCount (D-08)', () => {
+    // Set cap to 7 days
+    setCycleTimeMaxDays(7);
 
-    // PR in Jan 2025
-    insertPr(repoId, authorId, JAN_1_2025, JAN_2_2025);
-    // PR in July 2025 (out of range)
-    const JUL_1_2025 = 1751328000;
-    const JUL_2_2025 = JUL_1_2025 + 86400;
-    insertPr(repoId, authorId, JUL_1_2025, JUL_2_2025);
+    // Within-cap PR: cycle 24h (well under 7 days)
+    insertPr(10, JAN_15_2025, JAN_15_2025 + 24 * 3600, JAN_15_2025);
+    // Over-cap PR: cycle 240h = 10 days (>7-day cap)
+    insertPr(10, JAN_15_2025 + 100, JAN_15_2025 + 240 * 3600, JAN_15_2025);
 
-    const results = getPrTurnaroundTrend({
-      startDate: '2025-01-01',
-      endDate: '2025-03-31',
-    });
-
-    expect(results).toHaveLength(1);
-    expect(results[0].periodMonth).toBe('2025-01');
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toHaveLength(1);
+    const row = result[0];
+    expect(row.prCount).toBe(1);           // only the within-cap PR
+    expect(row.totalPrCount).toBe(2);      // coverage shows both
+    expect(row.medianHoursToMerge).toBeCloseTo(24, 5);
   });
 
-  it('returns empty array when no complete repos exist', () => {
-    const results = getPrTurnaroundTrend({});
-    expect(results).toEqual([]);
+  // ── Test 6: Phase 9.4 D-23 — bot PRs excluded from both medians and totalPrCount ──
+  it('excludes bot-authored PRs from BOTH medians and totalPrCount (Phase 9.4 D-23, is_bot = 0)', () => {
+    // Human PR included
+    insertPr(10, JAN_15_2025,       JAN_15_2025 + 10 * 3600, JAN_15_2025);
+    // Bot PR — must be excluded from numerator AND denominator
+    insertPr(11, JAN_15_2025 + 100, JAN_15_2025 + 5 * 3600,  JAN_15_2025);
+
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toHaveLength(1);
+    const row = result[0];
+    expect(row.prCount).toBe(1);           // only the human PR feeds medians
+    expect(row.totalPrCount).toBe(1);      // bot is excluded from coverage too (consistent denominator)
+    expect(row.medianHoursToMerge).toBeCloseTo(10, 5);
+  });
+
+  // ── Test 7: D-07 — median uses lower-midpoint for even N (NOT averaging) ─────
+  it('computes median via lower-midpoint for even-N series (D-07)', () => {
+    // 4 PRs with cycle hours [2, 4, 6, 8] → median = 4 (lower midpoint), NOT 5 (avg)
+    insertPr(10, JAN_15_2025,         JAN_15_2025 + 2 * 3600, JAN_15_2025);   // 2h
+    insertPr(10, JAN_15_2025 + 100,   JAN_15_2025 + 4 * 3600, JAN_15_2025);   // 4h
+    insertPr(10, JAN_15_2025 + 200,   JAN_15_2025 + 6 * 3600, JAN_15_2025);   // 6h
+    insertPr(10, JAN_15_2025 + 300,   JAN_15_2025 + 8 * 3600, JAN_15_2025);   // 8h
+
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toHaveLength(1);
+    const row = result[0];
+    expect(row.prCount).toBe(4);
+    // D-07: lower midpoint for even N — result must be 4, NOT 5 (the average of midpoints)
+    expect(row.medianHoursToMerge).toBe(4);
+  });
+
+  // ── Test 8: Median for odd N (middle element) ────────────────────────────────
+  it('computes median as the middle element for odd-N series', () => {
+    // 3 PRs with cycle hours [1, 5, 9] → median = 5
+    insertPr(10, JAN_15_2025,         JAN_15_2025 + 1 * 3600, JAN_15_2025);   // 1h
+    insertPr(10, JAN_15_2025 + 100,   JAN_15_2025 + 5 * 3600, JAN_15_2025);   // 5h
+    insertPr(10, JAN_15_2025 + 200,   JAN_15_2025 + 9 * 3600, JAN_15_2025);   // 9h
+
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toHaveLength(1);
+    expect(result[0].medianHoursToMerge).toBe(5);
+  });
+
+  // ── Test 9: avgHoursToMerge is the real mean of the covered+capped set ──────
+  it('returns avgHoursToMerge as the real mean of the covered+capped set', () => {
+    // Same fixture as Test 7: hours [2, 4, 6, 8] → mean = 5
+    insertPr(10, JAN_15_2025,         JAN_15_2025 + 2 * 3600, JAN_15_2025);
+    insertPr(10, JAN_15_2025 + 100,   JAN_15_2025 + 4 * 3600, JAN_15_2025);
+    insertPr(10, JAN_15_2025 + 200,   JAN_15_2025 + 6 * 3600, JAN_15_2025);
+    insertPr(10, JAN_15_2025 + 300,   JAN_15_2025 + 8 * 3600, JAN_15_2025);
+
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+    expect(result).toHaveLength(1);
+    expect(result[0].avgHoursToMerge).toBeCloseTo(5, 5);
   });
 });
