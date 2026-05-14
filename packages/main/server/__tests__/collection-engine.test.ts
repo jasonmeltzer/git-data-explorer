@@ -62,6 +62,7 @@ function createTestDb() {
       created_at INTEGER NOT NULL,
       merged_at INTEGER,
       closed_at INTEGER,
+      first_commit_at INTEGER,
       updated_at INTEGER NOT NULL,
       lines_added INTEGER NOT NULL DEFAULT 0,
       lines_deleted INTEGER NOT NULL DEFAULT 0,
