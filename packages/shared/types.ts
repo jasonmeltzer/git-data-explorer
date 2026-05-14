@@ -284,6 +284,26 @@ export interface HeadcountMonthlyRow {
 }
 
 /**
+ * Per-month PR turnaround (cycle-time) row (Phase 9.6).
+ *
+ * Cycle time = `mergedAt - firstCommitAt` (D-04/D-05) — first-commit-to-merge,
+ * NOT open-to-merge. PRs without `firstCommitAt` are excluded from medians but
+ * counted in `totalPrCount` so the chart can surface a coverage caveat (D-06).
+ *
+ * `medianHoursToMerge` is a TRUE median computed via TypeScript post-processing
+ * (SQLite has no MEDIAN()). `avgHoursToMerge` is a real mean from the same
+ * filtered set. Shape locked by D-07 — synchronized with `export-types.ts` and
+ * `hooks/usePrTurnaround.ts`.
+ */
+export interface PrTurnaroundRow {
+  periodMonth: string;            // 'YYYY-MM'
+  medianHoursToMerge: number;     // TRUE median via TypeScript post-processing
+  avgHoursToMerge: number;        // real mean (unchanged formula, from filtered set)
+  prCount: number;                // covered PRs only — feeds the medians
+  totalPrCount: number;           // total PRs in period including excluded — feeds coverage caveat
+}
+
+/**
  * Per-developer monthly time series row (Phase 9.5).
  *
  * One row per active dev per month across the analysis window. prCount and
