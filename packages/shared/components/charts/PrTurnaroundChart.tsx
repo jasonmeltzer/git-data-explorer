@@ -46,14 +46,28 @@ interface PrTurnaroundChartProps {
 }
 
 const chartConfig = {
-  avgHoursToMerge: {
-    label: 'Avg Hours to Merge',
+  medianHoursToMerge: {
+    label: 'Median Hours to Merge',
     color: 'var(--chart-1)',
   },
 };
 
 const prTurnaroundColumns: ColumnDef<PrTurnaroundRow>[] = [
   { accessorKey: 'periodMonth', header: 'Month', enableSorting: true },
+  {
+    accessorKey: 'medianHoursToMerge',
+    header: 'Median Hours to Merge',
+    enableSorting: true,
+    meta: { align: 'right' as const },
+    cell: ({ getValue }) => {
+      const hours = getValue<number>();
+      return (
+        <span className="tabular-nums">
+          {hours < 24 ? `${Math.round(hours)}h` : `${(hours / 24).toFixed(1)}d`}
+        </span>
+      );
+    },
+  },
   {
     accessorKey: 'avgHoursToMerge',
     header: 'Avg Hours to Merge',
@@ -110,6 +124,18 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
           </TabsList>
         </Tabs>
       </div>
+      {(() => {
+        // D-06 coverage caveat: surfaces when some PRs in the window lack first_commit_at data.
+        // Window-wide rollup of totalCovered vs totalAll; hides at 100% coverage (self-cleaning).
+        const totalCovered = data.reduce((s, r) => s + r.prCount, 0);
+        const totalAll = data.reduce((s, r) => s + r.totalPrCount, 0);
+        if (totalCovered >= totalAll || totalAll === 0) return null;
+        return (
+          <p className="text-xs text-muted-foreground -mt-1 mb-2">
+            Based on {totalCovered.toLocaleString()} of {totalAll.toLocaleString()} PRs in window. PRs without first-commit data are excluded from the median; re-collection populates the rest.
+          </p>
+        );
+      })()}
       <div className="mt-4">
         <StatCalloutRow>
           {insights.map((insight) => (
@@ -169,7 +195,7 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
                   />
                   <Line
                     type="monotone"
-                    dataKey="avgHoursToMerge"
+                    dataKey="medianHoursToMerge"
                     stroke="var(--chart-1)"
                     strokeWidth={2}
                     dot={{ r: 4, fill: 'var(--chart-1)' }}
@@ -251,21 +277,36 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
 
       <HelpPanel>
         <p>
-          This section shows how the average time from PR creation to merge has changed
-          over time. Each data point is the average hours-to-merge for PRs opened in
-          that month. Lower values mean PRs are being merged more quickly.
+          "Cycle time" here means <strong>first commit to merge</strong>, not PR open to
+          merge. This matches the LDX3 reference methodology — the time from when work
+          actually started (the first commit on the branch) to when it landed on the
+          default branch.
         </p>
         <p className="mt-2">
-          Faster turnaround can reflect smaller PRs (easier to review), better review
-          culture, or AI-assisted code review tooling. If you see a step-change
-          downward after your AI adoption date, that is worth investigating as a
-          productivity signal. If turnaround time is increasing, it may indicate that
-          PR sizes are growing faster than review capacity can keep up.
+          For each PR we fetch every commit and take{' '}
+          <code className="text-xs">MIN(authoredDate, committedDate)</code> per commit, then
+          the overall <code className="text-xs">MIN</code> across all the PR's commits to
+          determine when work began. This <strong>diverges from LDX3</strong>, which uses
+          <code className="text-xs"> committedDate</code> only. The divergence is intentional:
+          LDX3's <code className="text-xs">committedDate</code>-only choice resets to the
+          rebase time and biases cycle time short for long-running branches.{' '}
+          <code className="text-xs">MIN(authoredDate, committedDate)</code> preserves true
+          "work started" timing through rebases.
         </p>
         <p className="mt-2">
-          This metric uses the median review time per month to reduce distortion from
-          very large or very old PRs. Repos without complete PR data will affect the
-          accuracy of this section. Check the Collection tab for completeness status.
+          Each data point is the <strong>median</strong> hours-to-merge for PRs whose first
+          commit landed in that month. The median is a real PR's cycle time (lower-midpoint
+          for even-N months), not an interpolated average — large outliers do not distort it.
+          The secondary "Mean" column in the table view shows the arithmetic mean for
+          reference.
+        </p>
+        <p className="mt-2">
+          PRs whose elapsed time exceeds a configurable outlier cap (default 90 days,
+          editable on the Settings page) are excluded from the median. Very long-running
+          branches or rebase-onto-old-base PRs are kept in the underlying PR table but do
+          not skew the cycle-time trend. PRs missing first-commit data are also excluded;
+          the coverage caveat above shows current coverage. Re-collection populates the
+          rest.
         </p>
       </HelpPanel>
     </section>
