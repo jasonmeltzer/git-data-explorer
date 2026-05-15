@@ -92,7 +92,8 @@ function createTestDb() {
       period_month TEXT NOT NULL,
       avg_hours_to_merge REAL NOT NULL,
       median_hours_to_merge REAL NOT NULL,
-      pr_count INTEGER NOT NULL
+      pr_count INTEGER NOT NULL,
+      total_pr_count INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS bot_ratio (

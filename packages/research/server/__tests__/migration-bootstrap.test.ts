@@ -100,7 +100,8 @@ const LEGACY_DDL = `
     period_month TEXT NOT NULL,
     avg_hours_to_merge REAL NOT NULL DEFAULT 0,
     median_hours_to_merge REAL NOT NULL DEFAULT 0,
-    pr_count INTEGER NOT NULL DEFAULT 0
+    pr_count INTEGER NOT NULL DEFAULT 0,
+    total_pr_count INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE bot_ratio (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -315,7 +316,8 @@ const STATE_B_DDL = `
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     snapshot_id INTEGER NOT NULL, org_id INTEGER NOT NULL,
     period_month TEXT NOT NULL, avg_hours_to_merge REAL NOT NULL DEFAULT 0,
-    median_hours_to_merge REAL NOT NULL DEFAULT 0, pr_count INTEGER NOT NULL DEFAULT 0
+    median_hours_to_merge REAL NOT NULL DEFAULT 0, pr_count INTEGER NOT NULL DEFAULT 0,
+    total_pr_count INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE bot_ratio (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
