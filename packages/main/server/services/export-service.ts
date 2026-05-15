@@ -173,19 +173,32 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     console.error('[export-service] contributors failed:', err);
   }
 
+  // ── Build Period[] for Phase 9.4+ services ────────────────────────────────
+  // Constructed once and reused by all period-aware services below
+  // (prTurnaround [9.6 D-17], periodMetrics, concentrationMonthly,
+  // headcountMonthly, developerMonthly). Mirrors routes/analytics.ts
+  // `resolvePeriods` shape; that helper is private to analytics.ts so we
+  // replicate inline rather than couple this file to a route module.
+  const markerDateStr = aiMarkerDate
+    ? aiMarkerDate.toISOString().slice(0, 10)
+    : null;
+  const periods = buildPeriodsFromMarker(
+    effectiveStartIso.slice(0, 10),
+    req.endDate.slice(0, 10),
+    markerDateStr,
+  );
+
   let prTurnaround: ExportBundle['prTurnaround'] = [];
   try {
-    const result = getPrTurnaroundTrend({
-      startDate: effectiveStartIso,
-      endDate: req.endDate,
-      repoIds,
-    });
-    // Map from analytics-pr-turnaround.PrTurnaroundRow to export-types.PrTurnaroundRow
+    const result = getPrTurnaroundTrend(repoIds, periods);
+    // Phase 9.6 D-07: map all 5 fields including totalPrCount (coverage caveat).
+    // Phase 9.6 D-17: positional (repoIds, periods) signature.
     prTurnaround = result.map(r => ({
       periodMonth: r.periodMonth,
-      avgHoursToMerge: r.avgHoursToMerge,
       medianHoursToMerge: r.medianHoursToMerge,
+      avgHoursToMerge: r.avgHoursToMerge,
       prCount: r.prCount,
+      totalPrCount: r.totalPrCount,
     }));
   } catch (err) {
     console.error('[export-service] prTurnaround failed:', err);
@@ -228,11 +241,8 @@ export function buildExportBundle(req: ExportRequest): ExportBundle {
     console.error('[export-service] executiveSummary failed:', err);
   }
 
-  // ── Build Period[] for new Phase 9.4 services ────────────────────────────
-  const markerDateStr = aiMarkerDate
-    ? aiMarkerDate.toISOString().slice(0, 10)
-    : null;
-  const periods = buildPeriodsFromMarker(effectiveStartIso.slice(0, 10), req.endDate.slice(0, 10), markerDateStr);
+  // Period[] is already built above (before the prTurnaround section)
+  // and is reused here by the Phase 9.4 services.
 
   let periodMetrics: ExportBundle['periodMetrics'] = null;
   try {
