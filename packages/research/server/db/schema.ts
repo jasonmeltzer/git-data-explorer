@@ -84,6 +84,7 @@ export const prTurnaround = sqliteTable('pr_turnaround', {
   avgHoursToMerge: real('avg_hours_to_merge').notNull(),
   medianHoursToMerge: real('median_hours_to_merge').notNull(),
   prCount: integer('pr_count').notNull(),
+  totalPrCount: integer('total_pr_count').notNull().default(0),  // Phase 9.6 D-07/D-14
 }, (table) => [
   index('idx_pr_turnaround_org').on(table.orgId),
 ]);
