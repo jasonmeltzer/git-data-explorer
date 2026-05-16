@@ -718,7 +718,10 @@ function getAiMarkerMonth(db: Database.Database): string {
   return row.value.slice(0, 7);  // 'YYYY-MM'
 }
 
-function meanField(rows: ArchetypeMonthlyRow[], field: 'pr_count' | 'mean_lines_per_commit'): number {
+function meanField(
+  rows: ArchetypeMonthlyRow[],
+  field: 'pr_count' | 'commit_count' | 'mean_lines_per_commit',
+): number {
   if (rows.length === 0) return 0;
   return rows.reduce((s, r) => s + r[field], 0) / rows.length;
 }
@@ -879,6 +882,136 @@ d('seed data archetype shapes (Phase 9.5 D-21)', () => {
 
       // Late post-AI is meaningfully below early-post (drop has fully kicked in)
       expect(meanLatePostCommits).toBeLessThan(meanEarlyPostCommits * 0.7);
+    } finally {
+      db.close();
+    }
+  });
+});
+
+// ── Phase 9.6 D-15: PR firstCommitAt archetypes ─────────────────────────────
+//
+// Validates that the seed produces the cycle-time archetypes documented in D-15:
+//   - Pre-AI median cycle (firstCommitAt -> mergedAt) substantially higher than post-AI
+//     (target: post < pre by ~70-80%; tolerated upper bound 0.5)
+//   - At least one PR exceeds the 90-day cap (rebase outlier, D-08 exclusion path)
+//   - 5-10% of PRs have first_commit_at = NULL (D-06 coverage caveat path)
+
+function getAiMarkerEpochSec(db: Database.Database): number {
+  const row = db.prepare(`SELECT value FROM app_config WHERE key = 'ai_adoption_marker'`).get() as
+    | { value: string }
+    | undefined;
+  if (!row) throw new Error('ai_adoption_marker not found in app_config');
+  // value is ISO 8601 — convert to epoch seconds for SQLite comparisons
+  return Math.floor(new Date(row.value).getTime() / 1000);
+}
+
+/** Pure-TS median (lower-midpoint) — matches analytics-pr-turnaround D-07. */
+function medianLowerMidpoint(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? sorted[mid - 1] : sorted[mid];
+}
+
+d('seed data PR firstCommitAt archetypes (Phase 9.6 D-15)', () => {
+  test('post-AI median cycle time is meaningfully lower than pre-AI (D-15 pre/post split)', () => {
+    const db = openSeedDb();
+    try {
+      const aiMarkerEpoch = getAiMarkerEpochSec(db);
+      // Mirror analytics-pr-turnaround.ts filters: covered + capped + non-bot
+      const rows = db
+        .prepare(`
+          SELECT
+            (CAST(p.merged_at AS INTEGER) - CAST(p.first_commit_at AS INTEGER)) / 3600.0 AS hours,
+            CASE WHEN CAST(p.created_at AS INTEGER) < ? THEN 'pre' ELSE 'post' END AS period
+          FROM pull_requests p
+          JOIN authors a ON a.id = p.author_id
+          WHERE p.first_commit_at IS NOT NULL
+            AND p.merged_at IS NOT NULL
+            AND p.merged_at > p.first_commit_at
+            AND (CAST(p.merged_at AS INTEGER) - CAST(p.first_commit_at AS INTEGER)) <= 90 * 86400
+            AND a.is_bot = 0
+        `)
+        .all(aiMarkerEpoch) as Array<{ hours: number; period: 'pre' | 'post' }>;
+
+      const preHours = rows.filter(r => r.period === 'pre').map(r => r.hours);
+      const postHours = rows.filter(r => r.period === 'post').map(r => r.hours);
+
+      // Sanity: both buckets have substantial samples
+      expect(preHours.length).toBeGreaterThan(50);
+      expect(postHours.length).toBeGreaterThan(50);
+
+      const preMedian = medianLowerMidpoint(preHours);
+      const postMedian = medianLowerMidpoint(postHours);
+
+      // post-AI median should be meaningfully lower than pre-AI
+      expect(postMedian).toBeLessThan(preMedian);
+      // Target ~70-80% reduction (ratio < 0.5 with slack for randomness)
+      // AI marker (preAvg|postAvg|post*pre split) D-15 invariant
+      expect(postMedian / preMedian).toBeLessThan(0.5);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('at least one PR exceeds 90-day cap (D-08 outlier in DB, excluded from metric)', () => {
+    const db = openSeedDb();
+    try {
+      // Outliers: cycle time > 90 days (90 * 86400 = 7_776_000 seconds)
+      const outliers = db
+        .prepare(`
+          SELECT COUNT(*) AS cnt FROM pull_requests
+          WHERE first_commit_at IS NOT NULL
+            AND merged_at IS NOT NULL
+            AND (CAST(merged_at AS INTEGER) - CAST(first_commit_at AS INTEGER)) > 90 * 86400
+        `)
+        .get() as { cnt: number };
+
+      // D-15: at least one outlier ensures the cap exclusion path is exercised
+      expect(outliers.cnt).toBeGreaterThanOrEqual(1);
+
+      // And outliers must remain in the underlying pull_requests table
+      // (D-15: "outlier excluded from metric but present in PR table")
+      const totalWithCycle = db
+        .prepare(`
+          SELECT COUNT(*) AS cnt FROM pull_requests
+          WHERE first_commit_at IS NOT NULL AND merged_at IS NOT NULL
+        `)
+        .get() as { cnt: number };
+      // Total > outliers (most PRs are NOT outliers; outliers are a small fraction)
+      expect(totalWithCycle.cnt).toBeGreaterThan(outliers.cnt);
+    } finally {
+      db.close();
+    }
+  });
+
+  test('seeded data has < 100% first-commit coverage (D-06 caveat trigger)', () => {
+    const db = openSeedDb();
+    try {
+      const nullCount = db
+        .prepare(`
+          SELECT COUNT(*) AS cnt FROM pull_requests
+          WHERE first_commit_at IS NULL AND merged_at IS NOT NULL
+        `)
+        .get() as { cnt: number };
+
+      // D-15: at least one merged PR has firstCommitAt = NULL to trigger the caveat
+      expect(nullCount.cnt).toBeGreaterThanOrEqual(1);
+
+      const allMerged = db
+        .prepare(`
+          SELECT COUNT(*) AS cnt FROM pull_requests WHERE merged_at IS NOT NULL
+        `)
+        .get() as { cnt: number };
+
+      const coverageRatio = 1 - nullCount.cnt / allMerged.cnt;
+
+      // Coverage is < 100% (caveat triggers) but bulk archetypes dominate (> 50%)
+      expect(coverageRatio).toBeLessThan(1.0);
+      expect(coverageRatio).toBeGreaterThan(0.5);
+      // D-15 target: 5-10% null → 90-95% coverage. Allow slack for randomness (85-97%).
+      expect(coverageRatio).toBeGreaterThan(0.85);
+      expect(coverageRatio).toBeLessThan(0.97);
     } finally {
       db.close();
     }
