@@ -678,6 +678,54 @@ interface PRRecord {
   linesDeleted: number;
   filesChanged: number;
   commitCount: number;
+  firstCommitAt: Date | null;  // Phase 9.6 D-15: first-commit-to-merge cycle time basis
+}
+
+/**
+ * Phase 9.6 D-15: compute firstCommitAt per archetype.
+ *
+ * Archetype distribution (per D-15):
+ *  - ~8%: null (coverage caveat exercise — pre-9.6 / fetch-failure simulation)
+ *  - ~0.5%: rebase outlier (mergedAt - 91-180 days) — exceeds 90-day cap
+ *  - ~1%: long-running branch (createdAt - 4-12 weeks) — NOT outlier
+ *  - ~90.5%: typical pre/post-AI feature branch
+ *    * pre-AI: createdAt - rand(8, 48)h
+ *    * post-AI: createdAt - rand(1, 8)h
+ *
+ * The combination of:
+ *  - PR turnaround distribution (createdAt → mergedAt; exp(2.5 + 1.2 * rand) hours)
+ *  - firstCommitAt offset (above)
+ * yields:
+ *  - pre-AI median cycle (firstCommitAt → mergedAt) ≈ 24-36h
+ *  - post-AI median cycle ≈ 4-8h (matches LDX3 narrative)
+ *  - post/pre ratio < 0.5 (target ~70-80% reduction)
+ */
+function computeFirstCommitAt(
+  createdAt: Date,
+  mergedAt: Date | null,
+  isPostAI: boolean,
+  archetypeRandom: number,  // [0, 1) deterministic random for this PR
+): Date | null {
+  // ~8% null coverage (pre-9.6 / fetch-failure simulation — exercises D-06 caveat)
+  if (archetypeRandom < 0.08) return null;
+
+  // ~0.5% rebase outlier (mergedAt - 91-180 days) — exceeds 90-day cap, exercises D-08 exclusion
+  if (archetypeRandom < 0.085 && mergedAt) {
+    const daysOutlier = 91 + Math.floor(Math.random() * 90);  // 91-180 days
+    return new Date(mergedAt.getTime() - daysOutlier * 86_400_000);
+  }
+
+  // ~1% long-running branch (createdAt - 4-12 weeks) — NOT outlier, exercises long-tail medians
+  if (archetypeRandom < 0.095) {
+    const weeks = 4 + Math.floor(Math.random() * 9);  // 4-12 weeks
+    return new Date(createdAt.getTime() - weeks * 7 * 86_400_000);
+  }
+
+  // ~90.5% bulk: typical pre/post-AI feature branch
+  const minH = isPostAI ? 1 : 8;
+  const maxH = isPostAI ? 8 : 48;
+  const hours = minH + Math.random() * (maxH - minH);
+  return new Date(createdAt.getTime() - hours * 3_600_000);
 }
 
 let globalPRId = 100001;
@@ -712,8 +760,12 @@ function generatePRs(commitsByAuthorRepo: Map<string, CommitRecord[]>): PRRecord
       const createdAt = lastCommitDate;
 
       // PR mergedAt = lastCommit + realistic review turnaround (log-normal distribution)
-      // Mostly 4-48 hours with a long tail up to ~7 days (Pitfall D-17)
-      const turnaroundHours = Math.max(1, Math.round(Math.exp(2.5 + 1.2 * (Math.random() * 2 - 1))));
+      // Phase 9.6 D-15: differentiate pre/post AI to achieve ~70-80% cycle-time reduction.
+      // Pre-AI:  exp(2.5 + 1.2 * r)  ≈ 4-48h (matches legacy D-17 distribution)
+      // Post-AI: exp(1.2 + 1.2 * r)  ≈ 1-12h (shorter review queues post-AI adoption)
+      const isPostAIPr = lastCommitDate.getTime() >= AI_MARKER_MS;
+      const baseLog = isPostAIPr ? 1.2 : 2.5;
+      const turnaroundHours = Math.max(1, Math.round(Math.exp(baseLog + 1.2 * (Math.random() * 2 - 1))));
       const closeDaysMs = turnaroundHours * 60 * 60 * 1000;
       const closeDate = new Date(lastCommitDate.getTime() + closeDaysMs);
 
@@ -753,6 +805,11 @@ function generatePRs(commitsByAuthorRepo: Map<string, CommitRecord[]>): PRRecord
       const prNum = (prNumberByRepo.get(repoIndex) ?? 0) + 1;
       prNumberByRepo.set(repoIndex, prNum);
 
+      // Phase 9.6 D-15: compute firstCommitAt per archetype
+      const isPostAI = createdAt.getTime() >= AI_MARKER_MS;
+      const archetypeRandom = Math.random();
+      const firstCommitAt = computeFirstCommitAt(createdAt, mergedAt, isPostAI, archetypeRandom);
+
       prs.push({
         githubId: globalPRId++,
         repoIndex,
@@ -768,6 +825,7 @@ function generatePRs(commitsByAuthorRepo: Map<string, CommitRecord[]>): PRRecord
         linesDeleted,
         filesChanged,
         commitCount: batch.length,
+        firstCommitAt,
       });
     }
   }
@@ -835,6 +893,11 @@ function injectPrReviewerPrs(existingPrs: PRRecord[]): PRRecord[] {
       const prNum = (prNumberByRepo.get(repoIndex) ?? 0) + 1;
       prNumberByRepo.set(repoIndex, prNum);
 
+      // Phase 9.6 D-15: pr-reviewer PRs follow the same archetype mix as bulk PRs
+      const isPostAI = createdAt.getTime() >= AI_MARKER_MS;
+      const archetypeRandom = Math.random();
+      const firstCommitAt = computeFirstCommitAt(createdAt, mergedAt, isPostAI, archetypeRandom);
+
       injected.push({
         githubId: globalPRId++,
         repoIndex,
@@ -850,6 +913,7 @@ function injectPrReviewerPrs(existingPrs: PRRecord[]): PRRecord[] {
         linesDeleted,
         filesChanged,
         commitCount: 1,
+        firstCommitAt,
       });
     }
 
@@ -1064,6 +1128,7 @@ for (let i = 0; i < allPRs.length; i += BATCH_SIZE) {
     linesDeleted: pr.linesDeleted,
     filesChanged: pr.filesChanged,
     commitCount: pr.commitCount,
+    firstCommitAt: pr.firstCommitAt,  // Phase 9.6 D-15
   }));
 
   db.insert(schema.pullRequests).values(values).run();
