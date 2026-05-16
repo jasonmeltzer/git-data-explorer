@@ -686,7 +686,7 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
                 <StatCalloutBox
                   key={row.periodMonth}
                   label={row.periodMonth}
-                  value={`${Math.round(row.avgHoursToMerge)}h avg`}
+                  value={`${Math.round(row.medianHoursToMerge)}h median`}
                   delta={`${row.prCount} PRs`}
                   deltaDir="neutral"
                 />
