@@ -116,7 +116,7 @@ export function PrTurnaroundChart({ startDate, endDate, repoIds }: PrTurnaroundC
   return (
     <section>
       <div className="flex items-center justify-between">
-        <SectionHeader title="PR Review Turnaround" scope="filtered" />
+        <SectionHeader title="PR Cycle Time" scope="filtered" />
         <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as 'chart' | 'table')}>
           <TabsList className="h-7 gap-0 bg-transparent border border-border rounded-md p-0">
             <TabsTrigger value="chart" className="h-full px-2 py-0.5 rounded-r-none data-active:bg-primary data-active:text-primary-foreground" aria-label="Chart view"><BarChart3 className="h-3.5 w-3.5" /></TabsTrigger>
