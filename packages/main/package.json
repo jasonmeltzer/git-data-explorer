@@ -12,6 +12,7 @@
     "dev:client": "vite",
     "seed": "tsx scripts/seed.ts",
     "dev:seed": "DB_PATH=./data/seed.db concurrently -n server,client -c blue,green \"npm run dev:server\" \"npm run dev:client\"",
+    "backfill-pr-first-commits": "tsx scripts/backfill-pr-first-commits.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"
   }
