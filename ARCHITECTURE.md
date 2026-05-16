@@ -164,12 +164,12 @@ SQLite via better-sqlite3. Drizzle ORM schema.
 | `repositories` | Tracked GitHub repos with soft-delete via `removed_at` |
 | `authors` | Contributors identified by `github_login`, with bot flag and first-commit date |
 | `commits` | Commit data with line/file stats, indexed on `(repo_id, committed_at)` |
-| `pull_requests` | PR data with size stats and state tracking |
+| `pull_requests` | PR data with size stats and state tracking. **Phase 9.6** adds `first_commit_at` (integer, nullable) — epoch seconds of the earliest commit on this PR, computed as `MIN` across all commits of `MIN(authoredDate, committedDate)`. Populated during PR collection (`collectPRs` + `collectPRsIncremental` via `fetchPrFirstCommit`) and via `npm run backfill-pr-first-commits` for legacy data. NULL for legacy PRs collected before 9.6, 0-commit PRs, and fetch failures — naturally excluded from cycle-time medians by the `IS NOT NULL` filter. |
 | `collection_state` | Cursor tracking for incremental API collection — stores last page/SHA per repo per resource type |
 
 ### Research DB (`data/research.db`)
 
-Separate SQLite database. 12 tables (Phase 9.4 adds 3 new and drops `before_after_json` from `snapshots`; Phase 9.5 adds `developer_monthly`).
+Separate SQLite database. 12 tables (Phase 9.4 adds 3 new and drops `before_after_json` from `snapshots`; Phase 9.5 adds `developer_monthly`; Phase 9.6 adds `total_pr_count` to `pr_turnaround` via drizzle migration `0003_naive_callisto.sql`).
 
 | Table | Purpose |
 |-------|---------|
@@ -179,7 +179,7 @@ Separate SQLite database. 12 tables (Phase 9.4 adds 3 new and drops `before_afte
 | `ramp_up` | New developer ramp-up data: `week_index`, `avg_lines_changed`, `join_period`. Per snapshot |
 | `rolling_comparisons` | Rolling window comparison JSON blob (MoM/QoQ). One row per snapshot |
 | `contributors` | Per-contributor before/after stats. `pre_json` and `post_json` store ContributorStats as JSON |
-| `pr_turnaround` | Monthly PR merge time data. `avg_hours_to_merge`, `median_hours_to_merge`, `pr_count` |
+| `pr_turnaround` | Monthly PR merge time data. `avg_hours_to_merge`, `median_hours_to_merge`, `pr_count`. **Phase 9.6** adds `total_pr_count` (integer NOT NULL DEFAULT 0; drizzle migration `0003_naive_callisto.sql`) — total PRs in the period including those excluded from the cycle-time medians; feeds the coverage caveat UI when `pr_count < total_pr_count`. `median_hours_to_merge` is now a true median (no longer a SQL AVG approximation per GAP-10). |
 | `bot_ratio` | Monthly bot vs human commit ratio data |
 | `concentration_monthly` | **Phase 9.4.** One row per (snapshot, org, month, basis). Per-basis top-N share, HHI, Gini, bus factor, active devs, top contributor. Nullable share columns handle zero-activity months. |
 | `headcount_monthly` | **Phase 9.4.** One row per (snapshot, org, month). Active dev count + normalized output (PRs/dev, commits/dev). |
@@ -279,6 +279,27 @@ The analytics layer is a set of pure query services that read from the SQLite da
 
 **SQL injection prevention** — all `sql.raw()` interpolation sites validate IDs are positive integers before interpolation (SEC-01). Route-level Zod schemas validate date string inputs (BUG-06).
 
+### Cycle Time Analytics (Phase 9.6)
+
+`analytics-pr-turnaround.ts` (rewritten in Phase 9.6) computes the cycle-time trend per month. Signature follows the Phase 9.4 D-18 convention: `getPrTurnaroundTrend(repoIds: number[], periods: Period[]): Promise<PrTurnaroundRow[]>`. Periods drive the date range; monthly series remain monthly per D-19.
+
+**Filters applied at query time:**
+- `first_commit_at IS NOT NULL` — exclude fallback PRs from the metric (D-05). PRs without first-commit data are not silently fallback-computed against `created_at`; they are structurally excluded so the median is methodology-pure.
+- `merged_at > first_commit_at` — D-10 sanity guard against pathological negative cycle times; logged when encountered, never included in median.
+- Bot exclusion via `authors.is_bot = 0` join (Phase 9.4 D-23 — consistent with all bot-aware analytics).
+- Repo completeness via `getCompleteRepoIds` (SEC-01 / SEC-07 integer guard).
+- Outlier cap: `(merged_at - first_commit_at) <= cycle_time_max_days * 86400`. The cap is loaded from `app_config.cycle_time_max_days` (default `90`, clamped 1–365) via `getCycleTimeMaxDays()` in `analytics-config.ts`. **Loaded at query time, not collection time** — collection always stores the raw `firstCommitAt`; changing the cap retroactively adjusts which PRs appear in the median (intentional for D.Eng sensitivity analysis).
+
+**Median computation:** SQL aggregates per-PR cycle times, then TypeScript post-processes — collects per-period arrays, sorts ascending, indexes the lower midpoint for even N (`sorted[mid - 1]`). Diverges from `analytics-developer-monthly`'s averaging median because the cycle-time chart needs a value corresponding to a real PR, not an interpolated midpoint. This replaces the legacy SQL `AVG`-as-approximation noted in GAP-10.
+
+**Output shape (D-07, 5 fields):** `{ periodMonth: 'YYYY-MM', medianHoursToMerge: number, avgHoursToMerge: number, prCount: number, totalPrCount: number }`. `prCount` is covered PRs (in median); `totalPrCount` is all PRs in the period including excluded ones. The chart UI shows a coverage caveat ("based on X of Y PRs in window") when `prCount < totalPrCount` — sums across the visible date range, not per-month, to avoid cluttering the UI.
+
+**Methodology divergence from LDX3 (D-02):** firstCommitAt is computed per PR as `MIN` across all PR commits of `MIN(commit.authored.date, commit.committer.date)`. LDX3 uses `commit.committed.date` only. The divergence preserves true "work started" timing through rebases — LDX3's pure committedDate resets to rebase time and biases cycle time short for long-running branches. Documented inline in `analytics-pr-turnaround.ts` and `pr-first-commit.ts`.
+
+**Collection path:** `fetchPrFirstCommit(octokit, owner, repo, pullNumber)` (in `pr-first-commit.ts`) is called inline in **both** `collectPRs` and `collectPRsIncremental` after the existing `pulls.get` call. Pagination loop on `GET /repos/{owner}/{repo}/pulls/{pull_number}/commits` (per_page=100, Link-header `rel="next"`, 50-page safety cap = 5000 commits max). Fail-soft per D-03: any throw returns `null` and logs a warning; the PR row still saves with `first_commit_at=NULL` and is naturally excluded by the analytics filter. The PR upsert `.onConflictDoUpdate.set` includes `firstCommitAt` so re-running collection backfills the column idempotently (D-12 path a).
+
+**Backfill procedure (D-12 path b):** One-shot CLI script at `packages/main/scripts/backfill-pr-first-commits.ts`, run via `npm run backfill-pr-first-commits`. SELECTs `pull_requests` WHERE `first_commit_at IS NULL` joined to `repositories`, calls `fetchPrFirstCommit` per row, persists via prepared `UPDATE pull_requests SET first_commit_at = ? WHERE id = ?`. Per-PR fail-soft (failures log + skip); idempotent (re-running on backfilled DB is a no-op). No `collection_state` row, no UI affordance — CLI-only per D-13 (revisit when distributed users arrive). The script reuses the same `fetchPrFirstCommit` helper as live collection so backfill and live ingestion share one code path.
+
 ## ESLint Configuration
 
 ESLint flat config (`eslint.config.js`) with `typescript-eslint` parser for JSX/TSX support. Key rules:
@@ -297,6 +318,8 @@ Round-trip coverage: `packages/research/server/__tests__/round-trip-phase9.4.tes
 
 ## Recently Closed
 
+- **Phase 9.6 — Cycle Time Correction** — Replaces the open-to-merge approximation with first-commit-to-merge measurement (GAP-04 resolution). Adds `pull_requests.first_commit_at` (nullable timestamp; drizzle migration `0006_past_stardust.sql`) populated during collection via the new `fetchPrFirstCommit` helper. `analytics-pr-turnaround.ts` rewritten end-to-end: `IS NOT NULL` + sanity-guard + bot-exclusion + configurable cap filters, TypeScript median (sort + lower-midpoint indexing) replacing the legacy SQL AVG-as-approximation per GAP-10, new 5-field `PrTurnaroundRow` shape `{ periodMonth, medianHoursToMerge, avgHoursToMerge, prCount, totalPrCount }` per D-07. Settings page gains Cycle Time Analytics card (numeric input 1–365 days, default 90, applied at query time). Coverage caveat surfaces in the chart UI when `prCount < totalPrCount`. Research-side: `pr_turnaround` table gains `total_pr_count` column via drizzle migration `0003_naive_callisto.sql`; import-service + Zod schema + test-data-generator org archetypes (cycle ~24h pre-AI, ~6h post-AI) all updated for the D-07 shape. Methodology divergence from LDX3 (D-02 — `MIN(authoredDate, committedDate)` vs LDX3's `committedDate` only) is documented inline in `analytics-pr-turnaround.ts` and `pr-first-commit.ts`. Legacy backfill via one-shot CLI: `npm run backfill-pr-first-commits` (D-12 path b). Out of scope for 9.6 (deferred to 9.7): research-tool HelpPanel copy update for the cycle-time card, Chart|Table toggle, cross-org cycle-time aggregation.
+
 - **Phase 9.5 — Contribution Patterns** — Per-developer monthly trajectories surfaced in BOTH the main dashboard and the research-tool OrgDashboard. New analytics service `getDeveloperMonthly(repoIds, periods)` (3-query hybrid: commit aggregates + PR counts + raw per-commit rows for in-memory median, since SQLite has no `MEDIAN()`) feeds a new `/api/analytics/developer-monthly` route. Export pipeline gains `developer-monthly.json`; the anonymizer pseudonymizes `developerMonthly[].authorLogin` with the SAME `pseudonymMap` used for `contributors[].authorLogin` (stable identity across sections). Research DB gains `developer_monthly` table (drizzle migration `0002_handy_roughhouse.sql`); reconstruct route `/api/orgs/:orgId/snapshots/:snapshotId/data` returns the `developerMonthly` section. UI: collapsed-by-default section on main dashboard with HelpPanel (D-10/D-11 verbatim 5-paragraph copy); always-expanded section on research OrgDashboard with HelpPanel (D-13 verbatim shorter copy) plus Cohort filter (Senior / Mid / Junior / All) and Min Activity slider (1–12 active months). 4 promoted chart components live at `@shared/components/charts/`; main-package paths preserved as thin re-export shims. Privacy invariants enforced statically: 0 `dangerouslySetInnerHTML`, 0 real-name reveal, no profile-page navigation, sort exclusion at the type level (`SortKey` union excludes volume metrics). Seed data exhibits 4 archetype trajectories — Steady, AI-Power-User, Plateauing, Declining — across both `seed.db` and the research test-data-generator.
 
 - **Phase 9.4.3 (2026-04-21 external audit)** — 8 items closed: SSRF on `/api/import/url` (SEC-05), path sandbox on `/api/import/batch` (SEC-06), `sql.raw` integer guard across research + main (SEC-07), research DB drizzle-kit migration adoption (MIG-01, MIG-02), better-sqlite3 pin to `^11.10.0` and `@types/node` to `^22.19.17` (COMP-01, COMP-02), `export-service.ts` section-count comment + parity test (DOC-01).
@@ -305,7 +328,9 @@ Round-trip coverage: `packages/research/server/__tests__/round-trip-phase9.4.tes
 
 - **Settings UI for AI marker** — Currently API-only (`POST /api/analytics/marker`); no date picker in Settings page yet
 - **Research tool: persisted org charts** — OrgDashboard renders aggregated data from the latest snapshot; time-series comparison across snapshots not yet implemented
-- **Cycle time correction** — firstCommitAt on PRs for first-commit-to-merge measurement (Phase 9.6)
+- **Research-tool cycle-time HelpPanel + Chart|Table toggle** — Phase 9.6 swapped only the data source on the research-tool OrgDashboard cycle-time card per D-14; HelpPanel copy update and the Chart|Table toggle are deferred to Phase 9.7
+- **Cross-org cycle-time aggregation** — Phase 9.6's analytics-pr-turnaround rewrite is per-org; the CrossOrgPage aggregation path is deferred to Phase 9.7
+- **Permanent legacy-backfill infrastructure for cycle time** — Phase 9.6 ships a one-off `npm run backfill-pr-first-commits` CLI script per D-12 path (b). A persistent backfill service (with `collection_state` row, SSE progress, UI affordance) is deferred until distributed users arrive (D-13, memory `project_no_real_users_yet`)
 - **Cross-org Team Distribution aggregation** — Phase 9.4 added per-org concentration/headcount routes and tables; the CrossOrgPage aggregation path for these new sections is deferred to Phase 9.7
 - **Individual onboarding profiles** — per-new-hire first-N-weeks breakdown (Phase 9.8)
 - **Multi-marker AI timeline** — Phase 10 will supply length-N `Period[]` from an `ai_markers` table; the period-array data model is already in place so this becomes a thin schema + UI change
@@ -376,12 +401,15 @@ packages/
 │   │           ├── analytics-headcount.ts        # Phase 9.4: active devs, PRs/dev, commits/dev
 │   │           ├── analytics-period-metrics.ts   # Phase 9.4: replaces analytics-before-after; accepts Period[]
 │   │           ├── analytics-developer-monthly.ts # Phase 9.5: getDeveloperMonthly(repoIds, periods) — 3-query hybrid; SQLite-side aggregates + TS-side median
-│   │           ├── analytics-config.ts / analytics-utils.ts
+│   │           ├── analytics-pr-turnaround.ts    # Phase 9.6: first-commit-to-merge cycle time; true TS median; configurable cap; bot exclusion; coverage caveat (D-02/D-05/D-06/D-07/D-08/D-10/D-17/D-18)
+│   │           ├── analytics-config.ts / analytics-utils.ts  # Phase 9.6: analytics-config gains getCycleTimeMaxDays/setCycleTimeMaxDays for the D-08 cap
 │   │           ├── cohort-config-service.ts
 │   │           ├── export-service.ts # buildExportBundle (12 analytics sections: cohortCommits, cohortPrs, rampUp, rolling, contributors, prTurnaround, botRatio, executiveSummary, periodMetrics, concentrationMonthly, headcountMonthly, developerMonthly)
-│   │           └── first-commit-fetcher.ts
+│   │           ├── first-commit-fetcher.ts       # Phase 7.1: per-author first-commit fetcher (still used for authors.first_commit_at)
+│   │           └── pr-first-commit.ts            # Phase 9.6: per-PR first-commit fetcher — pagination loop on GET /pulls/:n/commits, MIN(authoredDate, committedDate) across all PR commits per D-02
 │   └── scripts/
-│       └── seed.ts                   # Synthetic data generator (npm run seed). 34 personas (3 bots) across 3 repos. Phase 9.4.2 scenarios: `direct-devon` commit-only persona (zero PRs), `reviewer-riley` PR-reviewer persona (cross-month PRs, minimal commits), `lwilson` refactor wave (week 40, 250 deletion-heavy commits), `dependabot` bot storm (weeks 34-37, 14× commit rate).
+│       ├── seed.ts                   # Synthetic data generator (npm run seed). 34 personas (3 bots) across 3 repos. Phase 9.4.2 scenarios: `direct-devon` commit-only persona (zero PRs), `reviewer-riley` PR-reviewer persona (cross-month PRs, minimal commits), `lwilson` refactor wave (week 40, 250 deletion-heavy commits), `dependabot` bot storm (weeks 34-37, 14× commit rate).
+│       └── backfill-pr-first-commits.ts  # Phase 9.6 D-12 path (b): one-shot CLI (`npm run backfill-pr-first-commits`) — SELECT WHERE first_commit_at IS NULL, call fetchPrFirstCommit, prepared UPDATE. Fail-soft per PR, idempotent. CLI-only per D-13.
 │
 ├── shared/
 │   ├── types.ts                      # Shared TypeScript interfaces (Phase 9.5: DeveloperMonthlyRow added)
@@ -401,6 +429,7 @@ packages/
     │       ├── 0000_initial.sql       # Baseline table DDL including pre-9.4 legacy columns
     │       ├── 0001_drop_legacy_columns.sql  # Drops industry, ai_tool, before_after_json (MIG-02)
     │       ├── 0002_handy_roughhouse.sql      # Phase 9.5: developer_monthly table + indexes
+    │       ├── 0003_naive_callisto.sql        # Phase 9.6: ALTER TABLE pr_turnaround ADD total_pr_count INTEGER NOT NULL DEFAULT 0 (D-14)
     │       └── meta/                  # _journal.json + per-migration snapshots
     ├── client/
     │   ├── main.tsx                  # Entry point
