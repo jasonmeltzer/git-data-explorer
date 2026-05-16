@@ -64,7 +64,8 @@ function createTestDb() {
       lines_added INTEGER NOT NULL DEFAULT 0,
       lines_deleted INTEGER NOT NULL DEFAULT 0,
       files_changed INTEGER NOT NULL DEFAULT 0,
-      commit_count INTEGER NOT NULL DEFAULT 0
+      commit_count INTEGER NOT NULL DEFAULT 0,
+      first_commit_at INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS collection_state (
@@ -340,7 +341,8 @@ describe('getContributorStats - per-repo mode', () => {
         lines_added INTEGER NOT NULL DEFAULT 0,
         lines_deleted INTEGER NOT NULL DEFAULT 0,
         files_changed INTEGER NOT NULL DEFAULT 0,
-        commit_count INTEGER NOT NULL DEFAULT 0
+        commit_count INTEGER NOT NULL DEFAULT 0,
+        first_commit_at INTEGER
       );
       CREATE TABLE IF NOT EXISTS collection_state (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
