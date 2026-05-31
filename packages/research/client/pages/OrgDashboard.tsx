@@ -676,10 +676,10 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
         isLoading={dataFetching && bundle?.periodMetrics === undefined}
       />
 
-      {/* PR Turnaround */}
+      {/* PR Cycle Time */}
       {bundle?.prTurnaround && bundle.prTurnaround.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>PR Turnaround Time</CardTitle></CardHeader>
+          <CardHeader><CardTitle>PR Cycle Time</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
               {bundle.prTurnaround.slice(-3).map(row => (
@@ -696,13 +696,14 @@ export default function OrgDashboard({ orgId }: OrgDashboardProps) {
           <CardContent className="pt-0">
             <HelpPanel>
               <p>
-                This section shows how long pull requests take from opening to merge. Faster
-                turnaround often reflects smaller PR sizes, more focused changes, or stronger
-                review culture — all common effects of AI-assisted development.
+                Cycle time here means first commit to merge — the time from when work actually
+                started on a branch (the earliest commit) to when it landed on the default branch.
+                This matches the LDX3 reference methodology and captures true development duration,
+                not just the review window.
               </p>
               <p className="mt-2">
-                An improvement in PR turnaround after your AI adoption date is a positive
-                signal, especially if combined with increased PR volume from newer contributors.
+                A decrease in cycle time after your AI adoption date suggests faster end-to-end
+                delivery, especially when combined with increased PR volume from newer contributors.
               </p>
             </HelpPanel>
           </CardContent>
