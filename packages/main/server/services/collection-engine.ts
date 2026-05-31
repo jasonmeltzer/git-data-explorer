@@ -712,7 +712,9 @@ export class CollectionEngine {
               filesChanged,
               commitCount,
               authorId,
-              firstCommitAt, // Phase 9.6 D-01 — idempotent for backfill path (Plan 11)
+              // Phase 9.6 CR-01 — preserve existing first_commit_at when fresh fetch returns null
+              // (fetchPrFirstCommit is fail-soft); only overwrite with a non-null value.
+              firstCommitAt: firstCommitAt !== null ? firstCommitAt : sql`${pullRequests.firstCommitAt}`,
             },
           })
           .run();
@@ -825,7 +827,12 @@ export class CollectionEngine {
           .values({ githubId, repoId: repo.id, authorId, number: prNumber, title, state, createdAt, mergedAt, closedAt, updatedAt: new Date(updatedAt), linesAdded, linesDeleted, filesChanged, commitCount, firstCommitAt })
           .onConflictDoUpdate({
             target: [pullRequests.githubId, pullRequests.repoId],
-            set: { title, state, mergedAt, closedAt, updatedAt: new Date(updatedAt), linesAdded, linesDeleted, filesChanged, commitCount, authorId, firstCommitAt },
+            set: {
+              title, state, mergedAt, closedAt, updatedAt: new Date(updatedAt), linesAdded, linesDeleted, filesChanged, commitCount, authorId,
+              // Phase 9.6 CR-01 — preserve existing first_commit_at when fresh fetch returns null
+              // (fetchPrFirstCommit is fail-soft); only overwrite with a non-null value.
+              firstCommitAt: firstCommitAt !== null ? firstCommitAt : sql`${pullRequests.firstCommitAt}`,
+            },
           })
           .run();
 
