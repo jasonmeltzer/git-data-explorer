@@ -88,7 +88,8 @@ const CREATE_TABLES_SQL = `
     period_month TEXT NOT NULL,
     avg_hours_to_merge REAL NOT NULL DEFAULT 0,
     median_hours_to_merge REAL NOT NULL DEFAULT 0,
-    pr_count INTEGER NOT NULL DEFAULT 0
+    pr_count INTEGER NOT NULL DEFAULT 0,
+    total_pr_count INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS bot_ratio (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -187,8 +188,8 @@ function makeFullBundle(overrides: Partial<ExportBundle> = {}): ExportBundle {
       },
     ],
     prTurnaround: [
-      { periodMonth: '2025-08', avgHoursToMerge: 4.2, medianHoursToMerge: 2.1, prCount: 12 },
-      { periodMonth: '2025-09', avgHoursToMerge: 3.8, medianHoursToMerge: 1.9, prCount: 18 },
+      { periodMonth: '2025-08', avgHoursToMerge: 4.2, medianHoursToMerge: 2.1, prCount: 12, totalPrCount: 12 },
+      { periodMonth: '2025-09', avgHoursToMerge: 3.8, medianHoursToMerge: 1.9, prCount: 18, totalPrCount: 18 },
     ],
     botRatio: [
       { periodMonth: '2025-08', botCommits: 5, humanCommits: 95, totalCommits: 100, botPercentage: 5.0 },

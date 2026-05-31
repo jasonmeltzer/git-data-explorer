@@ -349,7 +349,7 @@ export function importBundle(
         .run();
     }
 
-    // Insert pr_turnaround rows
+    // Insert pr_turnaround rows (Phase 9.6 D-14)
     if (data.prTurnaround.length > 0) {
       db.insert(prTurnaround)
         .values(
@@ -360,6 +360,9 @@ export function importBundle(
             avgHoursToMerge: row.avgHoursToMerge,
             medianHoursToMerge: row.medianHoursToMerge,
             prCount: row.prCount,
+            // Phase 9.6 D-14: legacy bundles (pre-9.6) lack totalPrCount; assume 100% coverage by falling back to prCount.
+            // This makes the coverage caveat invisibly hide on legacy data (avoids spurious "missing PRs" UI signal).
+            totalPrCount: row.totalPrCount ?? row.prCount,
           }))
         )
         .run();

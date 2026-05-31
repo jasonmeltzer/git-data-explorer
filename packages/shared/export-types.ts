@@ -23,10 +23,11 @@ import type { CohortConfig } from './cohort-config.js';
 // Keep in sync manually if those interfaces change.
 
 export interface PrTurnaroundRow {
-  periodMonth: string;
-  avgHoursToMerge: number;
-  medianHoursToMerge: number;
-  prCount: number;
+  periodMonth: string;            // 'YYYY-MM'
+  medianHoursToMerge: number;     // TRUE median via TypeScript post-processing
+  avgHoursToMerge: number;        // real mean (unchanged formula, from filtered set)
+  prCount: number;                // covered PRs only — feeds the medians
+  totalPrCount: number;           // total PRs in period including excluded — feeds coverage caveat
 }
 
 export interface BotRatioRow {

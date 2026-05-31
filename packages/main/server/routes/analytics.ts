@@ -304,19 +304,18 @@ const trendQuerySchema = z.object({
   repoIds: z.string().optional(),
 });
 
-// GET /api/analytics/pr-turnaround — monthly avg hours to merge for merged PRs
+// GET /api/analytics/pr-turnaround — monthly PR cycle-time (first-commit-to-merge) trend
 analytics.get('/api/analytics/pr-turnaround', (c) => {
   try {
     const parsed = trendQuerySchema.safeParse(c.req.query());
     if (!parsed.success) {
       return c.json({ error: 'Invalid query parameters', details: parsed.error.flatten() }, 400);
     }
-
     const { startDate, endDate, repoIds } = parsed.data;
     const repoIdsParsed = repoIds?.split(',').map(Number).filter(n => Number.isInteger(n) && n > 0);
-
-    const results = getPrTurnaroundTrend({ startDate, endDate, repoIds: repoIdsParsed });
-    return c.json(results);
+    const periods = resolvePeriods(startDate, endDate, repoIdsParsed);
+    const result = getPrTurnaroundTrend(repoIdsParsed, periods);
+    return c.json(result);
   } catch (err) {
     console.error('GET /api/analytics/pr-turnaround error:', err);
     return c.json({ error: 'Failed to fetch PR turnaround trend' }, 500);

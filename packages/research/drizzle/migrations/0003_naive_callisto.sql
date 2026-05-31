@@ -1,0 +1,1 @@
+ALTER TABLE `pr_turnaround` ADD `total_pr_count` integer DEFAULT 0 NOT NULL;

@@ -43,6 +43,13 @@
       "when": 1774757736033,
       "tag": "0005_chemical_mordo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1778781987654,
+      "tag": "0006_past_stardust",
+      "breakpoints": true
     }
   ]
 }

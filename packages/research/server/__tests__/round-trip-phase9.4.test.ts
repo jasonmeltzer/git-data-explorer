@@ -101,7 +101,8 @@ const CREATE_TABLES_SQL = `
     period_month TEXT NOT NULL,
     avg_hours_to_merge REAL NOT NULL DEFAULT 0,
     median_hours_to_merge REAL NOT NULL DEFAULT 0,
-    pr_count INTEGER NOT NULL DEFAULT 0
+    pr_count INTEGER NOT NULL DEFAULT 0,
+    total_pr_count INTEGER NOT NULL DEFAULT 0
   );
   CREATE TABLE IF NOT EXISTS bot_ratio (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

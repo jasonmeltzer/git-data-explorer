@@ -125,6 +125,25 @@ describe('fresh-install via migration', () => {
     expect(names).toContain('idx_headcount_monthly_org');
   });
 
+  test('pr_turnaround table has total_pr_count column with default 0 (Phase 9.6 MIG-02)', () => {
+    const db = drizzle(sqlite);
+    bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);
+    migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+
+    const cols = sqlite
+      .prepare(`PRAGMA table_info(pr_turnaround)`)
+      .all() as Array<{ name: string; notnull: number; dflt_value: string | null }>;
+    const colNames = cols.map((c) => c.name);
+
+    expect(colNames).toContain('total_pr_count');
+
+    // D-14 graceful degradation: default 0 + NOT NULL so legacy bundles can omit the field
+    const totalCol = cols.find((c) => c.name === 'total_pr_count');
+    expect(totalCol).toBeDefined();
+    expect(totalCol?.notnull).toBe(1);
+    expect(totalCol?.dflt_value).toBe('0');
+  });
+
   test('positive insert into org + snapshot + concentration_monthly succeeds', () => {
     const db = drizzle(sqlite);
     bootstrapMigrationJournal(sqlite, MIGRATIONS_FOLDER);

@@ -73,6 +73,11 @@ const PrTurnaroundRowSchema = z.object({
   avgHoursToMerge: z.number(),
   medianHoursToMerge: z.number(),
   prCount: z.number(),
+  // Phase 9.6 D-07: total PRs in window including those excluded from cycle-time
+  // (e.g. PRs missing firstCommitAt or beyond cycle_time_max_days cap).
+  // .optional() per D-14 graceful degradation — pre-9.6 bundles lack this field;
+  // import-service falls back to prCount (100% coverage assumption).
+  totalPrCount: z.number().optional(),
 });
 
 const BotRatioRowSchema = z.object({

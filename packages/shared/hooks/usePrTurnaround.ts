@@ -1,9 +1,11 @@
 import { useQuery } from '@tanstack/react-query';
 
 export interface PrTurnaroundRow {
-  periodMonth: string;
-  avgHoursToMerge: number;
-  prCount: number;
+  periodMonth: string;            // 'YYYY-MM'
+  medianHoursToMerge: number;     // TRUE median via TypeScript post-processing
+  avgHoursToMerge: number;        // real mean (unchanged formula, from filtered set)
+  prCount: number;                // covered PRs only — feeds the medians
+  totalPrCount: number;           // total PRs in period including excluded — feeds coverage caveat
 }
 
 interface UsePrTurnaroundParams {

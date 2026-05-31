@@ -437,16 +437,43 @@ function buildContributors(
 
 // ─── PR turnaround builder ────────────────────────────────────────────────────
 
-function buildPrTurnaround(months: string[], baseHours: number, aiMarkerMonth: string | null): PrTurnaroundRow[] {
+/**
+ * Build a PR-turnaround series for a single org.
+ *
+ * Phase 9.6 D-07: returns the 5-field `PrTurnaroundRow` (adds `totalPrCount`).
+ * Phase 9.6 D-16: `options` parameter shapes the per-org archetype:
+ *   - `postAiMultiplier`: ~0.25 produces the strong pre/post shift (24h → 6h
+ *     per CONTEXT.md line 100); 1.0 produces the no-shift control; 0.85
+ *     (the legacy default) produces a mild shift consistent with pre-9.6 behavior.
+ *   - `coverageRatio`: when < 1.0, `totalPrCount > prCount` so the D-06 caveat path
+ *     fires in the UI. Default 1.0 (full coverage).
+ *
+ * Default behavior preserved: omitting `options` yields the pre-9.6 baseline
+ * (`postAiMultiplier=0.85, coverageRatio=1.0`) so existing tests continue to pass.
+ */
+function buildPrTurnaround(
+  months: string[],
+  baseHours: number,
+  aiMarkerMonth: string | null,
+  options?: {
+    postAiMultiplier?: number;  // D-16: ~0.25 for strong shift (24h → 6h); ~1.0 for control
+    coverageRatio?: number;     // Phase 9.6 D-06 caveat exercise: 0.7 → covered/total = 0.7, 1.0 → full
+  },
+): PrTurnaroundRow[] {
+  const postAiMultiplier = options?.postAiMultiplier ?? 0.85;  // existing default — mild shift
+  const coverageRatio = options?.coverageRatio ?? 1.0;
   return months.map(month => {
     const isAfterAI = aiMarkerMonth !== null && month > aiMarkerMonth;
-    const multiplier = isAfterAI ? 0.85 : 1.0;
+    const multiplier = isAfterAI ? postAiMultiplier : 1.0;
     const avg = Math.round(jitter(baseHours * multiplier, baseHours * 0.1));
+    const total = logNormal(3, 0.5);
+    const covered = Math.max(1, Math.round(total * coverageRatio));
     return {
       periodMonth: month,
       avgHoursToMerge: Math.max(1, avg),
       medianHoursToMerge: Math.max(1, Math.round(avg * 0.8)),
-      prCount: logNormal(3, 0.5),
+      prCount: covered,
+      totalPrCount: total,  // Phase 9.6 D-07: total PRs in window (may exceed covered when coverageRatio < 1.0)
     };
   });
 }
@@ -977,7 +1004,15 @@ export function generateMidSizeCompany(options: GenerateOrgOptions = {}): Export
     aiMarkerDate
   );
 
-  const prTurnaround = buildPrTurnaround(months, 24, aiMarkerMonth);
+  // Phase 9.6 D-16 strong-shift archetype: cycle ~24h pre-AI → ~6h post-AI
+  // (CONTEXT.md line 100). coverageRatio=0.85 means ~15% of PRs lack firstCommitAt
+  // → exercises the D-06 coverage caveat path in the UI.
+  const prTurnaround = buildPrTurnaround(
+    months,
+    24,                                                  // baseHours = 24h pre-AI median
+    aiMarkerMonth,
+    { postAiMultiplier: 0.25, coverageRatio: 0.85 },     // 24h × 0.25 = 6h post-AI; 15% missing coverage
+  );
   const stormMonthIdx = includeBotStormMonth ? Math.floor(months.length * 0.6) : undefined;
   const botRatio = buildBotRatio(months, 0.15, stormMonthIdx);
   const rolling = buildRolling(referenceDate, 120);
@@ -1088,7 +1123,15 @@ export function generatePreAiBaseline(options: GenerateOrgOptions = {}): ExportB
   // All contributors have null post stats (no AI marker)
   const contributors = buildContributors(contributorCount, cohorts.map(c => ({ key: c.key, weight: c.weight })), null);
 
-  const prTurnaround = buildPrTurnaround(months, 18, null);
+  // Phase 9.6 D-16 control archetype: no AI marker (aiMarkerMonth=null → no shift
+  // can occur), explicit postAiMultiplier=1.0 documents the intent (no shift even
+  // if a marker were set), coverageRatio=1.0 → full coverage (caveat hides).
+  const prTurnaround = buildPrTurnaround(
+    months,
+    18,
+    null,                                                // no AI marker → never crosses threshold
+    { postAiMultiplier: 1.0, coverageRatio: 1.0 },       // explicit no-shift, full coverage
+  );
   // D-05 regression guard: pre-AI baseline is the control group — bot storm is
   // NEVER injected, even if the caller passes includeBotStormMonth: true. This
   // prevents accidental leakage into the control-group contract.

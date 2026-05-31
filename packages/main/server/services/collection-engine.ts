@@ -12,6 +12,7 @@ import {
   markCollectionComplete,
 } from './collection-state.js';
 import { isBot } from './bot-detection.js';
+import { fetchPrFirstCommit } from './pr-first-commit.js';
 import type { CollectionProgressEvent } from '@shared/types.js';
 
 /**
@@ -655,6 +656,17 @@ export class CollectionEngine {
           // Continue with zeros if individual fetch fails
         }
 
+        // Phase 9.6 D-01: Fetch first-commit timestamp for this PR.
+        // Failure → firstCommitAt=null, PR is excluded from cycle-time medians but still saved (D-03).
+        let firstCommitAt: Date | null = null;
+        try {
+          firstCommitAt = await fetchPrFirstCommit(octokit, repo.ownerLogin, repo.name, prNumber);
+        } catch (err) {
+          // Helper is already fail-soft, but defense-in-depth — never let this break collection
+          console.warn(`[collectPRs] fetchPrFirstCommit failed for ${repo.ownerLogin}/${repo.name}#${prNumber}:`, err);
+          firstCommitAt = null;
+        }
+
         const user = prData.user as { login?: string; type?: string } | null;
         const login = user?.login ?? 'unknown';
         const userType = user?.type ?? null;
@@ -685,6 +697,7 @@ export class CollectionEngine {
             linesDeleted,
             filesChanged,
             commitCount,
+            firstCommitAt, // Phase 9.6 D-01
           })
           .onConflictDoUpdate({
             target: [pullRequests.githubId, pullRequests.repoId],
@@ -699,6 +712,9 @@ export class CollectionEngine {
               filesChanged,
               commitCount,
               authorId,
+              // Phase 9.6 CR-01 — preserve existing first_commit_at when fresh fetch returns null
+              // (fetchPrFirstCommit is fail-soft); only overwrite with a non-null value.
+              firstCommitAt: firstCommitAt !== null ? firstCommitAt : sql`${pullRequests.firstCommitAt}`,
             },
           })
           .run();
@@ -785,6 +801,16 @@ export class CollectionEngine {
           commitCount = (d.commits as number) ?? 0;
         } catch { /* continue with zeros */ }
 
+        // Phase 9.6 D-01: Fetch first-commit timestamp for this PR (incremental sync path).
+        // Same fail-soft semantics as collectPRs — see Plan 09.6-03 SUMMARY for rationale.
+        let firstCommitAt: Date | null = null;
+        try {
+          firstCommitAt = await fetchPrFirstCommit(octokit, repo.ownerLogin, repo.name, prNumber);
+        } catch (err) {
+          console.warn(`[collectPRsIncremental] fetchPrFirstCommit failed for ${repo.ownerLogin}/${repo.name}#${prNumber}:`, err);
+          firstCommitAt = null;
+        }
+
         const user = prData.user as { login?: string; type?: string } | null;
         const login = user?.login ?? 'unknown';
         const userType = user?.type ?? null;
@@ -798,10 +824,15 @@ export class CollectionEngine {
         const closedAt = prData.closed_at ? new Date(prData.closed_at as string) : null;
 
         db.insert(pullRequests)
-          .values({ githubId, repoId: repo.id, authorId, number: prNumber, title, state, createdAt, mergedAt, closedAt, updatedAt: new Date(updatedAt), linesAdded, linesDeleted, filesChanged, commitCount })
+          .values({ githubId, repoId: repo.id, authorId, number: prNumber, title, state, createdAt, mergedAt, closedAt, updatedAt: new Date(updatedAt), linesAdded, linesDeleted, filesChanged, commitCount, firstCommitAt })
           .onConflictDoUpdate({
             target: [pullRequests.githubId, pullRequests.repoId],
-            set: { title, state, mergedAt, closedAt, updatedAt: new Date(updatedAt), linesAdded, linesDeleted, filesChanged, commitCount, authorId },
+            set: {
+              title, state, mergedAt, closedAt, updatedAt: new Date(updatedAt), linesAdded, linesDeleted, filesChanged, commitCount, authorId,
+              // Phase 9.6 CR-01 — preserve existing first_commit_at when fresh fetch returns null
+              // (fetchPrFirstCommit is fail-soft); only overwrite with a non-null value.
+              firstCommitAt: firstCommitAt !== null ? firstCommitAt : sql`${pullRequests.firstCommitAt}`,
+            },
           })
           .run();
 
