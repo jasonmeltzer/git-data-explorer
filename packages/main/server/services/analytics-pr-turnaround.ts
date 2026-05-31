@@ -96,10 +96,14 @@ export function getPrTurnaroundTrend(repoIds: number[] | undefined, periods: Per
   //   - merged_at > first_commit_at (D-10 — sanity guard against negative cycle)
   //   - (merged_at - first_commit_at) <= capSeconds (D-08 cap)
   //   - is_bot = 0 (D-23 — match denominator's bot filter)
-  // Month grouping uses first_commit_at month (the cycle-time measurement basis).
+  // Month grouping uses created_at (matching Query A's denominator basis) so the
+  // covered set is always a subset of the total set, guaranteeing prCount ≤ totalPrCount.
+  // Cycle-time hours are still measured from first_commit_at (D-02 methodology unchanged).
+  // CR-02 fix: switched month bucket and BETWEEN column from first_commit_at → created_at
+  // so that numerator (Query B) and denominator (Query A) share the same month basis.
   const perPrRows = db.all(sql.raw(`
     SELECT
-      strftime('%Y-%m', pr.first_commit_at, 'unixepoch') AS month,
+      strftime('%Y-%m', pr.created_at, 'unixepoch') AS month,
       (CAST(pr.merged_at AS INTEGER) - CAST(pr.first_commit_at AS INTEGER)) / 3600.0 AS hours_to_merge
     FROM pull_requests pr
     INNER JOIN authors a ON a.id = pr.author_id
@@ -108,7 +112,7 @@ export function getPrTurnaroundTrend(repoIds: number[] | undefined, periods: Per
       AND pr.first_commit_at IS NOT NULL
       AND CAST(pr.merged_at AS INTEGER) > CAST(pr.first_commit_at AS INTEGER)
       AND pr.repo_id IN (${repoIdList})
-      AND CAST(pr.first_commit_at AS INTEGER) BETWEEN ${startEpoch} AND ${endEpoch}
+      AND CAST(pr.created_at AS INTEGER) BETWEEN ${startEpoch} AND ${endEpoch}
       AND (CAST(pr.merged_at AS INTEGER) - CAST(pr.first_commit_at AS INTEGER)) <= ${capSeconds}
   `)) as Array<{ month: string; hours_to_merge: number }>;
 
@@ -157,7 +161,7 @@ export function getPrTurnaroundTrend(repoIds: number[] | undefined, periods: Per
     const avgHoursToMerge = prCount > 0
       ? hours.reduce((sum, h) => sum + h, 0) / prCount
       : 0;
-    const totalPrCount = totalByMonth.get(month) ?? prCount;
+    const totalPrCount = Math.max(totalByMonth.get(month) ?? 0, prCount);
 
     results.push({
       periodMonth: month,

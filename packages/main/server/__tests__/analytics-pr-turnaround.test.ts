@@ -102,6 +102,7 @@ const { setCycleTimeMaxDays } = await import('../services/analytics-config.js');
 // ── Time constants (UTC epochs, seconds) ──────────────────────────────────────
 const JAN_15_2025 = Math.floor(Date.UTC(2025, 0, 15) / 1000);  // 2025-01-15
 const JAN_20_2025 = Math.floor(Date.UTC(2025, 0, 20) / 1000);  // 2025-01-20
+const FEB_10_2025 = Math.floor(Date.UTC(2025, 1, 10) / 1000);  // 2025-02-10
 
 // ── Test data helpers ──────────────────────────────────────────────────────────
 
@@ -307,5 +308,48 @@ describe('getPrTurnaroundTrend', () => {
     const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
     expect(result).toHaveLength(1);
     expect(result[0].avgHoursToMerge).toBeCloseTo(5, 5);
+  });
+
+  // ── Test 10: CR-02 regression — month-straddling PR, prCount ≤ totalPrCount ──
+  //
+  // A PR whose first_commit_at is in Jan but created_at is in Feb would — before the
+  // CR-02 fix — be bucketed into Jan by Query B (first_commit_at month) but into Feb
+  // by Query A (created_at month).  In the Jan row, prCount would come from Query B
+  // (1) while totalPrCount would be 0 (no Jan entry in Query A), causing prCount >
+  // totalPrCount.  After the CR-02 fix both queries bucket by created_at, so the
+  // straddling PR lands in Feb for both numerator and denominator, and the invariant
+  // prCount ≤ totalPrCount holds for every row.
+  it('guarantees prCount ≤ totalPrCount for every row (CR-02 coverage invariant, month-straddling PR)', () => {
+    // Straddling PR: work started Jan (first_commit_at = JAN_15_2025), PR opened Feb
+    // (created_at = FEB_10_2025), merged Feb a few hours later.  Positive cycle time.
+    insertPr(
+      10,
+      FEB_10_2025,                   // created_at — Feb (denominator month)
+      FEB_10_2025 + 6 * 3600,        // merged_at  — +6h (valid positive cycle)
+      JAN_15_2025,                   // first_commit_at — Jan (work started before PR opened)
+    );
+
+    // Normal Feb PR: everything in Feb, short cycle time.
+    insertPr(
+      10,
+      FEB_10_2025 + 100,             // created_at — Feb
+      FEB_10_2025 + 100 + 5 * 3600, // merged_at  — +5h
+      FEB_10_2025 - 3600,            // first_commit_at — 1h before opening (same Feb month)
+    );
+
+    // Jan anchor PR (keeps Jan in both Query A and Query B so totals are consistent).
+    insertPr(
+      10,
+      JAN_15_2025,                   // created_at — Jan
+      JAN_15_2025 + 4 * 3600,        // merged_at  — +4h
+      JAN_15_2025 - 3600,            // first_commit_at — 1h before opening
+    );
+
+    const result = getPrTurnaroundTrend([1], [ALL_2025_PERIOD]);
+
+    // Every returned row must satisfy the coverage invariant.
+    for (const row of result) {
+      expect(row.prCount).toBeLessThanOrEqual(row.totalPrCount);
+    }
   });
 });
